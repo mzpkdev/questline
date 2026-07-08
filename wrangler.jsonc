@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "questline",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-07-08",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "not_found_handling": "single-page-application"
+  },
+  "kv_namespaces": [
+    { "binding": "QUESTLINE", "id": "9b394c5677cf4176837767d942b1d8ee" }
+  ],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}

@@ -29,8 +29,11 @@ export type PushOutcome = { ok: true; version: number } | { ok: false; status: n
 // The Worker base with any trailing slash trimmed, or undefined when sync is off (VITE_SYNC_URL unset).
 // Read lazily, not at module load, so tests can stub the env per case.
 function syncBase(): string | undefined {
-    const url = import.meta.env.VITE_SYNC_URL
-    return url ? url.replace(/\/+$/, "") : undefined
+    const configured = import.meta.env.VITE_SYNC_URL
+    // An explicit value wins: a URL points sync at that origin, "" turns it off. When unset (the common
+    // case now that one Cloudflare Worker serves both the app and the API), default to same-origin.
+    if (configured !== undefined) return configured ? configured.replace(/\/+$/, "") : undefined
+    return typeof window === "undefined" ? undefined : window.location.origin
 }
 
 export function syncEnabled(): boolean {

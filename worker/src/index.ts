@@ -12,9 +12,10 @@
 
 export interface Env {
     QUESTLINE: KVNamespace
-    // Comma-separated origin allowlist (e.g. "https://user.github.io,http://localhost:5173"). The
-    // matching request Origin is echoed back; CORS is defense-in-depth, not the access control.
-    ALLOWED_ORIGIN: string
+    // Optional comma-separated origin allowlist for cross-origin hosting. Unset -- the same-origin default,
+    // where one Worker serves both app and API -- reflects the request Origin. Safe here: there are no
+    // credentials, and confidentiality rests on the secret id + ciphertext-only storage, not on CORS.
+    ALLOWED_ORIGIN?: string
 }
 
 const BLOB_PREFIX = "/v1/blob/"
@@ -66,10 +67,12 @@ async function handlePut(request: Request, env: Env, id: string): Promise<Respon
 // Which allowlisted origin to echo: the request's own Origin if allowed, else the first configured one
 // (so a same-origin/no-Origin request still gets a sane value). `vary: origin` keeps caches honest.
 function allowedOrigin(env: Env, request: Request): string {
+    const origin = request.headers.get("origin") ?? ""
+    // No allowlist configured -> same-origin (or cross-origin without credentials): reflect the caller.
+    if (!env.ALLOWED_ORIGIN) return origin || "*"
     const list = env.ALLOWED_ORIGIN.split(",")
         .map((entry) => entry.trim())
         .filter(Boolean)
-    const origin = request.headers.get("origin") ?? ""
     if (list.includes(origin)) return origin
     return list[0] ?? ""
 }

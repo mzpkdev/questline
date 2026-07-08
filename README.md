@@ -11,19 +11,18 @@ mints a private link, and opening that link on another device keeps the two in s
   only ever stores ciphertext it can't read.
 - **The link is the key.** Anyone who holds it can read and edit your roadmap, and losing it means the
   data can't be recovered. Treat it like a password.
-- **Off by default.** With no Worker configured (`VITE_SYNC_URL` unset), the app is fully local and
-  your data lives only in this browser.
+- **Opt-in.** Enabling sync is a deliberate click and nothing uploads until you do; until then the
+  roadmap lives only in this browser.
 
-### Self-hosting the sync Worker
+### Self-hosting
 
-Sync is backed by a small Cloudflare Worker (`worker/`) that stores encrypted blobs in KV:
+One Cloudflare Worker serves the app and the sync API together (via `@cloudflare/vite-plugin`),
+storing encrypted blobs in KV. Create the namespace once, then deploy:
 
 ```sh
-cd worker
 bunx wrangler kv namespace create QUESTLINE   # paste the id into wrangler.jsonc
-bunx wrangler deploy
+bun run deploy
 ```
 
-Set `ALLOWED_ORIGIN` in `worker/wrangler.jsonc` to your site's origin, then point the app at the
-deployed Worker with `VITE_SYNC_URL` (a repo variable for the GitHub Pages build, or `.env.local`
-for local dev). See `.env.example`.
+Sync defaults to same-origin, so no extra config is needed; `bun run preview` runs the same setup
+locally.
