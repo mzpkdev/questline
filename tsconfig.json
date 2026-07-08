@@ -1,9 +1,22 @@
 {
-    "extends": "../../tsconfig.base.json",
+    "$schema": "https://json.schemastore.org/tsconfig",
     "compilerOptions": {
         "lib": ["ESNext", "DOM", "DOM.Iterable"],
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "moduleDetection": "force",
+        "verbatimModuleSyntax": true,
+        "noEmit": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "noUncheckedIndexedAccess": true,
+        "noFallthroughCasesInSwitch": true,
+        "forceConsistentCasingInFileNames": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
         "jsx": "react-jsx",
-        "types": ["vitest/globals"]
+        "types": ["node", "vitest/globals"]
     },
     "include": ["src", "vite.config.ts"]
 }
