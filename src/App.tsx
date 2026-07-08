@@ -24,6 +24,7 @@ import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, se
 import { newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
 import { TabBar } from "./TabBar"
 import { SyncBoard } from "./sync/SyncBoard"
+import { SyncNavButton } from "./sync/SyncNavButton"
 import { useSync } from "./sync/useSync"
 
 // Auto-placement for a new sub-milestone: drop it a tier below the parent (matches the seed's ~160px
@@ -788,12 +789,20 @@ export function App() {
                         bountiesActive={section === "bounties"}
                         onOpenMerchant={openMerchant}
                         merchantActive={section === "merchant"}
-                        onOpenSync={sync.enabled ? () => setSection("sync") : undefined}
-                        syncActive={section === "sync"}
-                        syncStatus={sync.status}
                     />
                 }
-                trailing={<IoButtons onExport={handleExport} onImport={handleImport} />}
+                trailing={
+                    <>
+                        <IoButtons onExport={handleExport} onImport={handleImport} />
+                        {sync.enabled && (
+                            <SyncNavButton
+                                active={section === "sync"}
+                                status={sync.status}
+                                onOpen={() => setSection("sync")}
+                            />
+                        )}
+                    </>
+                }
             />
             <div ref={boardRef} className="board-surface relative isolate flex-1 overflow-hidden">
                 <Corners />
