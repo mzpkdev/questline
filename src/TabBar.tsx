@@ -29,6 +29,9 @@ type TabBarProps = {
     onRemove: (id: string) => void
     // App-level chips rendered at the leading end of the bar, ahead of the tabs.
     leading?: ReactNode
+    // App-level controls pinned to the trailing (right) end of the bar, after the tabs. Right-aligned
+    // and wrapping with the tabs, so they never overlap a tab on narrow screens.
+    trailing?: ReactNode
 }
 
 // Shared chip shape (`.tab` base: inline-flex chip, faint gold-shadow border). Exported so app-level
@@ -179,6 +182,7 @@ export function TabBar(props: TabBarProps) {
                     </span>
                 )
             })}
+            {props.trailing && <div className="ml-auto flex items-center gap-1">{props.trailing}</div>}
             <ConfirmDialog
                 open={pendingRemove !== null}
                 title="Remove this view?"

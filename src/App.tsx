@@ -751,7 +751,6 @@ export function App() {
 
     return (
         <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#f6edd6]">
-            <IoButtons onExport={handleExport} onImport={handleImport} />
             <TabBar
                 tabs={tabs}
                 activeId={section === "roadmap" ? activeId : ""}
@@ -766,6 +765,7 @@ export function App() {
                         merchantActive={section === "merchant"}
                     />
                 }
+                trailing={<IoButtons onExport={handleExport} onImport={handleImport} />}
             />
             <div ref={boardRef} className="board-surface relative isolate flex-1 overflow-hidden">
                 <Corners />

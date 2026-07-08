@@ -36,7 +36,7 @@ export function IoButtons({ onExport, onImport }: IoButtonsProps) {
     }
 
     return (
-        <div className="absolute top-2 right-3.5 z-[6] flex gap-1">
+        <div className="flex items-center gap-1">
             <button
                 type="button"
                 onClick={exportRoadmap}
