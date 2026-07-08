@@ -1,0 +1,35 @@
+import { render } from "@testing-library/react"
+import { afterEach, beforeEach, expect } from "vitest"
+import { GoalCelebration } from "./GoalCelebration"
+
+describe("GoalCelebration", () => {
+    const origMatchMedia = window.matchMedia
+
+    beforeEach(() => {
+        window.matchMedia = ((query: string) => ({ matches: false, media: query })) as typeof window.matchMedia
+    })
+    afterEach(() => {
+        window.matchMedia = origMatchMedia
+    })
+
+    it("bursts a ring and a full ring of gold motes from the goal's position", () => {
+        const { container } = render(<GoalCelebration burst={{ x: 300, y: 120, nonce: 1 }} />)
+        const fanfare = container.querySelector('[data-testid="goal-celebration"]')
+
+        expect(fanfare).toBeInTheDocument()
+        expect(fanfare?.querySelectorAll("span")).toHaveLength(16)
+        // Motes anchor on the passed origin, not the board centre.
+        expect((fanfare?.querySelector("span") as HTMLElement).style.left).toBe("300px")
+    })
+
+    it("shows nothing until a goal has completed", () => {
+        const { container } = render(<GoalCelebration burst={null} />)
+        expect(container.querySelector('[data-testid="goal-celebration"]')).not.toBeInTheDocument()
+    })
+
+    it("stays silent under reduced motion", () => {
+        window.matchMedia = ((query: string) => ({ matches: true, media: query })) as typeof window.matchMedia
+        const { container } = render(<GoalCelebration burst={{ x: 300, y: 120, nonce: 1 }} />)
+        expect(container.querySelector('[data-testid="goal-celebration"]')).not.toBeInTheDocument()
+    })
+})
