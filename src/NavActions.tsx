@@ -27,16 +27,26 @@ type NavActionsProps = {
     onOpenMerchant?: () => void
     // Highlights the Merchant chip (active-tab look) while its view is showing.
     merchantActive?: boolean
+    // Opens the Sync view. Omitted (chip hidden) when sync is disabled.
+    onOpenSync?: () => void
+    // Highlights the Sync chip while its view is showing.
+    syncActive?: boolean
+    // Small attention dot on the Sync chip for "error" / "conflict" status.
+    syncStatus?: string
 }
 
 export function NavActions({
     onOpenBounties,
     bountiesActive = false,
     onOpenMerchant,
-    merchantActive = false
+    merchantActive = false,
+    onOpenSync,
+    syncActive = false,
+    syncStatus
 }: NavActionsProps) {
     const bountiesClass = `${chipBase} ${bountiesActive ? activeChip : inactiveChip} gap-1.5`
     const merchantClass = `${chipBase} ${merchantActive ? activeChip : inactiveChip} gap-1.5`
+    const syncClass = `${chipBase} ${syncActive ? activeChip : inactiveChip} gap-1.5`
     return (
         <>
             <button
@@ -73,6 +83,32 @@ export function NavActions({
                 </svg>
                 Bounties
             </button>
+            {onOpenSync && (
+                <button
+                    type="button"
+                    className={syncClass}
+                    style={syncActive ? activeShadow : undefined}
+                    title="Sync"
+                    aria-pressed={syncActive}
+                    onClick={onOpenSync}
+                >
+                    {/* Circular arrows (lucide refresh-cw). */}
+                    <svg {...iconProps}>
+                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                        <path d="M21 3v5h-5" />
+                        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                        <path d="M3 21v-5h5" />
+                    </svg>
+                    Sync
+                    {(syncStatus === "error" || syncStatus === "conflict") && (
+                        <span
+                            aria-hidden="true"
+                            className="ml-0.5 h-1.5 w-1.5 rounded-full"
+                            style={{ background: syncStatus === "error" ? "#a5482a" : "#b8892b" }}
+                        />
+                    )}
+                </button>
+            )}
         </>
     )
 }

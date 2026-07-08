@@ -23,7 +23,7 @@ import { NavActions } from "./NavActions"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
 import { newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
 import { TabBar } from "./TabBar"
-import { SyncButton } from "./sync/SyncButton"
+import { SyncBoard } from "./sync/SyncBoard"
 import { useSync } from "./sync/useSync"
 
 // Auto-placement for a new sub-milestone: drop it a tier below the parent (matches the seed's ~160px
@@ -126,7 +126,7 @@ export function App() {
     // The Merchant shelf. Gold isn't stored: it's earned from roadmap completion minus the price of
     // each redeemed reward (computed below), clamped at zero.
     const [rewards, setRewards] = useState<Reward[]>(boot.rewards)
-    const [section, setSection] = useState<"roadmap" | "bounties" | "merchant">("roadmap")
+    const [section, setSection] = useState<"roadmap" | "bounties" | "merchant" | "sync">("roadmap")
     // The "New reward" card, shown in the same top-right aside as the milestone detail card. `open` is
     // the intent; `shown` trails it so the exit animation can play before the card unmounts (mirrors
     // selectedId / displayId).
@@ -653,6 +653,12 @@ export function App() {
     )
     const sync = useSync(syncSlices, applyLoaded)
 
+    // A pairing link or a detected conflict needs attention now: jump to the Sync screen so the inline
+    // confirm / choice is visible without the user hunting for it.
+    useEffect(() => {
+        if (sync.pendingAdopt !== null || sync.conflict) setSection("sync")
+    }, [sync.pendingAdopt, sync.conflict])
+
     const tabs = order.flatMap((id) => {
         const project = projects[id]
         const goal = project?.milestones[project.goalId]
@@ -782,14 +788,12 @@ export function App() {
                         bountiesActive={section === "bounties"}
                         onOpenMerchant={openMerchant}
                         merchantActive={section === "merchant"}
+                        onOpenSync={sync.enabled ? () => setSection("sync") : undefined}
+                        syncActive={section === "sync"}
+                        syncStatus={sync.status}
                     />
                 }
-                trailing={
-                    <>
-                        <SyncButton sync={sync} />
-                        <IoButtons onExport={handleExport} onImport={handleImport} />
-                    </>
-                }
+                trailing={<IoButtons onExport={handleExport} onImport={handleImport} />}
             />
             <div ref={boardRef} className="board-surface relative isolate flex-1 overflow-hidden">
                 <Corners />
@@ -827,6 +831,10 @@ export function App() {
                             </aside>
                         )}
                     </>
+                ) : section === "sync" ? (
+                    <div className="absolute inset-0 z-10 overflow-auto">
+                        <SyncBoard sync={sync} />
+                    </div>
                 ) : (
                     <>
                         <div className="absolute inset-0 z-10">

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Questline">
+  <!-- Deep parchment-dark field, opaque so iOS/maskable crops look right. -->
+  <rect width="512" height="512" fill="#1b1307"/>
+  <circle cx="256" cy="256" r="250" fill="#241a0b"/>
+
+  <!-- Quest tree: gold edges linking milestone nodes up to the starred goal.
+       Edges are filled quads (not strokes) for reliable rasterisation; nodes cover
+       the joints. All geometry sits inside the maskable safe zone (center 80%). -->
+  <g fill="#b98f36">
+    <polygon points="264.5,408 264.5,300 247.5,300 247.5,408"/>
+    <polygon points="261.869,293.852 173.869,209.852 162.131,222.148 250.131,306.148"/>
+    <polygon points="261.869,306.148 349.869,222.148 338.131,209.852 250.131,293.852"/>
+    <polygon points="174.265,221.743 262.265,125.743 249.735,114.257 161.735,210.257"/>
+    <polygon points="350.265,210.257 262.265,114.257 249.735,125.743 337.735,221.743"/>
+  </g>
+
+  <g fill="#e6c458" stroke="#8a641d" stroke-width="6">
+    <circle cx="256" cy="408" r="26"/>
+    <circle cx="168" cy="216" r="24"/>
+    <circle cx="344" cy="216" r="24"/>
+    <circle cx="256" cy="300" r="22"/>
+  </g>
+
+  <!-- Goal node, brighter, with an engraved star. -->
+  <circle cx="256" cy="120" r="34" fill="#f6df9a" stroke="#b98f36" stroke-width="7"/>
+  <path d="M256,102 L260.41,113.93 L273.12,114.44 L263.13,122.32 L266.58,134.56 L256,127.5 L245.42,134.56 L248.87,122.32 L238.88,114.44 L251.59,113.93 Z" fill="#6b4e14"/>
+</svg>
