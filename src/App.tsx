@@ -20,9 +20,11 @@ import { AddRewardCard, MerchantBoard } from "./MerchantBoard"
 import { MilestoneTree } from "./MilestoneTree"
 import type { Milestone, MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
-import { deserialize, loadState, maxCounter, saveState, serialize } from "./persist"
+import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
 import { newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
 import { TabBar } from "./TabBar"
+import { SyncButton } from "./sync/SyncButton"
+import { useSync } from "./sync/useSync"
 
 // Auto-placement for a new sub-milestone: drop it a tier below the parent (matches the seed's ~160px
 // tier gap) and fan each extra sibling to the right so repeated adds don't stack exactly.
@@ -601,15 +603,10 @@ export function App() {
         [projects, order, mirrorPos, bounties, rewards]
     )
 
-    // Replace the whole app from an imported file. Invalid input is rejected with an alert and
-    // changes nothing; a valid file swaps the data, resumes the id counters past it, and opens the
-    // default tab (first non-Root view, else Root) selected on its goal.
-    const handleImport = useCallback((json: string) => {
-        const loaded = deserialize(json)
-        if (!loaded) {
-            alert("Could not import: the file is not a valid questline export.")
-            return
-        }
+    // Replace the whole app from a loaded state -- an imported file or a roadmap synced down from another
+    // device. Swaps every slice, resumes the id counters past it, and opens the default tab (first
+    // non-Root view, else Root) selected on its goal.
+    const applyLoaded = useCallback((loaded: PersistedSlices) => {
         setProjects(loaded.projects)
         setOrder(loaded.order)
         setMirrorPos(loaded.mirrorPos)
@@ -633,6 +630,28 @@ export function App() {
         setActiveId(nextActive)
         setSelectedId(loaded.projects[nextActive]?.goalId ?? null)
     }, [])
+
+    // Replace the whole app from an imported file. Invalid input is rejected with an alert and changes
+    // nothing; a valid file is applied like any loaded state.
+    const handleImport = useCallback(
+        (json: string) => {
+            const loaded = deserialize(json)
+            if (!loaded) {
+                alert("Could not import: the file is not a valid questline export.")
+                return
+            }
+            applyLoaded(loaded)
+        },
+        [applyLoaded]
+    )
+
+    // Cross-device sync: opt-in, end-to-end encrypted, and inert unless VITE_SYNC_URL is set at build.
+    // It reads the same slices the autosave persists and applies an incoming roadmap through applyLoaded.
+    const syncSlices = useMemo<PersistedSlices>(
+        () => ({ projects, order, mirrorPos, bounties, rewards }),
+        [projects, order, mirrorPos, bounties, rewards]
+    )
+    const sync = useSync(syncSlices, applyLoaded)
 
     const tabs = order.flatMap((id) => {
         const project = projects[id]
@@ -765,7 +784,12 @@ export function App() {
                         merchantActive={section === "merchant"}
                     />
                 }
-                trailing={<IoButtons onExport={handleExport} onImport={handleImport} />}
+                trailing={
+                    <>
+                        <SyncButton sync={sync} />
+                        <IoButtons onExport={handleExport} onImport={handleImport} />
+                    </>
+                }
             />
             <div ref={boardRef} className="board-surface relative isolate flex-1 overflow-hidden">
                 <Corners />

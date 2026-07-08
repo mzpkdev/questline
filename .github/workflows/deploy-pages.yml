@@ -43,6 +43,9 @@ jobs:
         env:
           # configure-pages emits the site's subpath (e.g. "/repo"); Vite reads it for asset URLs.
           VITE_BASE: ${{ steps.pages.outputs.base_path }}
+          # Sync Worker URL (repo variable, public not secret). Unset -> cross-device sync stays off and
+          # the deployed app runs fully local.
+          VITE_SYNC_URL: ${{ vars.VITE_SYNC_URL }}
         run: bun run build
 
       - name: Upload artifact
