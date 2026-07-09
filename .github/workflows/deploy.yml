@@ -41,7 +41,9 @@ jobs:
         run: bun run build
 
       - name: Deploy
-        run: bunx wrangler pages deploy
+        # CI checks out a detached HEAD (head_sha), so wrangler can't infer the branch and would
+        # ship a preview; --branch=main forces the production deployment.
+        run: bunx wrangler pages deploy --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
