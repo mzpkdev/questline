@@ -1,5 +1,5 @@
-// Whole-section (page) entrance. Wraps a top-level section -- the roadmap board, the Bounties list,
-// the Merchant shop, or Sync -- and plays a single fade + rise as it enters. App keys this by section
+// Whole-section (page) entrance. Wraps a top-level section -- the roadmap board, the Tasks list,
+// the Rewards shop, or Sync -- and plays a single fade + rise as it enters. App keys this by section
 // (and, within the roadmap, by the active tab), so it remounts and replays on a section change or a
 // tab switch, but not on an in-board re-render or a selection change. Uses WAAPI + the shared
 // reduced-motion guard, matching the

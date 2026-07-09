@@ -84,7 +84,7 @@ button:disabled {
     }
 }
 
-/* Bounty tile entrance (mockup .item animation): a small drop-in fade. */
+/* Task tile entrance (mockup .item animation): a small drop-in fade. */
 @keyframes itemIn {
     from {
         opacity: 0;
@@ -96,7 +96,7 @@ button:disabled {
     }
 }
 
-/* Merchant: a gentle coin glow on an affordable reward's price. */
+/* Rewards: a gentle coin glow on an affordable reward's price. */
 @keyframes coinPulse {
     0%,
     100% {

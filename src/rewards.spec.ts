@@ -1,6 +1,6 @@
 import {
     addReward,
-    BOUNTY_GOLD,
+    TASK_GOLD,
     CHECK_GOLD,
     earnedGold,
     GOAL_GOLD,
@@ -12,7 +12,7 @@ import {
     SEED_REWARDS,
     spentGold,
     visible
-} from "./merchant"
+} from "./rewards"
 import type { Todo } from "./milestones"
 import { newProject, type Project, ROOT_ID, rootProject } from "./project"
 
@@ -28,7 +28,7 @@ const projectWith = (id: string, mastered: string[], todos: Record<string, Todo[
     todos
 })
 
-describe("merchant", () => {
+describe("rewards", () => {
     context("addReward", () => {
         it("appends a reward with the given id", () => {
             expect(addReward(list(), "reward-3", "Snack", 4)).toEqual([
@@ -163,13 +163,13 @@ describe("merchant", () => {
             expect(earnedGold(projects, [])).toBe(2 * CHECK_GOLD)
         })
 
-        it("pays BOUNTY_GOLD per done bounty in the to-do list", () => {
-            const bounties = [
+        it("pays TASK_GOLD per done task in the to-do list", () => {
+            const tasks = [
                 { id: "b1", text: "one", done: true },
                 { id: "b2", text: "two", done: false },
                 { id: "b3", text: "three", done: true }
             ]
-            expect(earnedGold({}, bounties)).toBe(2 * BOUNTY_GOLD)
+            expect(earnedGold({}, tasks)).toBe(2 * TASK_GOLD)
         })
 
         it("skips the Root hub, so its node never mints gold", () => {
@@ -177,14 +177,14 @@ describe("merchant", () => {
             expect(earnedGold({ [ROOT_ID]: root }, [])).toBe(0)
         })
 
-        it("sums boxes, bounties, milestones, and goals together", () => {
+        it("sums boxes, tasks, milestones, and goals together", () => {
             const projects = {
                 [ROOT_ID]: rootProject(),
                 a: projectWith("a", ["n1"], { n1: [{ text: "x", done: true }] }),
                 b: projectWith("b", ["b-goal"])
             }
-            const bounties = [{ id: "b1", text: "one", done: true }]
-            expect(earnedGold(projects, bounties)).toBe(NODE_GOLD + CHECK_GOLD + GOAL_GOLD + BOUNTY_GOLD)
+            const tasks = [{ id: "b1", text: "one", done: true }]
+            expect(earnedGold(projects, tasks)).toBe(NODE_GOLD + CHECK_GOLD + GOAL_GOLD + TASK_GOLD)
         })
 
         it("is zero with nothing completed", () => {

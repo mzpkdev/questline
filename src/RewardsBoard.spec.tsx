@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import type { Reward } from "./merchant"
-import { MerchantBoard } from "./MerchantBoard"
+import type { Reward } from "./rewards"
+import { RewardsBoard } from "./RewardsBoard"
 
 const rewards: Reward[] = [
     { id: "reward-1", name: "Fancy coffee", price: 3 },
@@ -10,12 +10,12 @@ const rewards: Reward[] = [
 const noop = () => {}
 
 // gold=5 leaves the 3-gold reward affordable and the 40-gold one locked.
-const renderBoard = (props: Partial<Parameters<typeof MerchantBoard>[0]> = {}) =>
+const renderBoard = (props: Partial<Parameters<typeof RewardsBoard>[0]> = {}) =>
     render(
-        <MerchantBoard gold={5} rewards={rewards} onRedeem={noop} onOpenAdd={noop} onRemoveReward={noop} {...props} />
+        <RewardsBoard gold={5} rewards={rewards} onRedeem={noop} onOpenAdd={noop} onRemoveReward={noop} {...props} />
     )
 
-describe("MerchantBoard", () => {
+describe("RewardsBoard", () => {
     it("renders each reward with its price and shows the purse balance", () => {
         renderBoard()
         expect(screen.getByText("Fancy coffee")).toBeInTheDocument()

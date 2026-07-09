@@ -72,8 +72,8 @@ describe("sfx wiring", () => {
         fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
         expect(voices).toHaveLength(0)
 
-        // Cross a seeded task off: toggleBounty() on an open item -> coin (sine @ 1046.5).
-        fireEvent.click(screen.getByRole("button", { name: /^Check Tick a bounty/ }))
+        // Cross a seeded task off: toggleTask() on an open item -> coin (sine @ 1046.5).
+        fireEvent.click(screen.getByRole("button", { name: /^Check Tick a task/ }))
         expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 1046.5)).toBe(true)
     })
 
@@ -114,7 +114,7 @@ describe("sfx wiring", () => {
         )
 
         fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
-        fireEvent.click(screen.getByRole("button", { name: /^Check Tick a bounty/ }))
+        fireEvent.click(screen.getByRole("button", { name: /^Check Tick a task/ }))
         expect(voices).toHaveLength(0)
     })
 })

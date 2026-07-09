@@ -1,5 +1,5 @@
-// App-level nav items in the top bar, ahead of the roadmap tabs: Bounties (a to-do list) and
-// Merchant (a shop). They wear the exact roadmap-tab chip look (via TabBar's shared classes) plus an
+// App-level nav items in the top bar, ahead of the roadmap tabs: Tasks (a to-do list) and
+// Rewards (a shop). They wear the exact roadmap-tab chip look (via TabBar's shared classes) plus an
 // icon, so they read as top-level sections. Each opens its view and highlights like an active tab
 // while that view is showing.
 
@@ -19,33 +19,33 @@ const iconProps = {
 } as const
 
 type NavActionsProps = {
-    // Opens the app-level Bounties view. Omitted when the chip is rendered in isolation.
-    onOpenBounties?: () => void
-    // Highlights the Bounties chip (active-tab look) while its view is showing.
-    bountiesActive?: boolean
-    // Opens the app-level Merchant view. Omitted when the chip is rendered in isolation.
-    onOpenMerchant?: () => void
-    // Highlights the Merchant chip (active-tab look) while its view is showing.
-    merchantActive?: boolean
+    // Opens the app-level Tasks view. Omitted when the chip is rendered in isolation.
+    onOpenTasks?: () => void
+    // Highlights the Tasks chip (active-tab look) while its view is showing.
+    tasksActive?: boolean
+    // Opens the app-level Rewards view. Omitted when the chip is rendered in isolation.
+    onOpenRewards?: () => void
+    // Highlights the Rewards chip (active-tab look) while its view is showing.
+    rewardsActive?: boolean
 }
 
 export function NavActions({
-    onOpenBounties,
-    bountiesActive = false,
-    onOpenMerchant,
-    merchantActive = false
+    onOpenTasks,
+    tasksActive = false,
+    onOpenRewards,
+    rewardsActive = false
 }: NavActionsProps) {
-    const bountiesClass = `${chipBase} ${bountiesActive ? activeChip : inactiveChip} gap-1.5`
-    const merchantClass = `${chipBase} ${merchantActive ? activeChip : inactiveChip} gap-1.5`
+    const tasksClass = `${chipBase} ${tasksActive ? activeChip : inactiveChip} gap-1.5`
+    const rewardsClass = `${chipBase} ${rewardsActive ? activeChip : inactiveChip} gap-1.5`
     return (
         <>
             <button
                 type="button"
-                className={merchantClass}
-                style={merchantActive ? activeShadow : undefined}
+                className={rewardsClass}
+                style={rewardsActive ? activeShadow : undefined}
                 title="Rewards"
-                aria-pressed={merchantActive}
-                onClick={onOpenMerchant}
+                aria-pressed={rewardsActive}
+                onClick={onOpenRewards}
             >
                 {/* Gold coins (lucide coins). */}
                 <svg {...iconProps}>
@@ -58,11 +58,11 @@ export function NavActions({
             </button>
             <button
                 type="button"
-                className={bountiesClass}
-                style={bountiesActive ? activeShadow : undefined}
+                className={tasksClass}
+                style={tasksActive ? activeShadow : undefined}
                 title="Tasks"
-                aria-pressed={bountiesActive}
-                onClick={onOpenBounties}
+                aria-pressed={tasksActive}
+                onClick={onOpenTasks}
             >
                 {/* A quest scroll (lucide scroll-text). */}
                 <svg {...iconProps}>

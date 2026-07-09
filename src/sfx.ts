@@ -1,7 +1,7 @@
 // Zero-asset WebAudio SFX kit -- synthesized one-shot sound effects, no audio files to host or ship.
 // Questline is a medieval quest board (parchment, gold, Cinzel type), so the cues are warm struck
 // bells and a harp-like pluck rather than chiptune bleeps: a soft pluck when a to-do is ticked, rising
-// hand-bells when a milestone lands, a bright coin clink at the merchant, and a regal bell fanfare when
+// hand-bells when a milestone lands, a bright coin clink at the rewards, and a regal bell fanfare when
 // a whole quest is done. This is the audio counterpart to the app's visual juice (node seal, purse
 // bump, goal-celebration burst).
 //
@@ -10,7 +10,7 @@
 // lifetime). Returns a frozen record of bound effect functions plus unlock / setMuted / isMuted.
 //
 // Audio is a SIDE EFFECT: fire these from event handlers or from an effect that observes a real state
-// transition (see App). Never call them from a pure module (bounties.ts, merchant.ts, graph.ts) or
+// transition (see App). Never call them from a pure module (tasks.ts, rewards.ts, graph.ts) or
 // from a component's render body.
 //
 // Synthesis model: every voice is an OscillatorNode -> GainNode -> destination chain with a short gain

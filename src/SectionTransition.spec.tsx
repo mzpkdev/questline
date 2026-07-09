@@ -47,7 +47,7 @@ describe("SectionTransition", () => {
             </SectionTransition>
         )
         rerender(
-            <SectionTransition key="bounties" animate={true}>
+            <SectionTransition key="tasks" animate={true}>
                 content
             </SectionTransition>
         )

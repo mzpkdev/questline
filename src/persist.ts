@@ -6,8 +6,8 @@
 // is rebuilt into a Set on the way back in. Scope is data-only: the open tab/selection is not
 // persisted, so a load opens the default tab.
 
-import type { Bounty } from "./bounties"
-import type { Reward } from "./merchant"
+import type { Task } from "./tasks"
+import type { Reward } from "./rewards"
 import type { Project } from "./project"
 
 export const PERSIST_VERSION = 1
@@ -20,9 +20,9 @@ export type PersistedSlices = {
     projects: Record<string, Project>
     order: string[]
     mirrorPos: MirrorPos
-    // The app-level Bounties checklist (one flat list, not tied to any project).
-    bounties: Bounty[]
-    // The Merchant shelf. Gold isn't stored -- it's derived from roadmap completion (earnedGold) minus
+    // The app-level Tasks checklist (one flat list, not tied to any project).
+    tasks: Task[]
+    // The Rewards shelf. Gold isn't stored -- it's derived from roadmap completion (earnedGold) minus
     // the price of each redeemed reward, so a reward's `redeemedAt` carries the spend across a reload.
     rewards: Reward[]
 }
@@ -35,9 +35,9 @@ type WireState = {
     order: string[]
     mirrorPos: MirrorPos
     // Added after v1 shipped, so it's optional on the wire: an older file (or one from before the
-    // Bounties view) simply has none, and loads with an empty list.
-    bounties?: Bounty[]
-    // Likewise optional: a file from before the Merchant view has none, loading an empty shelf.
+    // Tasks view) simply has none, and loads with an empty list.
+    tasks?: Task[]
+    // Likewise optional: a file from before the Rewards view has none, loading an empty shelf.
     rewards?: Reward[]
 }
 
@@ -52,7 +52,7 @@ export function serialize(slices: PersistedSlices): string {
         projects,
         order: slices.order,
         mirrorPos: slices.mirrorPos,
-        bounties: slices.bounties,
+        tasks: slices.tasks,
         rewards: slices.rewards
     }
     return JSON.stringify(wire)
@@ -72,16 +72,16 @@ export function deserialize(text: string): PersistedSlices | null {
     for (const [id, project] of Object.entries(raw.projects)) {
         projects[id] = { ...project, mastered: new Set(project.mastered) }
     }
-    // Bounties are optional and lightly validated: any non-array or malformed entries fall back to an
+    // Tasks are optional and lightly validated: any non-array or malformed entries fall back to an
     // empty list rather than rejecting the whole file. Entries from before ids existed (or any missing
-    // one) are backfilled with a fresh `bounty-N`, resuming past whatever ids are already present.
-    const rawBounties = Array.isArray(raw.bounties) ? raw.bounties.filter(isBounty) : []
+    // one) are backfilled with a fresh `task-N`, resuming past whatever ids are already present.
+    const rawTasks = Array.isArray(raw.tasks) ? raw.tasks.filter(isTask) : []
     let nextId = maxCounter(
-        rawBounties.map((b) => (typeof b.id === "string" ? b.id : "")),
-        "bounty"
+        rawTasks.map((b) => (typeof b.id === "string" ? b.id : "")),
+        "task"
     )
-    const bounties: Bounty[] = rawBounties.map((b) => ({
-        id: typeof b.id === "string" && b.id ? b.id : `bounty-${++nextId}`,
+    const tasks: Task[] = rawTasks.map((b) => ({
+        id: typeof b.id === "string" && b.id ? b.id : `task-${++nextId}`,
         text: b.text,
         done: b.done,
         ...(typeof b.completedAt === "number" ? { completedAt: b.completedAt } : {})
@@ -100,7 +100,7 @@ export function deserialize(text: string): PersistedSlices | null {
         ...(typeof r.redeemedAt === "number" ? { redeemedAt: r.redeemedAt } : {}),
         ...(r.replenish === true ? { replenish: true } : {})
     }))
-    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, bounties, rewards }
+    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks, rewards }
 }
 
 // Best-effort read of the autosaved state, or null when absent/corrupt.
@@ -144,7 +144,7 @@ function isWireState(value: unknown): value is WireState {
     return Object.values(v.projects as Record<string, unknown>).every(isWireProject)
 }
 
-function isBounty(value: unknown): value is { id?: unknown; text: string; done: boolean; completedAt?: unknown } {
+function isTask(value: unknown): value is { id?: unknown; text: string; done: boolean; completedAt?: unknown } {
     if (typeof value !== "object" || value === null) return false
     const b = value as Record<string, unknown>
     return typeof b.text === "string" && typeof b.done === "boolean"

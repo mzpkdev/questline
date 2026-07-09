@@ -526,26 +526,26 @@ describe("App", () => {
         })
     })
 
-    context("the Bounties view", () => {
-        const openBounties = () => fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
+    context("the Tasks view", () => {
+        const openTasks = () => fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
 
-        it("opens the seeded bounties list from the nav chip, swapping out the roadmap", async () => {
+        it("opens the seeded tasks list from the nav chip, swapping out the roadmap", async () => {
             render(<App />)
-            openBounties()
-            expect(await screen.findByText("Tick a bounty to complete it and earn gold toward the Merchant.")).toBeInTheDocument()
-            // The roadmap board is gone while Bounties shows.
+            openTasks()
+            expect(await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")).toBeInTheDocument()
+            // The roadmap board is gone while Tasks shows.
             expect(nodeRoot("root-goal")).toBeNull()
         })
 
-        it("adds, toggles, then removes a bounty", async () => {
+        it("adds, toggles, then removes a task", async () => {
             render(<App />)
-            openBounties()
-            await screen.findByText("Tick a bounty to complete it and earn gold toward the Merchant.")
+            openTasks()
+            await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
-            fireEvent.change(screen.getByRole("textbox", { name: "New bounty" }), {
+            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), {
                 target: { value: "Slay the bog wyrm" }
             })
-            fireEvent.click(screen.getByRole("button", { name: "Add bounty" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
             expect(await screen.findByText("Slay the bog wyrm")).toBeInTheDocument()
 
             fireEvent.click(screen.getByRole("button", { name: "Check Slay the bog wyrm" }))
@@ -557,23 +557,23 @@ describe("App", () => {
 
         it("returns to the roadmap when a tab is clicked", async () => {
             render(<App />)
-            openBounties()
-            await screen.findByText("Tick a bounty to complete it and earn gold toward the Merchant.")
+            openTasks()
+            await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
             fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
             await waitFor(() => expect(nodeRoot("learn")).not.toBeNull())
-            expect(screen.queryByText("Tick a bounty to complete it and earn gold toward the Merchant.")).toBeNull()
+            expect(screen.queryByText("Tick a task to complete it and earn gold to spend on rewards.")).toBeNull()
         })
 
-        it("persists an added bounty across a remount", async () => {
+        it("persists an added task across a remount", async () => {
             const first = render(<App />)
-            openBounties()
-            await screen.findByText("Tick a bounty to complete it and earn gold toward the Merchant.")
+            openTasks()
+            await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
-            fireEvent.change(screen.getByRole("textbox", { name: "New bounty" }), {
+            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), {
                 target: { value: "Guard the caravan" }
             })
-            fireEvent.click(screen.getByRole("button", { name: "Add bounty" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
             await screen.findByText("Guard the caravan")
             await waitFor(() => expect(localStorage.getItem("questline:v1")).toContain("Guard the caravan"), {
                 timeout: 2000
@@ -586,14 +586,14 @@ describe("App", () => {
         })
     })
 
-    context("the Merchant view", () => {
-        const openMerchant = () => fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
+    context("the Rewards view", () => {
+        const openRewards = () => fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
 
-        // A fresh seed opens the purse at 3 gold: one completed step (3). The tutorial bounties all
+        // A fresh seed opens the purse at 3 gold: one completed step (3). The tutorial tasks all
         // start undone, and checklist boxes pay nothing (CHECK_GOLD is 0).
         it("opens the seeded shop from the nav chip, swapping out the roadmap", async () => {
             render(<App />)
-            openMerchant()
+            openRewards()
             expect(await screen.findByText("Fancy coffee")).toBeInTheDocument()
             expect(screen.getByTestId("purse")).toHaveTextContent("3")
             expect(nodeRoot("root-goal")).toBeNull()
@@ -601,7 +601,7 @@ describe("App", () => {
 
         it("redeems an affordable reward, marking it spent and draining the purse", async () => {
             render(<App />)
-            openMerchant()
+            openRewards()
             await screen.findByText("Fancy coffee")
             expect(screen.getByTestId("purse")).toHaveTextContent("3")
 
@@ -613,14 +613,14 @@ describe("App", () => {
             expect(screen.getByText(/Redeemed/)).toBeInTheDocument()
         })
 
-        it("counts a freshly ticked bounty toward the purse", async () => {
+        it("counts a freshly ticked task toward the purse", async () => {
             render(<App />)
-            // The tutorial bounties start undone, so the purse is the roadmap's 3. Ticking one adds
-            // BOUNTY_GOLD (1), taking it to 4.
+            // The tutorial tasks start undone, so the purse is the roadmap's 3. Ticking one adds
+            // TASK_GOLD (1), taking it to 4.
             fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
             fireEvent.click(
                 await screen.findByRole("button", {
-                    name: "Check Tick a bounty to complete it and earn gold toward the Merchant."
+                    name: "Check Tick a task to complete it and earn gold to spend on rewards."
                 })
             )
             fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
@@ -629,7 +629,7 @@ describe("App", () => {
 
         it("adds a custom reward to the shelf", async () => {
             render(<App />)
-            openMerchant()
+            openRewards()
             await screen.findByText("Fancy coffee")
 
             fireEvent.click(screen.getByRole("button", { name: "Add a reward" }))
@@ -644,7 +644,7 @@ describe("App", () => {
 
         it("auto-replenishes a flagged reward on redemption", async () => {
             render(<App />)
-            openMerchant()
+            openRewards()
 
             // Add a 3-gold auto-replenishing reward (the fresh purse is 3, so it's affordable).
             fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
@@ -667,7 +667,7 @@ describe("App", () => {
 
         it("opens the New reward card from the + tile and dismisses it on Escape", async () => {
             render(<App />)
-            openMerchant()
+            openRewards()
 
             fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
             expect(await screen.findByTestId("add-reward-card")).toBeInTheDocument()
@@ -679,7 +679,7 @@ describe("App", () => {
 
         it("returns to the roadmap when a tab is clicked", async () => {
             render(<App />)
-            openMerchant()
+            openRewards()
             await screen.findByText("Fancy coffee")
 
             fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
@@ -689,7 +689,7 @@ describe("App", () => {
 
         it("persists a redemption across a remount", async () => {
             const first = render(<App />)
-            openMerchant()
+            openRewards()
             await screen.findByText("Fancy coffee")
 
             fireEvent.click(screen.getByRole("button", { name: "Redeem Fancy coffee" }))

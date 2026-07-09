@@ -10,7 +10,7 @@ const slices = () => ({
     projects: { [ROOT_ID]: rootProject(), seed: seedProject() },
     order: [ROOT_ID, "seed"],
     mirrorPos: {},
-    bounties: [],
+    tasks: [],
     rewards: []
 })
 

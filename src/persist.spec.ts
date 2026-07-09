@@ -5,9 +5,9 @@ const slices = () => ({
     projects: { [ROOT_ID]: rootProject(), seed: seedProject() },
     order: [ROOT_ID, "seed"],
     mirrorPos: { "view-mirror-seed": { x: 10, y: 20 } },
-    bounties: [
-        { id: "bounty-1", text: "Scout the trail", done: false },
-        { id: "bounty-2", text: "Gather moonpetals", done: true }
+    tasks: [
+        { id: "task-1", text: "Scout the trail", done: false },
+        { id: "task-2", text: "Gather moonpetals", done: true }
     ],
     rewards: [
         { id: "reward-1", name: "Fancy coffee", price: 3 },
@@ -28,23 +28,23 @@ describe("persist", () => {
         expect(mastered?.has("break-steps")).toBe(true)
     })
 
-    it("round-trips the bounties list, ids and all", () => {
+    it("round-trips the tasks list, ids and all", () => {
         const back = deserialize(serialize(slices()))
-        expect(back?.bounties).toEqual([
-            { id: "bounty-1", text: "Scout the trail", done: false },
-            { id: "bounty-2", text: "Gather moonpetals", done: true }
+        expect(back?.tasks).toEqual([
+            { id: "task-1", text: "Scout the trail", done: false },
+            { id: "task-2", text: "Gather moonpetals", done: true }
         ])
     })
 
-    it("preserves a completed bounty's completedAt timestamp", () => {
+    it("preserves a completed task's completedAt timestamp", () => {
         const withCompletedAt = {
             ...slices(),
-            bounties: [{ id: "bounty-1", text: "done one", done: true, completedAt: 1_700_000_000_000 }]
+            tasks: [{ id: "task-1", text: "done one", done: true, completedAt: 1_700_000_000_000 }]
         }
-        expect(deserialize(serialize(withCompletedAt))?.bounties[0]?.completedAt).toBe(1_700_000_000_000)
+        expect(deserialize(serialize(withCompletedAt))?.tasks[0]?.completedAt).toBe(1_700_000_000_000)
     })
 
-    it("loads a pre-Bounties file (no bounties field) as an empty list, not a rejection", () => {
+    it("loads a pre-Tasks file (no tasks field) as an empty list, not a rejection", () => {
         const legacy = JSON.stringify({
             version: PERSIST_VERSION,
             projects: { [ROOT_ID]: { ...rootProject(), mastered: [] } },
@@ -53,10 +53,10 @@ describe("persist", () => {
         })
         const back = deserialize(legacy)
         expect(back).not.toBeNull()
-        expect(back?.bounties).toEqual([])
+        expect(back?.tasks).toEqual([])
     })
 
-    it("round-trips the merchant shelf", () => {
+    it("round-trips the rewards shelf", () => {
         const back = deserialize(serialize(slices()))
         expect(back?.rewards).toEqual([
             { id: "reward-1", name: "Fancy coffee", price: 3 },
@@ -72,7 +72,7 @@ describe("persist", () => {
         expect(deserialize(serialize(withRedeemed))?.rewards[0]?.redeemedAt).toBe(1_700_000_000_000)
     })
 
-    it("loads a pre-Merchant file (no rewards) as an empty shelf", () => {
+    it("loads a pre-Rewards file (no rewards) as an empty shelf", () => {
         const wire = JSON.parse(serialize(slices()))
         wire.rewards = undefined
         const back = deserialize(JSON.stringify(wire))
@@ -94,22 +94,22 @@ describe("persist", () => {
         ])
     })
 
-    it("drops malformed bounty entries rather than rejecting the file", () => {
+    it("drops malformed task entries rather than rejecting the file", () => {
         const wire = JSON.parse(serialize(slices()))
-        wire.bounties = [{ id: "bounty-1", text: "keep", done: false }, { text: 5, done: false }, "nope", null]
+        wire.tasks = [{ id: "task-1", text: "keep", done: false }, { text: 5, done: false }, "nope", null]
         const back = deserialize(JSON.stringify(wire))
-        expect(back?.bounties).toEqual([{ id: "bounty-1", text: "keep", done: false }])
+        expect(back?.tasks).toEqual([{ id: "task-1", text: "keep", done: false }])
     })
 
-    it("backfills ids for bounties saved before ids existed, resuming past any present", () => {
+    it("backfills ids for tasks saved before ids existed, resuming past any present", () => {
         const wire = JSON.parse(serialize(slices()))
-        wire.bounties = [
+        wire.tasks = [
             { text: "no id one", done: false },
-            { id: "bounty-5", text: "has id", done: true },
+            { id: "task-5", text: "has id", done: true },
             { text: "no id two", done: false }
         ]
-        const ids = deserialize(JSON.stringify(wire))?.bounties.map((b) => b.id)
-        expect(ids).toEqual(["bounty-6", "bounty-5", "bounty-7"])
+        const ids = deserialize(JSON.stringify(wire))?.tasks.map((b) => b.id)
+        expect(ids).toEqual(["task-6", "task-5", "task-7"])
     })
 
     it("stamps the current version", () => {

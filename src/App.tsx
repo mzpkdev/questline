@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { addBounty, type Bounty, remove, reorder, SEED_BOUNTIES, toggle, visible } from "./bounties"
-import { BountiesBoard } from "./BountiesBoard"
+import { addTask, type Task, remove, reorder, SEED_TASKS, toggle, visible } from "./tasks"
+import { TasksBoard } from "./TasksBoard"
 import { Corners } from "./Corners"
 import { DetailCard } from "./DetailCard"
 import { GoalCelebration } from "./GoalCelebration"
@@ -15,8 +15,8 @@ import {
     SEED_REWARDS,
     spentGold,
     visible as visibleRewards
-} from "./merchant"
-import { AddRewardCard, MerchantBoard } from "./MerchantBoard"
+} from "./rewards"
+import { AddRewardCard, RewardsBoard } from "./RewardsBoard"
 import { MilestoneTree } from "./MilestoneTree"
 import type { Milestone, MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
@@ -49,13 +49,13 @@ type Boot = {
     projects: Record<string, Project>
     order: string[]
     mirrorPos: Record<string, { x: number; y: number }>
-    bounties: Bounty[]
+    tasks: Task[]
     rewards: Reward[]
     activeId: string
     selectedId: string | null
     nextNodeId: number
     nextViewId: number
-    nextBountyId: number
+    nextTaskId: number
     nextRewardId: number
     hadHash: boolean
 }
@@ -65,9 +65,9 @@ function computeBoot(): Boot {
     const projects = loaded?.projects ?? { [ROOT_ID]: rootProject(), seed: seedProject() }
     const order = loaded?.order ?? [ROOT_ID, "seed"]
     const mirrorPos = loaded?.mirrorPos ?? {}
-    // Bounties and rewards seed only on a truly fresh start (no saved state at all); an existing save
+    // Tasks and rewards seed only on a truly fresh start (no saved state at all); an existing save
     // from before these views simply had none, and loads empty rather than re-seeding.
-    const bounties = loaded?.bounties ?? SEED_BOUNTIES
+    const tasks = loaded?.tasks ?? SEED_TASKS
     const rewards = loaded?.rewards ?? SEED_REWARDS
     // Counters resume past whatever ids the loaded/seed data already uses.
     const nextNodeId = maxCounter(
@@ -75,9 +75,9 @@ function computeBoot(): Boot {
         "node"
     )
     const nextViewId = maxCounter(Object.keys(projects), "view")
-    const nextBountyId = maxCounter(
-        bounties.map((bounty) => bounty.id),
-        "bounty"
+    const nextTaskId = maxCounter(
+        tasks.map((task) => task.id),
+        "task"
     )
     const nextRewardId = maxCounter(
         rewards.map((reward) => reward.id),
@@ -87,11 +87,11 @@ function computeBoot(): Boot {
         projects,
         order,
         mirrorPos,
-        bounties,
+        tasks,
         rewards,
         nextNodeId,
         nextViewId,
-        nextBountyId,
+        nextTaskId,
         nextRewardId
     }
 
@@ -127,13 +127,13 @@ export function App() {
     // Dragged positions of Root's mirror nodes, keyed by mirror id. Mirrors are otherwise derived, so
     // their layout lives here rather than in any project.
     const [mirrorPos, setMirrorPos] = useState<Record<string, { x: number; y: number }>>(boot.mirrorPos)
-    // The app-level Bounties checklist (one flat list shared across every tab) and which top-level
-    // section is on screen: the roadmap board, the Bounties list, or the Merchant shop.
-    const [bounties, setBounties] = useState<Bounty[]>(boot.bounties)
-    // The Merchant shelf. Gold isn't stored: it's earned from roadmap completion minus the price of
+    // The app-level Tasks checklist (one flat list shared across every tab) and which top-level
+    // section is on screen: the roadmap board, the Tasks list, or the Rewards shop.
+    const [tasks, setTasks] = useState<Task[]>(boot.tasks)
+    // The Rewards shelf. Gold isn't stored: it's earned from roadmap completion minus the price of
     // each redeemed reward (computed below), clamped at zero.
     const [rewards, setRewards] = useState<Reward[]>(boot.rewards)
-    const [section, setSection] = useState<"roadmap" | "bounties" | "merchant" | "sync">("roadmap")
+    const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync">("roadmap")
     // The section on screen at first load appears instantly; every section entered afterward plays the
     // SectionTransition fade + rise. Flipped off just after the initial mount (below).
     const firstSectionRef = useRef(true)
@@ -148,7 +148,7 @@ export function App() {
     // Monotonic sources of unique ids for new tabs and new nodes.
     const nextViewId = useRef(boot.nextViewId)
     const nextNodeId = useRef(boot.nextNodeId)
-    const nextBountyId = useRef(boot.nextBountyId)
+    const nextTaskId = useRef(boot.nextTaskId)
     const nextRewardId = useRef(boot.nextRewardId)
     // Fires the finale fanfare when the active tab's goal crosses into complete, anchored on that
     // goal node. Tracked per tab (seeded on first sight) so switching onto an already-done goal
@@ -159,12 +159,12 @@ export function App() {
 
     const active = projects[activeId]
 
-    // Gold in the purse: earned from progress (checklist boxes, bounties, milestones, goals) minus
+    // Gold in the purse: earned from progress (checklist boxes, tasks, milestones, goals) minus
     // what's been spent, floored at zero so un-completing work after a spend just empties the purse
     // rather than going negative.
     const gold = useMemo(
-        () => Math.max(0, earnedGold(projects, bounties) - spentGold(rewards)),
-        [projects, bounties, rewards]
+        () => Math.max(0, earnedGold(projects, tasks) - spentGold(rewards)),
+        [projects, tasks, rewards]
     )
 
     useEffect(() => {
@@ -196,12 +196,12 @@ export function App() {
         firstSectionRef.current = false
     }, [])
 
-    // Reveal the add-reward card on open; leaving the Merchant view discards it outright.
+    // Reveal the add-reward card on open; leaving the Rewards view discards it outright.
     useEffect(() => {
         if (addRewardOpen) setAddRewardShown(true)
     }, [addRewardOpen])
     useEffect(() => {
-        if (section !== "merchant") {
+        if (section !== "rewards") {
             setAddRewardOpen(false)
             setAddRewardShown(false)
         }
@@ -295,9 +295,9 @@ export function App() {
     // Autosave the app's data (not the open tab) 400ms after the last change, so a drag — which
     // fires moveMilestone rapidly — coalesces into a single write.
     useEffect(() => {
-        const timer = setTimeout(() => saveState({ projects, order, mirrorPos, bounties, rewards }), 400)
+        const timer = setTimeout(() => saveState({ projects, order, mirrorPos, tasks, rewards }), 400)
         return () => clearTimeout(timer)
-    }, [projects, order, mirrorPos, bounties, rewards])
+    }, [projects, order, mirrorPos, tasks, rewards])
 
     // Select a node and pan the canvas onto it; the URL hash follows the selection.
     const focusNode = useCallback((id: string) => {
@@ -316,33 +316,33 @@ export function App() {
         [sfx]
     )
 
-    // Bounties: open the app-level list, and add / toggle / remove its items. One global list, so
+    // Tasks: open the app-level list, and add / toggle / remove its items. One global list, so
     // these never touch the active project.
-    const openBounties = useCallback(() => setSection("bounties"), [])
-    const addBountyItem = useCallback((text: string) => {
-        nextBountyId.current += 1
-        setBounties((prev) => addBounty(prev, `bounty-${nextBountyId.current}`, text))
+    const openTasks = useCallback(() => setSection("tasks"), [])
+    const addTaskItem = useCallback((text: string) => {
+        nextTaskId.current += 1
+        setTasks((prev) => addTask(prev, `task-${nextTaskId.current}`, text))
     }, [])
-    const toggleBounty = useCallback(
+    const toggleTask = useCallback(
         (id: string) => {
             // Crossing a task off (the standalone to-do list) rings the coin cue; re-opening it is
             // silent. Decided from current state, not inside the updater (StrictMode double-invokes it).
-            const bounty = bounties.find((item) => item.id === id)
-            if (bounty && !bounty.done) sfx.coin()
-            setBounties((prev) => toggle(prev, id, Date.now()))
+            const task = tasks.find((item) => item.id === id)
+            if (task && !task.done) sfx.coin()
+            setTasks((prev) => toggle(prev, id, Date.now()))
         },
-        [bounties, sfx]
+        [tasks, sfx]
     )
-    const removeBounty = useCallback((id: string) => setBounties((prev) => remove(prev, id)), [])
-    const reorderBounty = useCallback(
-        (activeId: string, overId: string) => setBounties((prev) => reorder(prev, activeId, overId)),
+    const removeTask = useCallback((id: string) => setTasks((prev) => remove(prev, id)), [])
+    const reorderTask = useCallback(
+        (activeId: string, overId: string) => setTasks((prev) => reorder(prev, activeId, overId)),
         []
     )
 
-    // Merchant: open the shop, and add / redeem / remove its rewards. One global shelf, so these never
+    // Rewards: open the shop, and add / redeem / remove its rewards. One global shelf, so these never
     // touch the active project. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
     // balance covers the price), which spends the gold and starts the 14-day shelf window.
-    const openMerchant = useCallback(() => setSection("merchant"), [])
+    const openRewards = useCallback(() => setSection("rewards"), [])
     const toggleAddReward = useCallback(() => setAddRewardOpen((open) => !open), [])
     const addRewardItem = useCallback((name: string, price: number, replenish: boolean) => {
         nextRewardId.current += 1
@@ -652,8 +652,8 @@ export function App() {
 
     // Serialize the app's data (not the open tab) for the Export button to download.
     const handleExport = useCallback(
-        () => serialize({ projects, order, mirrorPos, bounties, rewards }),
-        [projects, order, mirrorPos, bounties, rewards]
+        () => serialize({ projects, order, mirrorPos, tasks, rewards }),
+        [projects, order, mirrorPos, tasks, rewards]
     )
 
     // Replace the whole app from a loaded state -- an imported file or a roadmap synced down from another
@@ -663,7 +663,7 @@ export function App() {
         setProjects(loaded.projects)
         setOrder(loaded.order)
         setMirrorPos(loaded.mirrorPos)
-        setBounties(loaded.bounties)
+        setTasks(loaded.tasks)
         setRewards(loaded.rewards)
         setSection("roadmap")
         nextNodeId.current = maxCounter(
@@ -671,9 +671,9 @@ export function App() {
             "node"
         )
         nextViewId.current = maxCounter(Object.keys(loaded.projects), "view")
-        nextBountyId.current = maxCounter(
-            loaded.bounties.map((bounty) => bounty.id),
-            "bounty"
+        nextTaskId.current = maxCounter(
+            loaded.tasks.map((task) => task.id),
+            "task"
         )
         nextRewardId.current = maxCounter(
             loaded.rewards.map((reward) => reward.id),
@@ -701,8 +701,8 @@ export function App() {
     // Cross-device sync: opt-in, end-to-end encrypted, and inert unless VITE_SYNC_URL is set at build.
     // It reads the same slices the autosave persists and applies an incoming roadmap through applyLoaded.
     const syncSlices = useMemo<PersistedSlices>(
-        () => ({ projects, order, mirrorPos, bounties, rewards }),
-        [projects, order, mirrorPos, bounties, rewards]
+        () => ({ projects, order, mirrorPos, tasks, rewards }),
+        [projects, order, mirrorPos, tasks, rewards]
     )
     const sync = useSync(syncSlices, applyLoaded)
 
@@ -837,10 +837,10 @@ export function App() {
                 onRemove={removeProject}
                 leading={
                     <NavActions
-                        onOpenBounties={openBounties}
-                        bountiesActive={section === "bounties"}
-                        onOpenMerchant={openMerchant}
-                        merchantActive={section === "merchant"}
+                        onOpenTasks={openTasks}
+                        tasksActive={section === "tasks"}
+                        onOpenRewards={openRewards}
+                        rewardsActive={section === "rewards"}
                     />
                 }
                 trailing={
@@ -860,20 +860,20 @@ export function App() {
                     key={section === "roadmap" ? `roadmap:${activeId}` : section}
                     animate={!firstSectionRef.current}
                 >
-                {section === "bounties" ? (
+                {section === "tasks" ? (
                     <div className="absolute inset-0 z-10 overflow-auto">
-                        <BountiesBoard
-                            items={visible(bounties, Date.now())}
-                            onAdd={addBountyItem}
-                            onToggle={toggleBounty}
-                            onRemove={removeBounty}
-                            onReorder={reorderBounty}
+                        <TasksBoard
+                            items={visible(tasks, Date.now())}
+                            onAdd={addTaskItem}
+                            onToggle={toggleTask}
+                            onRemove={removeTask}
+                            onReorder={reorderTask}
                         />
                     </div>
-                ) : section === "merchant" ? (
+                ) : section === "rewards" ? (
                     <>
                         <div className="absolute inset-0 z-10 overflow-auto">
-                            <MerchantBoard
+                            <RewardsBoard
                                 gold={gold}
                                 rewards={visibleRewards(rewards, Date.now())}
                                 onRedeem={redeemReward}

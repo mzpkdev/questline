@@ -1,4 +1,4 @@
-// The Sync view: a full section (like Bounties / Merchant) rather than a popover, so pairing, status,
+// The Sync view: a full section (like Tasks / Rewards) rather than a popover, so pairing, status,
 // and the two safety prompts (adopt-from-link, conflict) have room and never depend on a modal/portal
 // that a strict browser might not render. App auto-switches here when a pairing link opens or a
 // conflict fires; everything stateful lives in useSync, this is chrome over it.

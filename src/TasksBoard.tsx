@@ -1,4 +1,4 @@
-// The Bounties view: a flat checklist rendered on the same parchment board as the roadmap, a visual
+// The Tasks view: a flat checklist rendered on the same parchment board as the roadmap, a visual
 // re-port of the mockup's todo.html. Each task is a gold-framed, cream-faced tile with an accent
 // spine, echoing the milestone nodes. Ticking a box (useCheckPop) gives it the same soft gold pop the
 // roadmap's checklist boxes have; the × removes it (revealed on hover); the add row appends one; and
@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { type CSSProperties, type FormEvent, useState } from "react"
-import type { Bounty } from "./bounties"
+import type { Task } from "./tasks"
 import { ioButtonClass } from "./IoButtons"
 import { useCheckPop } from "./nodeMotion"
 
@@ -49,53 +49,53 @@ const TILE_SHADOW_DRAGGING = "shadow-[0_14px_28px_-10px_rgba(90,61,12,0.55)]"
 const CHECK_STYLE: CSSProperties = { border: "1.5px solid #b8892b", background: "#fffdf7", color: "#3a2a0c" }
 const CHECK_DONE_STYLE: CSSProperties = { border: "1.5px solid #cdb373", background: "#ecdcae", color: "#8a641d" }
 
-type BountiesBoardProps = {
-    items: Bounty[]
+type TasksBoardProps = {
+    items: Task[]
     onAdd: (text: string) => void
     onToggle: (id: string) => void
     onRemove: (id: string) => void
     onReorder: (activeId: string, overId: string) => void
 }
 
-// One sortable task tile. The box bounces the moment it's ticked (useCheckPop), so checking a bounty
+// One sortable task tile. The box bounces the moment it's ticked (useCheckPop), so checking a task
 // off feels like a stamp, exactly as it does on a milestone card. Only the grip carries the drag
 // listeners, so the check and × stay ordinary clicks.
-function SortableBountyTile({
-    bounty,
+function SortableTaskTile({
+    task,
     onToggle,
     onRemove
 }: {
-    bounty: Bounty
+    task: Task
     onToggle: (id: string) => void
     onRemove: (id: string) => void
 }) {
     const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
-        id: bounty.id
+        id: task.id
     })
-    const boxRef = useCheckPop<HTMLButtonElement>(bounty.done)
+    const boxRef = useCheckPop<HTMLButtonElement>(task.done)
     return (
         <li
             ref={setNodeRef}
             className={`group relative flex items-center gap-[11px] rounded-[13px] py-3 pl-[19px] pr-[15px] transition-[box-shadow] duration-200 ease-out animate-[itemIn_0.25s_ease] hover:scale-[1.015] ${TILE_SHADOW} ${
                 isDragging ? `${TILE_SHADOW_DRAGGING} opacity-95` : ""
-            } ${bounty.done ? "opacity-[0.78]" : ""}`}
+            } ${task.done ? "opacity-[0.78]" : ""}`}
             style={{
-                ...(bounty.done ? TILE_DONE_STYLE : TILE_STYLE),
+                ...(task.done ? TILE_DONE_STYLE : TILE_STYLE),
                 transform: CSS.Transform.toString(transform),
                 transition,
                 zIndex: isDragging ? 20 : undefined
             }}
         >
-            {/* Accent spine (mockup `.item::before`); gold, dimming when the bounty is done. */}
+            {/* Accent spine (mockup `.item::before`); gold, dimming when the task is done. */}
             <span
                 aria-hidden="true"
                 className="absolute left-[8px] top-1/2 h-[calc(100%-22px)] w-[5px] -translate-y-1/2 rounded-[2.5px]"
-                style={{ background: bounty.done ? "#c69a34" : "#e6c458" }}
+                style={{ background: task.done ? "#c69a34" : "#e6c458" }}
             />
             <button
                 ref={setActivatorNodeRef}
                 type="button"
-                aria-label={`Reorder ${bounty.text}`}
+                aria-label={`Reorder ${task.text}`}
                 className="grid h-6 w-4 flex-none touch-none cursor-grab place-items-center bg-transparent text-[#c3b183] opacity-60 transition-[color,opacity] duration-150 ease-out hover:text-[#8a6b28] group-hover:opacity-100 active:cursor-grabbing"
                 {...attributes}
                 {...listeners}
@@ -112,13 +112,13 @@ function SortableBountyTile({
             <button
                 ref={boxRef}
                 type="button"
-                aria-pressed={bounty.done}
-                aria-label={`${bounty.done ? "Uncheck" : "Check"} ${bounty.text}`}
-                onClick={() => onToggle(bounty.id)}
+                aria-pressed={task.done}
+                aria-label={`${task.done ? "Uncheck" : "Check"} ${task.text}`}
+                onClick={() => onToggle(task.id)}
                 className="grid h-[22px] w-[22px] flex-none place-items-center rounded-md"
-                style={bounty.done ? CHECK_DONE_STYLE : CHECK_STYLE}
+                style={task.done ? CHECK_DONE_STYLE : CHECK_STYLE}
             >
-                {bounty.done && (
+                {task.done && (
                     <svg
                         aria-hidden="true"
                         viewBox="0 0 24 24"
@@ -136,15 +136,15 @@ function SortableBountyTile({
             </button>
             <span
                 className={`min-w-0 flex-1 break-words font-display text-[14.5px] tracking-[0.2px] ${
-                    bounty.done ? "font-medium text-[#9c895f] line-through" : "font-semibold text-[#6f5316]"
+                    task.done ? "font-medium text-[#9c895f] line-through" : "font-semibold text-[#6f5316]"
                 }`}
             >
-                {bounty.text}
+                {task.text}
             </span>
             <button
                 type="button"
-                aria-label={`Remove ${bounty.text}`}
-                onClick={() => onRemove(bounty.id)}
+                aria-label={`Remove ${task.text}`}
+                onClick={() => onRemove(task.id)}
                 className="grid h-6 w-6 flex-none place-items-center bg-transparent text-[#c3b183] opacity-0 transition-[color,opacity] duration-150 ease-out hover:text-[#a5482a] group-hover:opacity-100 max-[600px]:opacity-60"
             >
                 <svg
@@ -166,7 +166,7 @@ function SortableBountyTile({
     )
 }
 
-export function BountiesBoard({ items, onAdd, onToggle, onRemove, onReorder }: BountiesBoardProps) {
+export function TasksBoard({ items, onAdd, onToggle, onRemove, onReorder }: TasksBoardProps) {
     const [draft, setDraft] = useState("")
     const sensors = useSensors(
         // A 5px threshold lets a plain click on the grip pass through without starting a drag.
@@ -192,14 +192,14 @@ export function BountiesBoard({ items, onAdd, onToggle, onRemove, onReorder }: B
         <div className="mx-auto w-[95%] max-w-[820px] px-1 py-12">
             <form onSubmit={submit} className="mb-4 flex items-center gap-1.5">
                 <input
-                    aria-label="New bounty"
+                    aria-label="New task"
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Post a bounty..."
+                    placeholder="Post a task..."
                     maxLength={120}
                     className="min-w-0 flex-1 rounded-none border-0 border-b-2 border-[#d8c48f] bg-transparent px-1 py-2 font-serif text-[14.5px] text-[#5a4a2c] placeholder:text-[#b7a577] transition-colors duration-150 ease-out focus:border-[#b8892b] focus:outline-none"
                 />
-                <button type="submit" aria-label="Add bounty" title="Add bounty" className={ioButtonClass}>
+                <button type="submit" aria-label="Add task" title="Add task" className={ioButtonClass}>
                     <svg
                         width={15}
                         height={15}
@@ -226,10 +226,10 @@ export function BountiesBoard({ items, onAdd, onToggle, onRemove, onReorder }: B
                 >
                     <SortableContext items={items.map((b) => b.id)} strategy={verticalListSortingStrategy}>
                         <ul className="m-0 flex list-none flex-col gap-[11px] p-0">
-                            {items.map((bounty) => (
-                                <SortableBountyTile
-                                    key={bounty.id}
-                                    bounty={bounty}
+                            {items.map((task) => (
+                                <SortableTaskTile
+                                    key={task.id}
+                                    task={task}
                                     onToggle={onToggle}
                                     onRemove={onRemove}
                                 />
@@ -239,7 +239,7 @@ export function BountiesBoard({ items, onAdd, onToggle, onRemove, onReorder }: B
                 </DndContext>
             ) : (
                 <p className="mt-6 text-center text-[15px] italic text-[#a2916c]">
-                    No bounties posted. Add one above to begin.
+                    No tasks posted. Add one above to begin.
                 </p>
             )}
         </div>

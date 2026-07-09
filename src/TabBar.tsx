@@ -35,10 +35,10 @@ type TabBarProps = {
 }
 
 // Shared chip shape (`.tab` base: inline-flex chip, faint gold-shadow border). Exported so app-level
-// chips (e.g. the Bounties button) can wear the exact same look as a roadmap tab.
+// chips (e.g. the Tasks button) can wear the exact same look as a roadmap tab.
 export const chipBase =
     "inline-flex appearance-none items-center rounded-lg border border-[#8a641d]/30 px-3 py-1 font-display text-[11.5px] tracking-wide transition-[color,background-color,box-shadow] duration-150 ease-out"
-// Exported alongside chipBase/inactiveChip so app-level chips (the Bounties button) can show the same
+// Exported alongside chipBase/inactiveChip so app-level chips (the Tasks button) can show the same
 // active look as a selected roadmap tab.
 export const activeChip = "bg-[#f4ead0] font-semibold text-[#4a3410]"
 export const inactiveChip = "bg-[#e7dabb] text-[#8a6f38] hover:bg-[#efe3c4] hover:text-[#6f5316]"

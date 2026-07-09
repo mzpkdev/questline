@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { AddRewardCard } from "./MerchantBoard"
+import { AddRewardCard } from "./RewardsBoard"
 
 const noop = () => {}
 

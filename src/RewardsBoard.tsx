@@ -1,14 +1,14 @@
-// The Merchant view: a shop of gold-framed reward cards on the same parchment board as the roadmap, a
+// The Rewards view: a shop of gold-framed reward cards on the same parchment board as the roadmap, a
 // re-port of the mockup's shop-shelves.html. The purse (top-right) shows gold earned on the roadmap
 // minus what's been spent; each card offers a Redeem when it's affordable and a dimmed "Need N more"
 // when it isn't. The trailing dashed tile opens an inline add form. Every reward is repeatable in this
 // first cut, so redeeming just spends gold and leaves the card on the shelf (App owns the state; the
-// pure ops + gold rule live in merchant.ts).
+// pure ops + gold rule live in rewards.ts).
 
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { ioButtonClass } from "./IoButtons"
-import type { Reward } from "./merchant"
+import type { Reward } from "./rewards"
 import { prefersReducedMotion } from "./nodeMotion"
 
 // Card faces (mockup `.reward`): the double-gradient border trick -- a cream padding-box fill beneath a
@@ -126,7 +126,7 @@ function usePurseBump(gold: number) {
     return ref
 }
 
-type MerchantBoardProps = {
+type RewardsBoardProps = {
     gold: number
     rewards: Reward[]
     onRedeem: (id: string) => void
@@ -362,7 +362,7 @@ export function AddRewardCard({
     )
 }
 
-export function MerchantBoard({ gold, rewards, onRedeem, onOpenAdd, onRemoveReward }: MerchantBoardProps) {
+export function RewardsBoard({ gold, rewards, onRedeem, onOpenAdd, onRemoveReward }: RewardsBoardProps) {
     const purseRef = usePurseBump(gold)
     // The reward pending removal: set by its ×, cleared on confirm or cancel. Drives the same confirm
     // modal the tabs use before deleting.
@@ -374,7 +374,7 @@ export function MerchantBoard({ gold, rewards, onRedeem, onOpenAdd, onRemoveRewa
                 <div>
                     <h2 className="font-decorative text-[21px] font-bold tracking-[0.4px] text-[#4a3410]">Rewards</h2>
                     <p className="mt-0.5 text-[13.5px] italic text-[#a2916c]">
-                        Spend the gold you earn from bounties and finished milestones. Add your own rewards and set the
+                        Spend the gold you earn from tasks and finished milestones. Add your own rewards and set the
                         price.
                     </p>
                 </div>
