@@ -281,4 +281,72 @@ describe("DetailCard", () => {
             expect(screen.queryByRole("button", { name: /mark complete/i })).not.toBeInTheDocument()
         })
     })
+
+    context("deleting in edit mode", () => {
+        it("opens a confirm and fires onDelete only once confirmed", async () => {
+            const onDelete = vi.fn()
+
+            render(
+                <DetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} onDelete={onDelete} />
+            )
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+
+            // The trigger opens the confirm without deleting yet.
+            fireEvent.click(screen.getByRole("button", { name: "Delete milestone" }))
+            expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete this milestone?")
+            expect(onDelete).not.toHaveBeenCalled()
+
+            // The single "Delete" button inside the dialog confirms.
+            fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+            expect(onDelete).toHaveBeenCalledTimes(1)
+        })
+
+        it("labels the action and confirm for a view when deleteKind is view", async () => {
+            render(
+                <DetailCard
+                    milestone={milestone({ name: "Launch Plan" })}
+                    state="available"
+                    todos={[]}
+                    isGoal={false}
+                    isView
+                    onDelete={vi.fn()}
+                    deleteKind="view"
+                />
+            )
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+
+            fireEvent.click(screen.getByRole("button", { name: "Delete view" }))
+            expect(await screen.findByRole("alertdialog")).toHaveTextContent("Remove this view?")
+        })
+
+        it("warns about the cascade count in the milestone confirm", async () => {
+            render(
+                <DetailCard
+                    milestone={milestone()}
+                    state="available"
+                    todos={[]}
+                    isGoal={false}
+                    onDelete={vi.fn()}
+                    descendantCount={2}
+                />
+            )
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete milestone" }))
+
+            expect(await screen.findByRole("alertdialog")).toHaveTextContent("2 sub-milestones")
+        })
+
+        it("offers no delete in read mode or when onDelete is absent", () => {
+            const { rerender } = render(
+                <DetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} onDelete={vi.fn()} />
+            )
+            // Read mode: no delete affordance even though onDelete is set.
+            expect(screen.queryByRole("button", { name: "Delete milestone" })).not.toBeInTheDocument()
+
+            // Edit mode but without onDelete: still nothing to delete with.
+            rerender(<DetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} />)
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            expect(screen.queryByRole("button", { name: "Delete milestone" })).not.toBeInTheDocument()
+        })
+    })
 })

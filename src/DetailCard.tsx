@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react"
+import { ConfirmDialog } from "./ConfirmDialog"
 import { STATE_LABEL } from "./graph"
 import type { Milestone, MilestoneState, Todo } from "./milestones"
 import { useCheckPop } from "./nodeMotion"
@@ -30,6 +31,12 @@ export type DetailCardProps = {
     // description (plus + Add sub-view); no badge, checklist, sub-milestone, or parent buttons.
     isView?: boolean
     onView?: () => void
+    // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
+    onDelete?: () => void
+    // What the delete removes: a milestone + its subtree, or the whole view. Drives the button + copy.
+    deleteKind?: "milestone" | "view"
+    // Sub-milestone count under this node, so the milestone confirm can warn about the cascade.
+    descendantCount?: number
     onExited?: () => void
 }
 
@@ -104,6 +111,9 @@ const TODO_DEL_CLASS = `grid h-6 w-6 flex-none appearance-none place-items-cente
 const TODO_ADD_CLASS = `mt-2.5 self-start rounded-lg border-[1.5px] border-dashed border-[#cdb373] px-3 py-1.5 font-display text-[11px] uppercase tracking-wide text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
 const ADD_DESC_CLASS = `${ACTION_CLASS} border-[1.5px] border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
 const ADD_PARENT_CLASS = `${ACTION_CLASS} border-[1.5px] border-solid border-[#b8892b] bg-transparent text-[#7a5c1c] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
+// Destructive action (delete node / view): danger-red outline on parchment, colour-only hover, matching
+// the tab-remove affordance (#a5482a). Lives in edit mode only, so read mode can't fat-finger a delete.
+const DELETE_BTN_CLASS = `${ACTION_CLASS} mt-2.5 border-[1.5px] border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] ${EDIT_BTN_TRANSITION} hover:bg-[#a5482a]/10`
 const CHECKLIST_HEAD_CLASS = "font-display text-[11px] uppercase tracking-widest text-[#8a6b28]"
 
 // A single read-mode checklist row. Its box bounces the moment it's ticked (useCheckPop), so checking
@@ -174,9 +184,13 @@ export function DetailCard(props: DetailCardProps) {
         onAddSubView,
         isView,
         onView,
+        onDelete,
+        deleteKind = "milestone",
+        descendantCount = 0,
         onExited
     } = props
     const [editing, setEditing] = useState(false)
+    const [confirmOpen, setConfirmOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
 
     // Fire onExited once the dismissal animation ends. A native listener (attached only while closing)
@@ -347,6 +361,54 @@ export function DetailCard(props: DetailCardProps) {
                                 </button>
                             )}
                         </div>
+                    )}
+
+                    {onDelete && (
+                        <>
+                            <button
+                                type="button"
+                                className={DELETE_BTN_CLASS}
+                                onClick={() => setConfirmOpen(true)}
+                            >
+                                {deleteKind === "view" ? "Delete view" : "Delete milestone"}
+                            </button>
+                            <ConfirmDialog
+                                open={confirmOpen}
+                                title={deleteKind === "view" ? "Remove this view?" : "Delete this milestone?"}
+                                message={
+                                    deleteKind === "view" ? (
+                                        <>
+                                            Delete{" "}
+                                            <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>?
+                                            This removes the whole view and can't be undone.
+                                        </>
+                                    ) : descendantCount > 0 ? (
+                                        <>
+                                            Delete{" "}
+                                            <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>{" "}
+                                            and its {descendantCount} sub-milestone
+                                            {descendantCount === 1 ? "" : "s"}? This can't be undone.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Delete{" "}
+                                            <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>?
+                                            This can't be undone.
+                                        </>
+                                    )
+                                }
+                                confirmLabel="Delete"
+                                onConfirm={() => {
+                                    // Close first, THEN delete: onDelete may unmount this card (view removal), so
+                                    // touching confirmOpen afterward would be a set-state-on-unmounted warning.
+                                    setConfirmOpen(false)
+                                    onDelete()
+                                }}
+                                onOpenChange={(open) => {
+                                    if (!open) setConfirmOpen(false)
+                                }}
+                            />
+                        </>
                     )}
                 </>
             ) : (

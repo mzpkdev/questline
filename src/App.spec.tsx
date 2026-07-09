@@ -278,6 +278,75 @@ describe("App", () => {
         })
     })
 
+    context("deleting", () => {
+        it("cascades a milestone's subtree and moves selection to its parent", async () => {
+            render(<App />)
+            openSampleTab()
+            const node = await waitFor(() => {
+                const el = nodeRoot("plan-goal")
+                if (!el) throw new Error("node not mounted yet")
+                return el as HTMLElement
+            })
+            // plan-goal has a child (break-steps); both go on delete.
+            expect(nodeRoot("break-steps")).not.toBeNull()
+
+            fireEvent.click(node)
+            await screen.findByRole("heading", { name: /plan your goal/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete milestone" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+
+            // The node and its descendant are gone, and the parent (learn) is now shown.
+            await waitFor(() => {
+                expect(nodeRoot("plan-goal")).toBeNull()
+                expect(nodeRoot("break-steps")).toBeNull()
+            })
+            expect(await screen.findByRole("heading", { name: /learn questline/i })).toBeInTheDocument()
+        })
+
+        it("removes a non-Root tab's whole view when its goal is deleted", async () => {
+            render(<App />)
+            openSampleTab()
+            await waitFor(() => expect(nodeRoot("learn")).not.toBeNull())
+
+            // Entering the tab selects its goal; a tab goal deletes the whole view.
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete view" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+
+            await waitFor(() => expect(screen.queryByRole("button", { name: "Learn Questline" })).toBeNull())
+        })
+
+        it("removes a view when its Root-hub chip is deleted", async () => {
+            render(<App />)
+            const chip = await waitFor(() => {
+                const el = viewNode("view-mirror-seed")
+                if (!el) throw new Error("view chip not mounted yet")
+                return el as HTMLElement
+            })
+
+            fireEvent.click(chip)
+            await screen.findByTestId("detail-card")
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete view" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+
+            await waitFor(() => expect(viewNode("view-mirror-seed")).toBeNull())
+        })
+
+        it("offers no delete on the Root goal", async () => {
+            render(<App />)
+            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+
+            fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
+            await screen.findByTestId("detail-card")
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+
+            expect(screen.queryByRole("button", { name: "Delete milestone" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Delete view" })).not.toBeInTheDocument()
+        })
+    })
+
     context("Root as a hub of views", () => {
         it("mirrors each other view as a view chip under Root", async () => {
             render(<App />)

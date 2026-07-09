@@ -2,6 +2,7 @@
 // The tab's label is simply the goal (tier-0 root) milestone's name, so renaming the tab and
 // renaming the goal are the same edit seen from two places.
 
+import { descendantsOf } from "./graph"
 import { EDGES, MASTERED, type Milestone, type MilestoneEdge, NODES, TODOS, type Todo } from "./milestones"
 
 export type Project = {
@@ -51,4 +52,24 @@ export function rootProject(): Project {
     const goal = project.milestones[project.goalId]
     if (!goal) return project
     return { ...project, milestones: { ...project.milestones, [project.goalId]: { ...goal, desc: ROOT_DESC } } }
+}
+
+// Remove a milestone and its whole subtree from a project: the node, every descendant, the edges
+// touching any of them, their checklists, and any completed marks. The goal (tier-0 root) is never
+// removed this way -- deleting a whole view is a separate op (removeProject) -- and an unknown id is
+// a no-op, both returning the same reference so callers can skip a redundant update.
+export function deleteMilestone(project: Project, id: string): Project {
+    if (id === project.goalId || !project.milestones[id]) return project
+    const doomed = new Set<string>([id, ...descendantsOf(id, project.edges)])
+    const milestones: Record<string, Milestone> = {}
+    for (const [mid, milestone] of Object.entries(project.milestones)) {
+        if (!doomed.has(mid)) milestones[mid] = milestone
+    }
+    const todos: Record<string, Todo[]> = {}
+    for (const [mid, list] of Object.entries(project.todos)) {
+        if (!doomed.has(mid)) todos[mid] = list
+    }
+    const edges = project.edges.filter(([parent, child]) => !doomed.has(parent) && !doomed.has(child))
+    const mastered = new Set([...project.mastered].filter((mid) => !doomed.has(mid)))
+    return { ...project, milestones, edges, todos, mastered }
 }

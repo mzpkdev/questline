@@ -22,6 +22,24 @@ export const parentOf = (id: string, edges: MilestoneEdge[]): string | null => {
     return edge ? edge[0] : null
 }
 
+// Every node beneath `id` (its whole subtree), excluding `id` itself. Breadth-first over the edge
+// list, with a visited guard so a malformed cycle can't loop forever.
+export function descendantsOf(id: string, edges: MilestoneEdge[]): string[] {
+    const seen = new Set<string>([id])
+    const out: string[] = []
+    const queue: string[] = [id]
+    while (queue.length > 0) {
+        const cur = queue.shift() as string
+        for (const child of childrenOf(cur, edges)) {
+            if (seen.has(child)) continue
+            seen.add(child)
+            out.push(child)
+            queue.push(child)
+        }
+    }
+    return out
+}
+
 // A node is complete when in `mastered`; a leaf (no children) is always actionable;
 // otherwise it unlocks only once every child beneath it is complete.
 export function stateOf(id: string, mastered: ReadonlySet<string>, edges: MilestoneEdge[]): MilestoneState {

@@ -1,4 +1,4 @@
-import { childrenOf, complete, parentOf, STATE_LABEL, stateOf, uncomplete } from "./graph"
+import { childrenOf, complete, descendantsOf, parentOf, STATE_LABEL, stateOf, uncomplete } from "./graph"
 import { EDGES, MASTERED } from "./milestones"
 
 describe("childrenOf", () => {
@@ -18,6 +18,19 @@ describe("parentOf", () => {
 
     it("returns null for the root goal", () => {
         expect(parentOf("learn", EDGES)).toBeNull()
+    })
+})
+
+describe("descendantsOf", () => {
+    it("returns every node in the subtree, excluding the node itself", () => {
+        // learn -> {plan-goal, track-progress} -> {break-steps, finish-milestone}, breadth-first.
+        const kids = descendantsOf("learn", EDGES)
+        expect(kids).toEqual(["plan-goal", "track-progress", "break-steps", "finish-milestone"])
+        expect(kids).not.toContain("learn")
+    })
+
+    it("returns an empty list for a leaf", () => {
+        expect(descendantsOf("break-steps", EDGES)).toEqual([])
     })
 })
 

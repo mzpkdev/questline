@@ -4,7 +4,7 @@ import { TasksBoard } from "./TasksBoard"
 import { Corners } from "./Corners"
 import { DetailCard } from "./DetailCard"
 import { GoalCelebration } from "./GoalCelebration"
-import { complete, stateOf, uncomplete } from "./graph"
+import { complete, descendantsOf, parentOf, stateOf, uncomplete } from "./graph"
 import { IoButtons } from "./IoButtons"
 import {
     addReward,
@@ -21,7 +21,7 @@ import { MilestoneTree } from "./MilestoneTree"
 import type { Milestone, MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
-import { newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
+import { deleteMilestone, newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -237,7 +237,8 @@ export function App() {
                 target?.closest(".react-flow__node") ||
                 target?.closest(".react-flow__controls") ||
                 target?.closest("[data-tabbar]") ||
-                target?.closest("[data-view-popover]")
+                target?.closest("[data-view-popover]") ||
+                target?.closest('[role="alertdialog"]')
             ) {
                 return
             }
@@ -413,6 +414,17 @@ export function App() {
             return mastered === project.mastered ? project : { ...project, mastered }
         })
     }, [selectedId, updateActive])
+
+    // Delete the selected milestone and its subtree (cascade), then move selection to its parent so the
+    // card shows something valid (every non-goal node has a parent; fall back to clearing). The goal is
+    // never deleted here -- that path removes the whole view via removeProject.
+    const deleteSelected = useCallback(() => {
+        if (selectedId === null || !active) return
+        const parent = parentOf(selectedId, active.edges)
+        updateActive((project) => deleteMilestone(project, selectedId))
+        if (parent) focusNode(parent)
+        else setSelectedId(null)
+    }, [selectedId, active, updateActive, focusNode])
 
     // Edit the selected milestone's name/description in place.
     const editMilestone = useCallback(
@@ -826,6 +838,17 @@ export function App() {
     const isGoal = shown ? shown.tier === 0 : false
     // The Root node itself (not a mirror), which also offers "+ Add sub-view".
     const shownIsRootGoal = activeId === ROOT_ID && !shownIsView && !!shown && shown.id === active?.goalId
+    // Delete wiring for the shown card. Root goal: never. View chip or a tab's goal: removes the whole
+    // view (removeProject). A normal milestone: deletes its own subtree.
+    const deleteKind: "milestone" | "view" = shownIsView || (isGoal && !shownIsRootGoal) ? "view" : "milestone"
+    const canDelete = !!shown && !shownIsRootGoal
+    const onDeleteShown = !canDelete
+        ? undefined
+        : deleteKind === "view"
+          ? () => removeProject(shownIsView && displayId ? displayId.slice(VIEW_MIRROR_PREFIX.length) : activeId)
+          : deleteSelected
+    const deleteDescendantCount =
+        canDelete && deleteKind === "milestone" && active && shown ? descendantsOf(shown.id, active.edges).length : 0
 
     return (
         <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#f6edd6]">
@@ -951,6 +974,9 @@ export function App() {
                                     }
                                     isView={shownIsView}
                                     onView={shownIsView && displayId ? () => openView(displayId) : undefined}
+                                    onDelete={onDeleteShown}
+                                    deleteKind={deleteKind}
+                                    descendantCount={deleteDescendantCount}
                                     onExited={() => setDisplayId(null)}
                                 />
                             </aside>
