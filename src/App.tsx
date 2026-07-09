@@ -22,6 +22,8 @@ import type { Milestone, MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
 import { newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
+import { useSfx } from "./SfxProvider"
+import { SoundToggle } from "./SoundToggle"
 import { TabBar } from "./TabBar"
 import { SyncBoard } from "./sync/SyncBoard"
 import { SyncNavButton } from "./sync/SyncNavButton"
@@ -111,6 +113,9 @@ export function App() {
     // the URL hash when it names a known node.
     const bootRef = useRef<Boot | null>(null)
     const boot = (bootRef.current ??= computeBoot())
+    // The synthesized SFX kit, stable for the app's lifetime. Effects fire from the handlers below and
+    // from the goal-celebration effect -- never from render or from inside a state updater.
+    const sfx = useSfx()
     const [projects, setProjects] = useState<Record<string, Project>>(boot.projects)
     const [order, setOrder] = useState<string[]>(boot.order)
     const [activeId, setActiveId] = useState(boot.activeId)
@@ -172,7 +177,10 @@ export function App() {
         const x = rect && node ? node.left + node.width / 2 - rect.left : (rect?.width ?? 0) / 2
         const y = rect && node ? node.top + node.height / 2 - rect.top : (rect?.height ?? 0) * 0.42
         setBurst((prev) => ({ x, y, nonce: (prev?.nonce ?? 0) + 1 }))
-    }, [active, activeId])
+        // The whole quest just crossed into done: the biggest accomplishment moment gets the finale
+        // fanfare, in step with the on-screen burst above.
+        sfx.fanfare()
+    }, [active, activeId, sfx])
 
     useEffect(() => {
         if (selectedId !== null) setDisplayId(selectedId)
@@ -295,7 +303,16 @@ export function App() {
         nextBountyId.current += 1
         setBounties((prev) => addBounty(prev, `bounty-${nextBountyId.current}`, text))
     }, [])
-    const toggleBounty = useCallback((id: string) => setBounties((prev) => toggle(prev, id, Date.now())), [])
+    const toggleBounty = useCallback(
+        (id: string) => {
+            // Crossing a bounty off (a to-do completed) pops; re-opening it is silent. Decided from
+            // current state, not inside the updater (which StrictMode double-invokes in dev).
+            const bounty = bounties.find((item) => item.id === id)
+            if (bounty && !bounty.done) sfx.pop()
+            setBounties((prev) => toggle(prev, id, Date.now()))
+        },
+        [bounties, sfx]
+    )
     const removeBounty = useCallback((id: string) => setBounties((prev) => remove(prev, id)), [])
     const reorderBounty = useCallback(
         (activeId: string, overId: string) => setBounties((prev) => reorder(prev, activeId, overId)),
@@ -317,16 +334,23 @@ export function App() {
     // (an unused id just leaves a harmless gap in the sequence).
     const redeemReward = useCallback(
         (id: string) => {
+            // A coin ka-ching, but only when the buy will actually go through (mirrors redeem()'s guard).
+            const reward = rewards.find((item) => item.id === id)
+            if (reward && reward.redeemedAt === undefined && gold >= reward.price) sfx.coin()
             nextRewardId.current += 1
             const replenishId = `reward-${nextRewardId.current}`
             setRewards((prev) => redeem(prev, id, gold, Date.now(), replenishId))
         },
-        [gold]
+        [gold, rewards, sfx]
     )
 
     const toggleTodo = useCallback(
         (index: number) => {
             if (selectedId === null) return
+            // Crossing a checklist item off (a to-do completed) pops; un-ticking is silent. Decided from
+            // current state, not inside the updater (which StrictMode double-invokes in dev).
+            const current = active?.todos[selectedId]?.[index]
+            if (current && !current.done) sfx.pop()
             updateActive((project) => {
                 const list = project.todos[selectedId]
                 if (!list) return project
@@ -339,19 +363,27 @@ export function App() {
                 }
             })
         },
-        [selectedId, updateActive]
+        [selectedId, active, updateActive, sfx]
     )
 
     // Mark the selected milestone complete — the pure rule guards that it is unlocked and every box
     // is ticked, so a no-op leaves the set (and reference) untouched.
     const completeSelected = useCallback(() => {
         if (selectedId === null) return
+        // Decide the cue from current state (outside the StrictMode-double-invoked updater): a non-goal
+        // milestone chimes here, while completing the goal fires the finale fanfare from the
+        // goal-celebration effect, so it isn't doubled.
+        if (active) {
+            const allDone = (active.todos[selectedId] ?? []).every((todo) => todo.done)
+            const next = complete(selectedId, active.mastered, allDone, active.edges)
+            if (next !== active.mastered && active.milestones[selectedId]?.tier !== 0) sfx.success()
+        }
         updateActive((project) => {
             const allDone = (project.todos[selectedId] ?? []).every((todo) => todo.done)
             const mastered = complete(selectedId, project.mastered, allDone, project.edges)
             return mastered === project.mastered ? project : { ...project, mastered }
         })
-    }, [selectedId, updateActive])
+    }, [selectedId, active, updateActive, sfx])
 
     // Mark it incomplete, cascading up so no completed parent is left with an incomplete child.
     const uncompleteSelected = useCallback(() => {
@@ -793,6 +825,7 @@ export function App() {
                 }
                 trailing={
                     <>
+                        <SoundToggle />
                         <IoButtons onExport={handleExport} onImport={handleImport} />
                         {sync.enabled && (
                             <SyncNavButton on={sync.active} onOpen={() => setSection("sync")} />
