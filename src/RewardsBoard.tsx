@@ -448,7 +448,10 @@ export function RewardDetailCard({
                     )}
                 </>
             ) : (
-                <form onSubmit={submit} className="flex flex-col">
+                <form onSubmit={submit} noValidate className="flex flex-col">
+                    {/* App-level validation only (a blank name is ignored, the price is coerced in addReward),
+                        so bypass native constraint validation -- otherwise a fractional / sub-1 price would fail
+                        the min/step check and silently block the submit instead of being coerced. */}
                     <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">New reward</h3>
                     <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">
                         Name it and set what it costs in gold.

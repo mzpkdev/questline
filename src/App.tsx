@@ -133,7 +133,7 @@ export function App() {
     // section is on screen: the roadmap board, the Tasks list, or the Rewards shop.
     const [tasks, setTasks] = useState<Task[]>(boot.tasks)
     // The Rewards shelf. Gold isn't stored: it's earned from roadmap completion minus the price of
-    // each redeemed reward (computed below), clamped at zero.
+    // each redeemed reward (computed below).
     const [rewards, setRewards] = useState<Reward[]>(boot.rewards)
     const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync">("roadmap")
     // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
@@ -171,13 +171,10 @@ export function App() {
 
     const active = projects[activeId]
 
-    // Gold in the purse: earned from progress (checklist boxes, tasks, milestones, goals) minus
-    // what's been spent, floored at zero so un-completing work after a spend just empties the purse
-    // rather than going negative.
-    const gold = useMemo(
-        () => Math.max(0, earnedGold(projects, tasks) - spentGold(rewards)),
-        [projects, tasks, rewards]
-    )
+    // Gold in the purse: earned from progress (checklist boxes, tasks, milestones, goals) minus what's
+    // been spent. A redemption is a permanent spend, so un-completing work you'd already spent against
+    // can push the balance negative -- a debt the purse shows honestly until fresh work out-earns it.
+    const gold = useMemo(() => earnedGold(projects, tasks) - spentGold(rewards), [projects, tasks, rewards])
 
     useEffect(() => {
         if (!active) return
