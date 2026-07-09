@@ -1,10 +1,7 @@
 import {
     addReward,
     TASK_GOLD,
-    CHECK_GOLD,
     earnedGold,
-    GOAL_GOLD,
-    NODE_GOLD,
     redeem,
     REDEEMED_TTL_MS,
     removeReward,
@@ -13,7 +10,7 @@ import {
     spentGold,
     visible
 } from "./rewards"
-import type { Todo } from "./milestones"
+import { DEFAULT_GOAL_REWARD, DEFAULT_NODE_REWARD, type Milestone, type Todo } from "./milestones"
 import { newProject, type Project, ROOT_ID, rootProject } from "./project"
 
 const list = (): Reward[] => [
@@ -21,12 +18,29 @@ const list = (): Reward[] => [
     { id: "reward-2", name: "Book", price: 8 }
 ]
 
-// A non-root project whose goal + the given extra ids are all mastered, with optional checklists.
-const projectWith = (id: string, mastered: string[], todos: Record<string, Todo[]> = {}): Project => ({
-    ...newProject(id, id, ROOT_ID),
-    mastered: new Set(mastered),
-    todos
-})
+// A non-root project whose goal + the given extra ids are all mastered, with optional checklists. Each
+// extra id gets a real milestone record carrying the default node reward, so earnedGold reads it off
+// the node (the goal already exists from newProject with the default goal reward).
+const projectWith = (id: string, mastered: string[], todos: Record<string, Todo[]> = {}): Project => {
+    const base = newProject(id, id, ROOT_ID)
+    const milestones = { ...base.milestones }
+    for (const mid of mastered) {
+        if (!milestones[mid]) {
+            milestones[mid] = {
+                id: mid,
+                name: mid,
+                tag: "Step",
+                x: 0,
+                y: 0,
+                tier: 1,
+                branch: "b",
+                description: "",
+                reward: DEFAULT_NODE_REWARD
+            }
+        }
+    }
+    return { ...base, milestones, mastered: new Set(mastered), todos }
+}
 
 describe("rewards", () => {
     context("addReward", () => {
@@ -145,12 +159,24 @@ describe("rewards", () => {
     })
 
     context("earnedGold", () => {
-        it("pays NODE_GOLD per completed step and GOAL_GOLD per completed goal", () => {
+        it("pays the default node reward per completed step and goal reward per completed goal", () => {
             const projects = { a: projectWith("a", ["a-goal", "n1", "n2"]) }
-            expect(earnedGold(projects, [])).toBe(GOAL_GOLD + 2 * NODE_GOLD)
+            expect(earnedGold(projects, [])).toBe(DEFAULT_GOAL_REWARD + 2 * DEFAULT_NODE_REWARD)
         })
 
-        it("pays CHECK_GOLD per ticked checklist box on a milestone", () => {
+        it("pays a milestone's own reward when set, not the default", () => {
+            const base = newProject("a", "a", ROOT_ID)
+            const goal = base.milestones[base.goalId] as Milestone
+            const step: Milestone = { id: "n1", name: "Step", tag: "Step", x: 0, y: 0, tier: 1, branch: "b", description: "", reward: 7 }
+            const project: Project = {
+                ...base,
+                milestones: { ...base.milestones, [base.goalId]: { ...goal, reward: 10 }, n1: step },
+                mastered: new Set([base.goalId, "n1"])
+            }
+            expect(earnedGold({ a: project }, [])).toBe(17)
+        })
+
+        it("pays nothing for ticked checklist boxes on a milestone", () => {
             const projects = {
                 a: projectWith("a", [], {
                     n1: [
@@ -160,7 +186,7 @@ describe("rewards", () => {
                     ]
                 })
             }
-            expect(earnedGold(projects, [])).toBe(2 * CHECK_GOLD)
+            expect(earnedGold(projects, [])).toBe(0)
         })
 
         it("pays TASK_GOLD per done task in the to-do list", () => {
@@ -177,14 +203,14 @@ describe("rewards", () => {
             expect(earnedGold({ [ROOT_ID]: root }, [])).toBe(0)
         })
 
-        it("sums boxes, tasks, milestones, and goals together", () => {
+        it("sums tasks, milestones, and goals together", () => {
             const projects = {
                 [ROOT_ID]: rootProject(),
-                a: projectWith("a", ["n1"], { n1: [{ text: "x", done: true }] }),
+                a: projectWith("a", ["n1"]),
                 b: projectWith("b", ["b-goal"])
             }
             const tasks = [{ id: "b1", text: "one", done: true }]
-            expect(earnedGold(projects, tasks)).toBe(NODE_GOLD + CHECK_GOLD + GOAL_GOLD + TASK_GOLD)
+            expect(earnedGold(projects, tasks)).toBe(DEFAULT_NODE_REWARD + DEFAULT_GOAL_REWARD + TASK_GOLD)
         })
 
         it("is zero with nothing completed", () => {

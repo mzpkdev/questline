@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react"
+import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { STATE_LABEL } from "./graph"
 import type { Milestone, MilestoneState, Todo } from "./milestones"
@@ -18,7 +19,7 @@ export type DetailCardProps = {
     onToggle?: (index: number) => void
     onComplete?: () => void
     onUncomplete?: () => void
-    onEditMilestone?: (patch: { name?: string; desc?: string }) => void
+    onEditMilestone?: (patch: { name?: string; description?: string; reward?: number }) => void
     onEditTodo?: (index: number, text: string) => void
     onDeleteTodo?: (index: number) => void
     onAddTodo?: () => void
@@ -27,9 +28,13 @@ export type DetailCardProps = {
     // When set, edit mode offers "+ Add sub-view" (a child view in the Root hub). Shown for view
     // chips and the Root node.
     onAddSubView?: () => void
-    // View-node mode: the action is a single "View" button, and edit mode is limited to name +
-    // description (plus + Add sub-view); no badge, checklist, sub-milestone, or parent buttons.
+    // View-node mode: the action is a single "View" button, and edit mode is limited to name,
+    // description, and reward (plus + Add sub-view); no badge, checklist, sub-milestone, or parent
+    // buttons. A view chip's reward is its underlying goal's, editable here via onEditMilestone.
     isView?: boolean
+    // Whether completing this node mints gold. True for every real milestone/goal and view chip; false
+    // only for the Root hub goal (which never pays out), which hides the reward editor.
+    earnsGold?: boolean
     onView?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
     onDelete?: () => void
@@ -183,6 +188,7 @@ export function DetailCard(props: DetailCardProps) {
         onAddParent,
         onAddSubView,
         isView,
+        earnsGold = true,
         onView,
         onDelete,
         deleteKind = "milestone",
@@ -302,9 +308,33 @@ export function DetailCard(props: DetailCardProps) {
                     {!isView && <div className="mt-[7px]">{badge}</div>}
                     <textarea
                         className={EDIT_DESC_CLASS}
-                        value={milestone.desc}
-                        onChange={(event) => onEditMilestone?.({ desc: event.target.value })}
+                        value={milestone.description}
+                        onChange={(event) => onEditMilestone?.({ description: event.target.value })}
                     />
+
+                    {earnsGold && (
+                        <div className="mb-[15px]">
+                            <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
+                            <div className="flex items-center gap-2">
+                                <Coin size={20} className="flex-none" />
+                                <input
+                                    aria-label="Reward in gold"
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={milestone.reward}
+                                    onChange={(event) => {
+                                        const n = event.target.valueAsNumber
+                                        onEditMilestone?.({ reward: Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0 })
+                                    }}
+                                    className={`${TODO_EDIT_CLASS} max-w-[92px] flex-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                />
+                                <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
+                                    gold on completion
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {!isView && !isGoal && (
                         <div className="mb-[15px]">
@@ -422,8 +452,8 @@ export function DetailCard(props: DetailCardProps) {
                         </div>
                     </div>
 
-                    {milestone.desc && (
-                        <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.desc}</p>
+                    {milestone.description && (
+                        <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.description}</p>
                     )}
 
                     {showChecklist && (

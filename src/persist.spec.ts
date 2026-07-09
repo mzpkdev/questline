@@ -44,18 +44,6 @@ describe("persist", () => {
         expect(deserialize(serialize(withCompletedAt))?.tasks[0]?.completedAt).toBe(1_700_000_000_000)
     })
 
-    it("loads a pre-Tasks file (no tasks field) as an empty list, not a rejection", () => {
-        const legacy = JSON.stringify({
-            version: PERSIST_VERSION,
-            projects: { [ROOT_ID]: { ...rootProject(), mastered: [] } },
-            order: [ROOT_ID],
-            mirrorPos: {}
-        })
-        const back = deserialize(legacy)
-        expect(back).not.toBeNull()
-        expect(back?.tasks).toEqual([])
-    })
-
     it("round-trips the rewards shelf", () => {
         const back = deserialize(serialize(slices()))
         expect(back?.rewards).toEqual([
@@ -72,56 +60,33 @@ describe("persist", () => {
         expect(deserialize(serialize(withRedeemed))?.rewards[0]?.redeemedAt).toBe(1_700_000_000_000)
     })
 
-    it("loads a pre-Rewards file (no rewards) as an empty shelf", () => {
-        const wire = JSON.parse(serialize(slices()))
-        wire.rewards = undefined
-        const back = deserialize(JSON.stringify(wire))
-        expect(back?.rewards).toEqual([])
-    })
-
-    it("drops malformed rewards and clamps prices, backfilling missing ids", () => {
-        const wire = JSON.parse(serialize(slices()))
-        wire.rewards = [
-            { name: "no id", price: 5 },
-            { id: "reward-9", name: "cheap", price: 0 },
-            { name: 5, price: 3 },
-            null
-        ]
-        const back = deserialize(JSON.stringify(wire))
-        expect(back?.rewards).toEqual([
-            { id: "reward-10", name: "no id", price: 5 },
-            { id: "reward-9", name: "cheap", price: 1 }
-        ])
-    })
-
-    it("drops malformed task entries rather than rejecting the file", () => {
-        const wire = JSON.parse(serialize(slices()))
-        wire.tasks = [{ id: "task-1", text: "keep", done: false }, { text: 5, done: false }, "nope", null]
-        const back = deserialize(JSON.stringify(wire))
-        expect(back?.tasks).toEqual([{ id: "task-1", text: "keep", done: false }])
-    })
-
-    it("backfills ids for tasks saved before ids existed, resuming past any present", () => {
-        const wire = JSON.parse(serialize(slices()))
-        wire.tasks = [
-            { text: "no id one", done: false },
-            { id: "task-5", text: "has id", done: true },
-            { text: "no id two", done: false }
-        ]
-        const ids = deserialize(JSON.stringify(wire))?.tasks.map((b) => b.id)
-        expect(ids).toEqual(["task-6", "task-5", "task-7"])
-    })
-
     it("stamps the current version", () => {
         expect(JSON.parse(serialize(slices())).version).toBe(PERSIST_VERSION)
     })
 
     it("rejects non-JSON, wrong version, and malformed shapes as null", () => {
         expect(deserialize("not json")).toBeNull()
-        expect(deserialize(JSON.stringify({ version: 999, projects: {}, order: [], mirrorPos: {} }))).toBeNull()
         expect(
-            deserialize(JSON.stringify({ version: PERSIST_VERSION, projects: { x: {} }, order: [], mirrorPos: {} }))
+            deserialize(JSON.stringify({ version: 999, projects: {}, order: [], mirrorPos: {}, tasks: [], rewards: [] }))
         ).toBeNull()
+        // A malformed project rejects the whole file.
+        expect(
+            deserialize(
+                JSON.stringify({
+                    version: PERSIST_VERSION,
+                    projects: { x: {} },
+                    order: [],
+                    mirrorPos: {},
+                    tasks: [],
+                    rewards: []
+                })
+            )
+        ).toBeNull()
+        // v2 is strict: a single malformed task or reward, or a missing tasks/rewards field, rejects it.
+        const valid = JSON.parse(serialize(slices()))
+        expect(deserialize(JSON.stringify({ ...valid, rewards: [{ name: "no id", price: 5 }] }))).toBeNull()
+        expect(deserialize(JSON.stringify({ ...valid, tasks: [{ text: "no id", done: false }] }))).toBeNull()
+        expect(deserialize(JSON.stringify({ ...valid, tasks: undefined }))).toBeNull()
     })
 
     it("saves to and loads from localStorage", () => {

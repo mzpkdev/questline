@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { DetailCard } from "./DetailCard"
 import { STATE_LABEL } from "./graph"
-import type { Milestone, Todo } from "./milestones"
+import { DEFAULT_NODE_REWARD, type Milestone, type Todo } from "./milestones"
 
 // A full Milestone with sensible defaults; each test overrides only what it asserts on.
 function milestone(overrides: Partial<Milestone> = {}): Milestone {
@@ -14,7 +14,8 @@ function milestone(overrides: Partial<Milestone> = {}): Milestone {
         y: 0,
         tier: 1,
         branch: "Product",
-        desc: "Every core feature built, integrated, and ready for real users.",
+        description: "Every core feature built, integrated, and ready for real users.",
+        reward: DEFAULT_NODE_REWARD,
         ...overrides
     }
 }
@@ -182,8 +183,57 @@ describe("DetailCard", () => {
             fireEvent.change(screen.getByDisplayValue("Feature Complete"), { target: { value: "Renamed" } })
             expect(onEditMilestone).toHaveBeenCalledWith({ name: "Renamed" })
 
-            fireEvent.change(screen.getByDisplayValue(/Every core feature/), { target: { value: "New desc" } })
-            expect(onEditMilestone).toHaveBeenCalledWith({ desc: "New desc" })
+            fireEvent.change(screen.getByDisplayValue(/Every core feature/), { target: { value: "New description" } })
+            expect(onEditMilestone).toHaveBeenCalledWith({ description: "New description" })
+        })
+
+        it("shows the reward and commits a change, rounding to a whole number of at least 0", async () => {
+            const user = userEvent.setup()
+            const onEditMilestone = vi.fn()
+
+            render(
+                <DetailCard
+                    milestone={milestone({ reward: 3 })}
+                    state="available"
+                    todos={[]}
+                    isGoal={false}
+                    onEditMilestone={onEditMilestone}
+                />
+            )
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+
+            const field = screen.getByRole("spinbutton", { name: "Reward in gold" })
+            expect(field).toHaveValue(3)
+            fireEvent.change(field, { target: { value: "8" } })
+            expect(onEditMilestone).toHaveBeenCalledWith({ reward: 8 })
+        })
+
+        it("hides the reward editor for a non-earning node (the Root hub goal)", async () => {
+            const user = userEvent.setup()
+            render(
+                <DetailCard milestone={milestone()} state="available" todos={[]} isGoal earnsGold={false} />
+            )
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+            expect(screen.queryByRole("spinbutton", { name: "Reward in gold" })).toBeNull()
+        })
+
+        it("lets a view chip edit its reward too", async () => {
+            const user = userEvent.setup()
+            const onEditMilestone = vi.fn()
+            render(
+                <DetailCard
+                    milestone={milestone({ reward: 5 })}
+                    state="available"
+                    todos={[]}
+                    isGoal
+                    isView
+                    onEditMilestone={onEditMilestone}
+                    onView={vi.fn()}
+                />
+            )
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.change(screen.getByRole("spinbutton", { name: "Reward in gold" }), { target: { value: "12" } })
+            expect(onEditMilestone).toHaveBeenCalledWith({ reward: 12 })
         })
 
         it("edits, removes, and adds checklist items", async () => {

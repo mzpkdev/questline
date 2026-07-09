@@ -92,13 +92,13 @@ describe("MilestoneTree", () => {
         })
 
         it("spawns the new card, proving the spawn context reaches React Flow's nodes", async () => {
-            const goal: Milestone = { id: "g", name: "Goal", tag: "Goal", x: 200, y: 80, tier: 0, branch: "Goal", desc: "" }
+            const goal: Milestone = { id: "g", name: "Goal", tag: "Goal", x: 200, y: 80, tier: 0, branch: "Goal", description: "", reward: 5 }
             const onSelect = vi.fn()
             const { rerender } = renderTree(null, onSelect, new Set(), { g: goal }, [])
             await screen.findByText("Goal")
             animate.mockClear() // ignore anything from the initial settle; only the later add should animate
 
-            const child: Milestone = { id: "c", name: "Fresh Node", tag: "Step", x: 200, y: 240, tier: 1, branch: "Goal", desc: "" }
+            const child: Milestone = { id: "c", name: "Fresh Node", tag: "Step", x: 200, y: 240, tier: 1, branch: "Goal", description: "", reward: 3 }
             rerender(
                 <div style={{ width: 1200, height: 800 }}>
                     <MilestoneTree

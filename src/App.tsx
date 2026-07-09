@@ -18,7 +18,7 @@ import {
 } from "./rewards"
 import { AddRewardCard, RewardsBoard } from "./RewardsBoard"
 import { MilestoneTree } from "./MilestoneTree"
-import type { Milestone, MilestoneEdge } from "./milestones"
+import { DEFAULT_GOAL_REWARD, DEFAULT_NODE_REWARD, type Milestone, type MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
 import { deleteMilestone, newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
@@ -426,9 +426,9 @@ export function App() {
         else setSelectedId(null)
     }, [selectedId, active, updateActive, focusNode])
 
-    // Edit the selected milestone's name/description in place.
+    // Edit the selected milestone's name/description/reward in place.
     const editMilestone = useCallback(
-        (patch: Partial<Pick<Milestone, "name" | "desc">>) => {
+        (patch: Partial<Pick<Milestone, "name" | "description" | "reward">>) => {
             if (selectedId === null) return
             updateActive((project) => {
                 const current = project.milestones[selectedId]
@@ -520,7 +520,8 @@ export function App() {
                 y: parent.y + TIER_GAP,
                 tier: parent.tier + 1,
                 branch: parent.branch,
-                desc: ""
+                description: "",
+                reward: DEFAULT_NODE_REWARD
             }
             const edges: MilestoneEdge[] = [...project.edges, [parentId, childId]]
             return {
@@ -555,7 +556,8 @@ export function App() {
                 y: oldGoal.y - TIER_GAP,
                 tier: 0,
                 branch: "Goal",
-                desc: ""
+                description: "",
+                reward: DEFAULT_GOAL_REWARD
             }
             const edges: MilestoneEdge[] = [...project.edges, [goalId, project.goalId]]
             return { ...project, milestones, edges, goalId }
@@ -581,9 +583,10 @@ export function App() {
         [switchProject]
     )
 
-    // Editing a mirror edits the view it stands for: patch that view's goal name/description. A name
-    // change flows back to the tab and the chip (both read the goal name).
-    const editMirror = useCallback((mirrorId: string, patch: Partial<Pick<Milestone, "name" | "desc">>) => {
+    // Editing a mirror edits the view it stands for: patch that view's goal name/description/reward. A
+    // name change flows back to the tab and the chip (both read the goal name); a reward change sets
+    // what completing that view's goal pays out.
+    const editMirror = useCallback((mirrorId: string, patch: Partial<Pick<Milestone, "name" | "description" | "reward">>) => {
         const pid = mirrorId.slice(VIEW_MIRROR_PREFIX.length)
         setProjects((prev) => {
             const project = prev[pid]
@@ -792,7 +795,8 @@ export function App() {
                 y: dragged ? dragged.y : rootGoal.y + d * TIER_GAP,
                 tier: 1,
                 branch: "View",
-                desc: goal.desc
+                description: goal.description,
+                reward: goal.reward
             }
             // Hang under the parent view's chip, or under the Root node for a top-level view.
             const parentId = project?.parentId
@@ -832,7 +836,17 @@ export function App() {
         const project = projects[displayId.slice(VIEW_MIRROR_PREFIX.length)]
         const goal = project?.milestones[project.goalId]
         return goal
-            ? { id: displayId, name: goal.name, tag: "View", x: 0, y: 0, tier: 1, branch: "View", desc: goal.desc }
+            ? {
+                  id: displayId,
+                  name: goal.name,
+                  tag: "View",
+                  x: 0,
+                  y: 0,
+                  tier: 1,
+                  branch: "View",
+                  description: goal.description,
+                  reward: goal.reward
+              }
             : undefined
     })()
     const isGoal = shown ? shown.tier === 0 : false
@@ -972,6 +986,7 @@ export function App() {
                                               : undefined
                                     }
                                     isView={shownIsView}
+                                    earnsGold={!shownIsRootGoal}
                                     onView={shownIsView && displayId ? () => openView(displayId) : undefined}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}

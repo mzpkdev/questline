@@ -501,7 +501,7 @@ describe("App", () => {
 
             // A minimal valid export: Root plus one view whose goal is `solo-goal`.
             const imported = {
-                version: 1,
+                version: 2,
                 projects: {
                     root: {
                         id: "root",
@@ -515,7 +515,7 @@ describe("App", () => {
                                 y: 0,
                                 tier: 0,
                                 branch: "Goal",
-                                desc: ""
+                                description: ""
                             }
                         },
                         edges: [],
@@ -535,7 +535,7 @@ describe("App", () => {
                                 y: 0,
                                 tier: 0,
                                 branch: "Goal",
-                                desc: ""
+                                description: ""
                             }
                         },
                         edges: [],
@@ -544,7 +544,9 @@ describe("App", () => {
                     }
                 },
                 order: ["root", "solo"],
-                mirrorPos: {}
+                mirrorPos: {},
+                tasks: [],
+                rewards: []
             }
             fireEvent.change(screen.getByTestId("import-input"), {
                 target: { files: [exportFile(JSON.stringify(imported))] }
@@ -577,7 +579,7 @@ describe("App", () => {
             // Rename the goal, then wait past the 400ms autosave debounce.
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.change(screen.getByDisplayValue("Learn Questline"), { target: { value: "Restored Launch" } })
-            await waitFor(() => expect(localStorage.getItem("questline:v1")).toContain("Restored Launch"), {
+            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Restored Launch"), {
                 timeout: 2000
             })
 
@@ -644,7 +646,7 @@ describe("App", () => {
             })
             fireEvent.click(screen.getByRole("button", { name: "Add task" }))
             await screen.findByText("Guard the caravan")
-            await waitFor(() => expect(localStorage.getItem("questline:v1")).toContain("Guard the caravan"), {
+            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Guard the caravan"), {
                 timeout: 2000
             })
 
@@ -659,7 +661,7 @@ describe("App", () => {
         const openRewards = () => fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
 
         // A fresh seed opens the purse at 3 gold: one completed step (3). The tutorial tasks all
-        // start undone, and checklist boxes pay nothing (CHECK_GOLD is 0).
+        // start undone, and ticking checklist boxes pays nothing.
         it("opens the seeded shop from the nav chip, swapping out the roadmap", async () => {
             render(<App />)
             openRewards()
@@ -680,6 +682,32 @@ describe("App", () => {
             await waitFor(() => expect(screen.getByTestId("purse")).toHaveTextContent("0"))
             expect(screen.queryByRole("button", { name: "Redeem Fancy coffee" })).toBeNull()
             expect(screen.getByText(/Redeemed/)).toBeInTheDocument()
+        })
+
+        it("counts a milestone's edited reward toward the purse, not the default", async () => {
+            render(<App />)
+            openSampleTab()
+
+            // Open finish-milestone and raise its reward from the default 3 to 20 in edit mode.
+            const leaf = await waitFor(() => {
+                const el = nodeRoot("finish-milestone")
+                if (!el) throw new Error("node not mounted yet")
+                return el as HTMLElement
+            })
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.change(screen.getByRole("spinbutton", { name: "Reward in gold" }), { target: { value: "20" } })
+
+            // Back out of edit mode, tick its boxes, and complete it.
+            fireEvent.click(screen.getByRole("button", { name: "Finish editing" }))
+            fireEvent.click(screen.getByRole("button", { name: "Check Tick this box" }))
+            fireEvent.click(screen.getByRole("button", { name: "Check Then tick this one" }))
+            fireEvent.click(screen.getByRole("button", { name: "Mark Complete" }))
+
+            // Purse = the seeded step (3) + this milestone's custom 20 = 23, not the default 3 + 3.
+            openRewards()
+            await waitFor(() => expect(screen.getByTestId("purse")).toHaveTextContent("23"))
         })
 
         it("counts a freshly ticked task toward the purse", async () => {
@@ -762,7 +790,7 @@ describe("App", () => {
             await screen.findByText("Fancy coffee")
 
             fireEvent.click(screen.getByRole("button", { name: "Redeem Fancy coffee" }))
-            await waitFor(() => expect(localStorage.getItem("questline:v1")).toContain("redeemedAt"), { timeout: 2000 })
+            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("redeemedAt"), { timeout: 2000 })
 
             first.unmount()
             render(<App />)

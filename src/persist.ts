@@ -10,8 +10,8 @@ import type { Task } from "./tasks"
 import type { Reward } from "./rewards"
 import type { Project } from "./project"
 
-export const PERSIST_VERSION = 1
-export const STORAGE_KEY = "questline:v1"
+export const PERSIST_VERSION = 2
+export const STORAGE_KEY = "questline:v2"
 
 export type MirrorPos = Record<string, { x: number; y: number }>
 
@@ -34,11 +34,9 @@ type WireState = {
     projects: Record<string, WireProject>
     order: string[]
     mirrorPos: MirrorPos
-    // Added after v1 shipped, so it's optional on the wire: an older file (or one from before the
-    // Tasks view) simply has none, and loads with an empty list.
-    tasks?: Task[]
-    // Likewise optional: a file from before the Rewards view has none, loading an empty shelf.
-    rewards?: Reward[]
+    // The app-level Tasks checklist and the Rewards shelf. Both required in the v2 wire format.
+    tasks: Task[]
+    rewards: Reward[]
 }
 
 // Live slices -> the JSON string written to a file or to localStorage.
@@ -58,8 +56,10 @@ export function serialize(slices: PersistedSlices): string {
     return JSON.stringify(wire)
 }
 
-// JSON string -> live slices, or null if the text is not a roadmap file we understand (bad JSON,
-// wrong version, missing/mistyped fields). Callers treat null as "reject, change nothing".
+// JSON string -> live slices, or null if the text is not a v2 roadmap file we fully understand (bad
+// JSON, wrong version, or any missing/mistyped field). No salvage: a malformed file is rejected
+// wholesale, so callers treat null as "reject, change nothing". Only Project.mastered is transformed
+// (array back to a Set); every other field is trusted exactly as written.
 export function deserialize(text: string): PersistedSlices | null {
     let raw: unknown
     try {
@@ -72,35 +72,7 @@ export function deserialize(text: string): PersistedSlices | null {
     for (const [id, project] of Object.entries(raw.projects)) {
         projects[id] = { ...project, mastered: new Set(project.mastered) }
     }
-    // Tasks are optional and lightly validated: any non-array or malformed entries fall back to an
-    // empty list rather than rejecting the whole file. Entries from before ids existed (or any missing
-    // one) are backfilled with a fresh `task-N`, resuming past whatever ids are already present.
-    const rawTasks = Array.isArray(raw.tasks) ? raw.tasks.filter(isTask) : []
-    let nextId = maxCounter(
-        rawTasks.map((b) => (typeof b.id === "string" ? b.id : "")),
-        "task"
-    )
-    const tasks: Task[] = rawTasks.map((b) => ({
-        id: typeof b.id === "string" && b.id ? b.id : `task-${++nextId}`,
-        text: b.text,
-        done: b.done,
-        ...(typeof b.completedAt === "number" ? { completedAt: b.completedAt } : {})
-    }))
-    // Rewards get the same lenient treatment: malformed entries are dropped, missing ids are backfilled
-    // (resuming past any present), and each price is clamped to a whole number of at least 1.
-    const rawRewards = Array.isArray(raw.rewards) ? raw.rewards.filter(isReward) : []
-    let nextRewardId = maxCounter(
-        rawRewards.map((r) => (typeof r.id === "string" ? r.id : "")),
-        "reward"
-    )
-    const rewards: Reward[] = rawRewards.map((r) => ({
-        id: typeof r.id === "string" && r.id ? r.id : `reward-${++nextRewardId}`,
-        name: r.name,
-        price: Math.max(1, Math.round(r.price) || 1),
-        ...(typeof r.redeemedAt === "number" ? { redeemedAt: r.redeemedAt } : {}),
-        ...(r.replenish === true ? { replenish: true } : {})
-    }))
-    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks, rewards }
+    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks: raw.tasks, rewards: raw.rewards }
 }
 
 // Best-effort read of the autosaved state, or null when absent/corrupt.
@@ -141,21 +113,32 @@ function isWireState(value: unknown): value is WireState {
     if (typeof v.projects !== "object" || v.projects === null) return false
     if (!Array.isArray(v.order) || !v.order.every((id) => typeof id === "string")) return false
     if (typeof v.mirrorPos !== "object" || v.mirrorPos === null) return false
+    if (!Array.isArray(v.tasks) || !v.tasks.every(isTask)) return false
+    if (!Array.isArray(v.rewards) || !v.rewards.every(isReward)) return false
     return Object.values(v.projects as Record<string, unknown>).every(isWireProject)
 }
 
-function isTask(value: unknown): value is { id?: unknown; text: string; done: boolean; completedAt?: unknown } {
+function isTask(value: unknown): value is Task {
     if (typeof value !== "object" || value === null) return false
     const b = value as Record<string, unknown>
-    return typeof b.text === "string" && typeof b.done === "boolean"
+    return (
+        typeof b.id === "string" &&
+        typeof b.text === "string" &&
+        typeof b.done === "boolean" &&
+        (b.completedAt === undefined || typeof b.completedAt === "number")
+    )
 }
 
-function isReward(
-    value: unknown
-): value is { id?: unknown; name: string; price: number; redeemedAt?: unknown; replenish?: unknown } {
+function isReward(value: unknown): value is Reward {
     if (typeof value !== "object" || value === null) return false
     const r = value as Record<string, unknown>
-    return typeof r.name === "string" && typeof r.price === "number"
+    return (
+        typeof r.id === "string" &&
+        typeof r.name === "string" &&
+        typeof r.price === "number" &&
+        (r.redeemedAt === undefined || typeof r.redeemedAt === "number") &&
+        (r.replenish === undefined || typeof r.replenish === "boolean")
+    )
 }
 
 function isWireProject(value: unknown): value is WireProject {

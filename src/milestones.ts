@@ -20,8 +20,19 @@ export type Milestone = {
     y: number
     tier: number
     branch: string
-    desc: string
+    description: string
+    // Gold minted when this milestone is completed. Seeded from DEFAULT_GOAL_REWARD (the tier-0 goal)
+    // or DEFAULT_NODE_REWARD (every milestone below it) when the node is created, then editable per
+    // node in the detail card. Required: reward-less data from before this field is upgraded on load
+    // (see persist.deserialize), so every live milestone carries one.
+    reward: number
 }
+
+// Default gold a milestone pays on completion, used to seed a new node's `reward` and to upgrade older
+// data with none set (in persist.deserialize). The goal (tier 0) is the big payoff; every milestone
+// below it pays the smaller node reward.
+export const DEFAULT_NODE_REWARD = 3
+export const DEFAULT_GOAL_REWARD = 5
 
 // [parent (drawn above), child (drawn below)] -- child is a sub-milestone of parent.
 export type MilestoneEdge = [parent: string, child: string]
@@ -35,7 +46,8 @@ export const NODES: Milestone[] = [
         y: 90,
         tier: 0,
         branch: "Goal",
-        desc: "This is your goal, the thing everything below builds toward. Click any node to open its card; the pencil (top-right) edits its name, description, and checklist. Progress climbs from the bottom up: a node lights up once every step beneath it is done."
+        description: "This is your goal, the thing everything below builds toward. Click any node to open its card; the pencil (top-right) edits its name, description, checklist, and reward. Progress climbs from the bottom up: a node lights up once every step beneath it is done.",
+        reward: DEFAULT_GOAL_REWARD
     },
 
     {
@@ -46,7 +58,8 @@ export const NODES: Milestone[] = [
         y: 250,
         tier: 1,
         branch: "Plan",
-        desc: "Sub-milestones split a goal into tracks. The step beneath this one is already done, so this track has unlocked and shows In Progress. Its own checklist decides when you can mark it complete."
+        description: "Sub-milestones split a goal into tracks. The step beneath this one is already done, so this track has unlocked and shows In Progress. Its own checklist decides when you can mark it complete.",
+        reward: DEFAULT_NODE_REWARD
     },
     {
         id: "track-progress",
@@ -56,7 +69,8 @@ export const NODES: Milestone[] = [
         y: 250,
         tier: 1,
         branch: "Track",
-        desc: "This track is Locked: it waits until the milestone beneath it is complete. Finish the step below and watch this light up."
+        description: "This track is Locked: it waits until the milestone beneath it is complete. Finish the step below and watch this light up.",
+        reward: DEFAULT_NODE_REWARD
     },
 
     {
@@ -67,7 +81,8 @@ export const NODES: Milestone[] = [
         y: 410,
         tier: 2,
         branch: "Plan",
-        desc: "Every milestone carries a checklist, its definition of done. Every box here is ticked and the milestone is marked complete, which is why the track above unlocked."
+        description: "Every milestone carries a checklist, its definition of done. Every box here is ticked and the milestone is marked complete, which is why the track above unlocked.",
+        reward: DEFAULT_NODE_REWARD
     },
     {
         id: "finish-milestone",
@@ -77,7 +92,8 @@ export const NODES: Milestone[] = [
         y: 410,
         tier: 2,
         branch: "Track",
-        desc: "Your turn: tick each item below, then press Mark Complete. The track above will unlock the moment this is done."
+        description: "Your turn: tick each item below, then press Mark Complete. The track above will unlock the moment this is done.",
+        reward: DEFAULT_NODE_REWARD
     }
 ]
 
