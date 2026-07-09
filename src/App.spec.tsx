@@ -157,9 +157,9 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
 
-            // A lone goal node named "New View"; the seed roadmap is gone.
+            // A lone goal node named "New Quest"; the seed roadmap is gone.
             await waitFor(() => expect(nodeRoot("view-1-goal")).not.toBeNull())
-            expect(nodeRoot("view-1-goal")?.textContent).toContain("New View")
+            expect(nodeRoot("view-1-goal")?.textContent).toContain("New Quest")
             expect(nodeRoot("learn")).toBeNull()
         })
 
@@ -527,7 +527,7 @@ describe("App", () => {
     })
 
     context("the Bounties view", () => {
-        const openBounties = () => fireEvent.click(screen.getByRole("button", { name: "Bounties" }))
+        const openBounties = () => fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
 
         it("opens the seeded bounties list from the nav chip, swapping out the roadmap", async () => {
             render(<App />)
@@ -581,13 +581,13 @@ describe("App", () => {
 
             first.unmount()
             render(<App />)
-            fireEvent.click(screen.getByRole("button", { name: "Bounties" }))
+            fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
             expect(await screen.findByText("Guard the caravan")).toBeInTheDocument()
         })
     })
 
     context("the Merchant view", () => {
-        const openMerchant = () => fireEvent.click(screen.getByRole("button", { name: "Merchant" }))
+        const openMerchant = () => fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
 
         // A fresh seed opens the purse at 3 gold: one completed step (3). The tutorial bounties all
         // start undone, and checklist boxes pay nothing (CHECK_GOLD is 0).
@@ -617,13 +617,13 @@ describe("App", () => {
             render(<App />)
             // The tutorial bounties start undone, so the purse is the roadmap's 3. Ticking one adds
             // BOUNTY_GOLD (1), taking it to 4.
-            fireEvent.click(screen.getByRole("button", { name: "Bounties" }))
+            fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
             fireEvent.click(
                 await screen.findByRole("button", {
                     name: "Check Tick a bounty to complete it and earn gold toward the Merchant."
                 })
             )
-            fireEvent.click(screen.getByRole("button", { name: "Merchant" }))
+            fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
             await waitFor(() => expect(screen.getByTestId("purse")).toHaveTextContent("4"))
         })
 
@@ -697,7 +697,7 @@ describe("App", () => {
 
             first.unmount()
             render(<App />)
-            fireEvent.click(screen.getByRole("button", { name: "Merchant" }))
+            fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
             // The redemption survived: 3 earned - 3 spent = 0, and the reward still reads redeemed.
             await waitFor(() => expect(screen.getByTestId("purse")).toHaveTextContent("0"))
             expect(screen.getByText(/Redeemed/)).toBeInTheDocument()

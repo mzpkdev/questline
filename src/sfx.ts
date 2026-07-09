@@ -1,36 +1,37 @@
 // Zero-asset WebAudio SFX kit -- synthesized one-shot sound effects, no audio files to host or ship.
-// Questline mimics a mobile game's "juice", so each interaction gets a short, distinct cue: a soft pop
-// when you tick a task off, a rising chime when a milestone lands, a coin ka-ching at the merchant, and
-// a fanfare when a whole quest is done. This is the audio counterpart to the app's existing visual juice
-// (node seal, purse bump, goal-celebration burst).
+// Questline is a medieval quest board (parchment, gold, Cinzel type), so the cues are warm struck
+// bells and a harp-like pluck rather than chiptune bleeps: a soft pluck when a to-do is ticked, rising
+// hand-bells when a milestone lands, a bright coin clink at the merchant, and a regal bell fanfare when
+// a whole quest is done. This is the audio counterpart to the app's visual juice (node seal, purse
+// bump, goal-celebration burst).
 //
 // House style: a callable factory of free functions over closure-private state (no data class, no
 // destroy() -- a single lazy AudioContext is the only resource and it is fine to share for the page's
 // lifetime). Returns a frozen record of bound effect functions plus unlock / setMuted / isMuted.
 //
-// Audio is a SIDE EFFECT: fire these from event handlers or from effects that observe a real state
-// transition (see SfxProvider / App). Never call them from a pure module (bounties.ts, merchant.ts,
-// graph.ts) or from a component's render body.
+// Audio is a SIDE EFFECT: fire these from event handlers or from an effect that observes a real state
+// transition (see App). Never call them from a pure module (bounties.ts, merchant.ts, graph.ts) or
+// from a component's render body.
 //
 // Synthesis model: every voice is an OscillatorNode -> GainNode -> destination chain with a short gain
-// envelope (a fast linear attack and an exponential decay to near-silence). The exponential tail is what
-// stops the audible "click" you get from cutting a tone off at non-zero amplitude. A distinct waveform /
-// frequency / duration per effect gives each its character; the richer cues (success, coin, fanfare)
-// layer a few staggered voices into a short melody.
+// envelope (a fast linear attack and an exponential decay to near-silence). The exponential tail is
+// what stops the audible "click" you get from cutting a tone off at non-zero amplitude. Timbre comes
+// from `strike`, which layers a fundamental with quiet inharmonic overtones (the ratios a real bell or
+// plucked string rings at), so a plain oscillator reads as a struck bell instead of a synth tone.
 //
 // Browser gesture policy: an AudioContext starts `suspended` until a user gesture resumes it, so the
 // context is created and resumed lazily on the first effect (or unlock()) call. SfxProvider wires
 // unlock() into the first pointerdown / keydown so the very first effect is audible.
 //
 // SSR / non-DOM safe: every entry point guards `typeof window` and the presence of an AudioContext
-// constructor, so importing and calling this on the server (or in a jsdom test without WebAudio, as this
-// repo's Vitest suite does) is a silent no-op rather than a throw.
+// constructor, so importing and calling this on the server (or in a jsdom test without WebAudio, as
+// this repo's Vitest suite does) is a silent no-op rather than a throw.
 //
 // @example
 //   import { createSfx } from "./sfx"
 //   const sfx = createSfx()
 //   window.addEventListener("pointerdown", () => sfx.unlock(), { once: true })
-//   sfx.pop()      // a task ticked off
+//   sfx.pop()      // a to-do ticked off
 //   sfx.success()  // a milestone completed
 //   sfx.fanfare()  // the whole quest done
 
@@ -44,20 +45,18 @@ export type SoundEffect = () => void
  * The public surface returned by {@link createSfx}: the named one-shot effects plus the lifecycle
  * controls. Frozen so callers can destructure freely without risk of reassigning an effect.
  *
- * @property blip    - Short neutral UI tick -- a confirm / create (add a bounty, reward, milestone, or
- *                     view; open a section). Square wave, mid pitch, ~80ms.
- * @property pop     - Bright bubble "pop" -- a single thing crossed off (a bounty or a milestone
- *                     checklist box ticked). Triangle wave with a quick upward bend, ~120ms.
- * @property success - Rising two-note arpeggio -- a milestone completed. Sine, ~260ms.
- * @property error   - Low buzzy descending tone -- something rejected (an invalid import). Sawtooth,
- *                     low pitch, ~220ms.
- * @property tick    - Very short, very quiet high click -- lightweight feedback that fires often
- *                     (selecting a node, dropping a drag, un-checking, removing). Square wave, ~35ms.
- * @property coin    - Two-note metallic "ka-ching" -- a reward redeemed at the merchant (gold spent).
- *                     Triangle, ~230ms.
- * @property fanfare - The finale: a rising major arpeggio with a sparkle on top -- a whole quest's goal
- *                     completed. The loudest/longest cue; pairs with the on-screen goal celebration.
- *                     Sine + triangle, ~700ms.
+ * @property blip    - A soft single bell tap -- a light confirm (used for the unmute cue). ~160ms.
+ * @property pop     - A warm harp-like pluck (fundamental + a quiet octave) -- a single to-do or bounty
+ *                     crossed off. Triangle, ~200ms.
+ * @property success - Two rising struck hand-bells with inharmonic overtones -- a milestone completed.
+ *                     Sine, ~550ms.
+ * @property error   - A soft low two-note fall -- a muted "denied", not a buzzer. Triangle, ~280ms.
+ * @property tick    - A very short, very quiet click -- lightweight incidental feedback. Sine, ~50ms.
+ * @property coin    - A bright metallic clink -- gold dropped into the purse when a reward is redeemed.
+ *                     Sine bells, higher/tighter than success. ~280ms.
+ * @property fanfare - The finale: a regal rising bell arpeggio over a low root with a shimmer on top --
+ *                     a whole quest's goal completed. The loudest/longest cue; pairs with the on-screen
+ *                     goal celebration. ~950ms.
  * @property unlock  - Resume the (lazily created) AudioContext. Call from the first user gesture.
  *                     Idempotent and safe to call eagerly.
  * @property setMuted - Toggle the global mute flag. While muted every effect is a no-op; the context is
@@ -103,8 +102,8 @@ const SILENCE = 0.0001
  *   2. linear-ramp up to `peak` over `attack` seconds (the transient), then
  *   3. exponential-ramp down to SILENCE by `startTime + duration`.
  *
- * Stopping the oscillator a hair after the decay completes means amplitude is already ~0, so there is no
- * discontinuity and therefore no click.
+ * Stopping the oscillator a hair after the decay completes means amplitude is already ~0, so there is
+ * no discontinuity and therefore no click.
  *
  * @param context   - The shared, already-resumed audio context.
  * @param type      - Oscillator waveform.
@@ -113,9 +112,7 @@ const SILENCE = 0.0001
  * @param duration  - Total voice length in seconds (attack + decay).
  * @param peak      - Peak gain after the attack ramp (0..1). Kept well under 1 so layered voices don't
  *                    clip the destination.
- * @param attack    - Attack time in seconds; defaults to a 4ms transient.
- * @param bendTo    - Optional target frequency to glide to by the voice end (exponential pitch ramp) --
- *                    used for the "pop" and "error" bends.
+ * @param attack    - Attack time in seconds; defaults to a 3ms transient (a struck / plucked onset).
  */
 const playVoice = (
     context: AudioContext,
@@ -124,18 +121,13 @@ const playVoice = (
     startTime: number,
     duration: number,
     peak: number,
-    attack: number = 0.004,
-    bendTo?: number
+    attack: number = 0.003
 ): void => {
     const oscillator = context.createOscillator()
     const gain = context.createGain()
 
     oscillator.type = type
     oscillator.frequency.setValueAtTime(frequency, startTime)
-    if (bendTo !== undefined) {
-        // Exponential glide reads as a "bend"; target must be > 0.
-        oscillator.frequency.exponentialRampToValueAtTime(Math.max(bendTo, 1), startTime + duration)
-    }
 
     // Envelope: SILENCE -> peak (linear attack) -> SILENCE (exponential decay).
     gain.gain.setValueAtTime(SILENCE, startTime)
@@ -149,11 +141,44 @@ const playVoice = (
 }
 
 /**
+ * One overtone above a struck fundamental: a frequency `ratio` times the fundamental, at `gain` times
+ * its peak, ringing for `decay` times its duration. Real bells / plucked strings ring at *inharmonic*
+ * ratios (not clean octaves), and it is those overtones -- brief and quiet -- that make a bare
+ * oscillator read as struck metal or wood rather than a synth tone.
+ */
+type Partial = { ratio: number; gain: number; decay?: number }
+
+/**
+ * A struck / plucked tone: the `fundamental` plus its `partials`, all sharing one onset. Layer a few of
+ * these (staggered in time) to build a bell peal or an arpeggio.
+ */
+const strike = (
+    context: AudioContext,
+    startTime: number,
+    fundamental: number,
+    duration: number,
+    peak: number,
+    partials: Partial[] = [],
+    type: OscillatorType = "sine"
+): void => {
+    playVoice(context, type, fundamental, startTime, duration, peak)
+    for (const partial of partials) {
+        playVoice(context, type, fundamental * partial.ratio, startTime, duration * (partial.decay ?? 1), peak * partial.gain)
+    }
+}
+
+// Bell overtones (inharmonic) for the mid-register hand-bells and the fanfare.
+const BELL: Partial[] = [
+    { ratio: 2.4, gain: 0.42, decay: 0.85 },
+    { ratio: 3.9, gain: 0.18, decay: 0.6 }
+]
+
+/**
  * Builds an {@link Sfx} kit bound to a single lazily-created AudioContext.
  *
- * Nothing touches WebAudio until the first effect or {@link Sfx.unlock} call, so constructing the kit is
- * cheap and SSR-safe. The context is created once and reused for every effect for the lifetime of the
- * page; there is intentionally no `destroy()`. To silence the app, mute it.
+ * Nothing touches WebAudio until the first effect or {@link Sfx.unlock} call, so constructing the kit
+ * is cheap and SSR-safe. The context is created once and reused for every effect for the lifetime of
+ * the page; there is intentionally no `destroy()`. To silence the app, mute it.
  *
  * @returns A frozen kit of named one-shot effects plus `unlock` / `setMuted` / `isMuted`. Every effect
  *          is a no-op until unlocked, while muted, and whenever WebAudio is unavailable.
@@ -190,55 +215,57 @@ export const createSfx = (): Sfx => {
 
     const blip: SoundEffect = () =>
         schedule((context, t) => {
-            playVoice(context, "square", 440, t, 0.08, 0.18)
+            // A soft bell tap (fundamental + a quiet octave) -- the light confirm behind the unmute cue.
+            strike(context, t, 587.33, 0.16, 0.14, [{ ratio: 2, gain: 0.3 }])
         })
 
     const pop: SoundEffect = () =>
         schedule((context, t) => {
-            // Triangle body with a quick upward bend -> a bright, friendly "pop".
-            playVoice(context, "triangle", 520, t, 0.12, 0.22, 0.004, 880)
+            // A warm harp-like pluck: a triangle fundamental with a quiet octave, ringing out fast. It
+            // fires on every box ticked, so it stays short and gentle.
+            strike(context, t, 587.33, 0.2, 0.17, [{ ratio: 2, gain: 0.3 }], "triangle")
         })
 
     const success: SoundEffect = () =>
         schedule((context, t) => {
-            // Two-note rising arpeggio (E5 -> A5). The second note starts as the first is decaying, so
-            // they overlap into a perceived "ta-da".
-            playVoice(context, "sine", 659.25, t, 0.14, 0.2)
-            playVoice(context, "sine", 880, t + 0.1, 0.18, 0.2)
+            // Two rising struck hand-bells (A4 -> E5) with inharmonic overtones -- a small, warm chime.
+            strike(context, t, 440, 0.5, 0.16, BELL)
+            strike(context, t + 0.13, 659.25, 0.55, 0.16, BELL)
         })
 
     const error: SoundEffect = () =>
         schedule((context, t) => {
-            // Low sawtooth with a downward bend -> a buzzy "nope".
-            playVoice(context, "sawtooth", 196, t, 0.22, 0.2, 0.004, 110)
+            // A soft low two-note fall (A3 -> E3) -- a muted "denied", rounded rather than a buzzer.
+            playVoice(context, "triangle", 220, t, 0.24, 0.16)
+            playVoice(context, "triangle", 164.81, t + 0.12, 0.28, 0.16)
         })
 
     const tick: SoundEffect = () =>
         schedule((context, t) => {
-            // Very short, very quiet high click for lightweight per-action feedback.
-            playVoice(context, "square", 1320, t, 0.035, 0.08)
+            // A very short, very quiet click for incidental feedback.
+            playVoice(context, "sine", 880, t, 0.05, 0.06)
         })
 
     const coin: SoundEffect = () =>
         schedule((context, t) => {
-            // Two quick bright notes (B5 -> E6) -> a minted "ka-ching" for a reward bought with gold.
-            playVoice(context, "triangle", 987.77, t, 0.09, 0.2)
-            playVoice(context, "triangle", 1318.51, t + 0.07, 0.16, 0.22)
+            // Two quick bright metallic clinks (C6 -> E6) with a single high overtone -- gold into the
+            // purse. Higher and tighter than success so a purchase reads distinctly.
+            strike(context, t, 1046.5, 0.24, 0.15, [{ ratio: 2.76, gain: 0.5, decay: 0.7 }])
+            strike(context, t + 0.08, 1318.51, 0.28, 0.15, [{ ratio: 2.76, gain: 0.5, decay: 0.6 }])
         })
 
     const fanfare: SoundEffect = () =>
         schedule((context, t) => {
-            // A rising major arpeggio (C5 E5 G5 C6), each note ringing under the next, with a high G6
-            // sparkle over the top -> the finale when a whole quest's goal is done. Peaks are kept low
-            // because up to three voices overlap at once.
-            const notes = [523.25, 659.25, 783.99, 1046.5]
-            for (let i = 0; i < notes.length; i++) {
-                const frequency = notes[i]
-                if (frequency === undefined) continue
+            // A regal rising bell arpeggio (G major: G4 B4 D5 G5) over a low G3 root, with a high D6
+            // shimmer over the top -- the finale when a whole quest's goal is done. Peaks are kept low
+            // because many voices overlap.
+            playVoice(context, "triangle", 196, t, 0.9, 0.1)
+            const notes = [392, 493.88, 587.33, 783.99]
+            notes.forEach((frequency, i) => {
                 const isLast = i === notes.length - 1
-                playVoice(context, isLast ? "triangle" : "sine", frequency, t + i * 0.09, isLast ? 0.5 : 0.34, 0.16)
-            }
-            playVoice(context, "sine", 1567.98, t + 0.3, 0.5, 0.08)
+                strike(context, t + i * 0.1, frequency, isLast ? 0.85 : 0.5, 0.14, BELL)
+            })
+            playVoice(context, "sine", 1174.66, t + 0.34, 0.7, 0.06)
         })
 
     const unlock = (): void => {

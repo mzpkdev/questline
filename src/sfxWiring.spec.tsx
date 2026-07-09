@@ -69,12 +69,12 @@ describe("sfx wiring", () => {
         )
 
         // Navigation is not one of the kept cues, so it makes no sound.
-        fireEvent.click(screen.getByRole("button", { name: "Bounties" }))
+        fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
         expect(voices).toHaveLength(0)
 
-        // Cross a seeded bounty off: toggleBounty() on an open item -> pop (triangle @ 520).
+        // Cross a seeded bounty off: toggleBounty() on an open item -> pluck (triangle @ 587.33).
         fireEvent.click(screen.getByRole("button", { name: /^Check Tick a bounty/ }))
-        expect(voices.some((voice) => voice.type === "triangle" && voice.frequency === 520)).toBe(true)
+        expect(voices.some((voice) => voice.type === "triangle" && voice.frequency === 587.33)).toBe(true)
     })
 
     it("stays silent while muted", () => {
@@ -85,7 +85,7 @@ describe("sfx wiring", () => {
             </SfxProvider>
         )
 
-        fireEvent.click(screen.getByRole("button", { name: "Bounties" }))
+        fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
         fireEvent.click(screen.getByRole("button", { name: /^Check Tick a bounty/ }))
         expect(voices).toHaveLength(0)
     })

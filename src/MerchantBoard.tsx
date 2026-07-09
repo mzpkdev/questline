@@ -372,7 +372,7 @@ export function MerchantBoard({ gold, rewards, onRedeem, onOpenAdd, onRemoveRewa
         <div className="mx-auto w-[95%] max-w-[1040px] px-1 py-10">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                 <div>
-                    <h2 className="font-decorative text-[21px] font-bold tracking-[0.4px] text-[#4a3410]">Merchant</h2>
+                    <h2 className="font-decorative text-[21px] font-bold tracking-[0.4px] text-[#4a3410]">Rewards</h2>
                     <p className="mt-0.5 text-[13.5px] italic text-[#a2916c]">
                         Spend the gold you earn from bounties and finished milestones. Add your own rewards and set the
                         price.

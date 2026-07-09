@@ -572,7 +572,7 @@ export function App() {
             setSection("roadmap")
             nextViewId.current += 1
             const id = `view-${nextViewId.current}`
-            const project = newProject(id, "New View", parentId)
+            const project = newProject(id, "New Quest", parentId)
             setProjects((prev) => ({ ...prev, [id]: project }))
             setOrder((prev) => [...prev, id])
             if (activate) {

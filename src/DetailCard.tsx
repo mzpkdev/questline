@@ -331,14 +331,14 @@ export function DetailCard(props: DetailCardProps) {
 
                     {(!isView || onAddSubView) && (
                         <div className="flex flex-col gap-2.5">
+                            {!isView && isGoal && onAddParent && (
+                                <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
+                                    + Add parent milestone
+                                </button>
+                            )}
                             {!isView && (
                                 <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
                                     + Add sub-milestone
-                                </button>
-                            )}
-                            {!isView && isGoal && onAddParent && (
-                                <button type="button" className={ADD_PARENT_CLASS} onClick={onAddParent}>
-                                    + Add parent milestone
                                 </button>
                             )}
                             {onAddSubView && (
