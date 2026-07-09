@@ -125,6 +125,7 @@ function isTask(value: unknown): value is Task {
         typeof b.id === "string" &&
         typeof b.text === "string" &&
         typeof b.done === "boolean" &&
+        typeof b.reward === "number" &&
         (b.completedAt === undefined || typeof b.completedAt === "number")
     )
 }

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { DetailCard } from "./DetailCard"
+import { NodeDetailCard } from "./NodeDetailCard"
 import { STATE_LABEL } from "./graph"
 import { DEFAULT_NODE_REWARD, type Milestone, type Todo } from "./milestones"
 
@@ -20,11 +20,11 @@ function milestone(overrides: Partial<Milestone> = {}): Milestone {
     }
 }
 
-describe("DetailCard", () => {
+describe("NodeDetailCard", () => {
     context("the root goal", () => {
         it("renders the name and state badge, no checklist, and the goal action label", () => {
             render(
-                <DetailCard milestone={milestone({ name: "Learn Questline" })} state="available" todos={[]} isGoal />
+                <NodeDetailCard milestone={milestone({ name: "Learn Questline" })} state="available" todos={[]} isGoal />
             )
 
             expect(screen.getByRole("heading", { name: "Learn Questline" })).toBeInTheDocument()
@@ -42,7 +42,7 @@ describe("DetailCard", () => {
                 { text: "Beta feedback triaged", done: false }
             ]
 
-            render(<DetailCard milestone={milestone()} state="available" todos={todos} isGoal={false} />)
+            render(<NodeDetailCard milestone={milestone()} state="available" todos={todos} isGoal={false} />)
 
             expect(screen.getByRole("button", { name: "Mark Complete" })).toBeDisabled()
             expect(screen.getByText("Check off every item to complete this milestone.")).toBeInTheDocument()
@@ -57,7 +57,7 @@ describe("DetailCard", () => {
                 { text: "Second check complete", done: true }
             ]
 
-            render(<DetailCard milestone={milestone()} state="available" todos={todos} isGoal={false} />)
+            render(<NodeDetailCard milestone={milestone()} state="available" todos={todos} isGoal={false} />)
 
             expect(screen.getByRole("button", { name: "Mark Complete" })).toBeEnabled()
             expect(screen.queryByText(/Check off every item/)).not.toBeInTheDocument()
@@ -68,7 +68,7 @@ describe("DetailCard", () => {
         it("offers Mark Incomplete and shows a ticked item as pressed", () => {
             const todos: Todo[] = [{ text: "Compute provisioned", done: true }]
 
-            render(<DetailCard milestone={milestone()} state="mastered" todos={todos} isGoal={false} />)
+            render(<NodeDetailCard milestone={milestone()} state="mastered" todos={todos} isGoal={false} />)
 
             expect(screen.getByText(STATE_LABEL.mastered)).toBeInTheDocument()
             expect(screen.getByRole("button", { name: "Mark Incomplete" })).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe("DetailCard", () => {
             const todos: Todo[] = [{ text: "Second check complete", done: true }]
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="available"
                     todos={todos}
@@ -102,7 +102,7 @@ describe("DetailCard", () => {
             const todos: Todo[] = [{ text: "Compute provisioned", done: true }]
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="mastered"
                     todos={todos}
@@ -120,7 +120,7 @@ describe("DetailCard", () => {
         it("renders a disabled Locked action", () => {
             const todos: Todo[] = [{ text: "Blocked step", done: false }]
 
-            render(<DetailCard milestone={milestone()} state="locked" todos={todos} isGoal={false} />)
+            render(<NodeDetailCard milestone={milestone()} state="locked" todos={todos} isGoal={false} />)
 
             expect(screen.getByText(STATE_LABEL.locked)).toBeInTheDocument()
             expect(screen.getByRole("button", { name: "Locked" })).toBeDisabled()
@@ -137,7 +137,7 @@ describe("DetailCard", () => {
             ]
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="available"
                     todos={todos}
@@ -156,7 +156,7 @@ describe("DetailCard", () => {
             const todos: Todo[] = [{ text: "Blocked step", done: false }]
 
             render(
-                <DetailCard milestone={milestone()} state="locked" todos={todos} isGoal={false} onToggle={onToggle} />
+                <NodeDetailCard milestone={milestone()} state="locked" todos={todos} isGoal={false} onToggle={onToggle} />
             )
 
             await user.click(screen.getByRole("button", { name: "Check Blocked step" }))
@@ -170,7 +170,7 @@ describe("DetailCard", () => {
             const onEditMilestone = vi.fn()
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="available"
                     todos={[]}
@@ -192,7 +192,7 @@ describe("DetailCard", () => {
             const onEditMilestone = vi.fn()
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone({ reward: 3 })}
                     state="available"
                     todos={[]}
@@ -211,17 +211,36 @@ describe("DetailCard", () => {
         it("hides the reward editor for a non-earning node (the Root hub goal)", async () => {
             const user = userEvent.setup()
             render(
-                <DetailCard milestone={milestone()} state="available" todos={[]} isGoal earnsGold={false} />
+                <NodeDetailCard milestone={milestone()} state="available" todos={[]} isGoal earnsGold={false} />
             )
             await user.click(screen.getByRole("button", { name: "Edit" }))
             expect(screen.queryByRole("spinbutton", { name: "Reward in gold" })).toBeNull()
+        })
+
+        it("shows the reward in read mode, hidden for a non-earning node", () => {
+            const { rerender } = render(
+                <NodeDetailCard milestone={milestone({ reward: 4 })} state="available" todos={[]} isGoal={false} />
+            )
+            expect(screen.getByText("gold on completion")).toBeInTheDocument()
+            expect(screen.getByText("4")).toBeInTheDocument()
+
+            rerender(
+                <NodeDetailCard
+                    milestone={milestone({ reward: 4 })}
+                    state="available"
+                    todos={[]}
+                    isGoal
+                    earnsGold={false}
+                />
+            )
+            expect(screen.queryByText("gold on completion")).toBeNull()
         })
 
         it("lets a view chip edit its reward too", async () => {
             const user = userEvent.setup()
             const onEditMilestone = vi.fn()
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone({ reward: 5 })}
                     state="available"
                     todos={[]}
@@ -244,7 +263,7 @@ describe("DetailCard", () => {
             const todos: Todo[] = [{ text: "Data model reviewed", done: true }]
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="available"
                     todos={todos}
@@ -271,7 +290,7 @@ describe("DetailCard", () => {
             const onAddChild = vi.fn()
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="available"
                     todos={[]}
@@ -290,7 +309,7 @@ describe("DetailCard", () => {
             const onAddParent = vi.fn()
 
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone({ name: "Learn Questline" })}
                     state="available"
                     todos={[]}
@@ -307,7 +326,7 @@ describe("DetailCard", () => {
         it("omits + Add parent milestone when adding a parent isn't allowed", async () => {
             const user = userEvent.setup()
 
-            render(<DetailCard milestone={milestone()} state="available" todos={[]} isGoal />)
+            render(<NodeDetailCard milestone={milestone()} state="available" todos={[]} isGoal />)
             await user.click(screen.getByRole("button", { name: "Edit" }))
 
             expect(screen.queryByRole("button", { name: "+ Add parent milestone" })).not.toBeInTheDocument()
@@ -319,7 +338,7 @@ describe("DetailCard", () => {
             const user = userEvent.setup()
             const todos: Todo[] = [{ text: "Data model reviewed", done: true }]
 
-            render(<DetailCard milestone={milestone()} state="available" todos={todos} isGoal={false} />)
+            render(<NodeDetailCard milestone={milestone()} state="available" todos={todos} isGoal={false} />)
             expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
 
             await user.click(screen.getByRole("button", { name: "Edit" }))
@@ -337,7 +356,7 @@ describe("DetailCard", () => {
             const onDelete = vi.fn()
 
             render(
-                <DetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} onDelete={onDelete} />
+                <NodeDetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} onDelete={onDelete} />
             )
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
 
@@ -353,7 +372,7 @@ describe("DetailCard", () => {
 
         it("labels the action and confirm for a view when deleteKind is view", async () => {
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone({ name: "Launch Plan" })}
                     state="available"
                     todos={[]}
@@ -371,7 +390,7 @@ describe("DetailCard", () => {
 
         it("warns about the cascade count in the milestone confirm", async () => {
             render(
-                <DetailCard
+                <NodeDetailCard
                     milestone={milestone()}
                     state="available"
                     todos={[]}
@@ -388,13 +407,13 @@ describe("DetailCard", () => {
 
         it("offers no delete in read mode or when onDelete is absent", () => {
             const { rerender } = render(
-                <DetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} onDelete={vi.fn()} />
+                <NodeDetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} onDelete={vi.fn()} />
             )
             // Read mode: no delete affordance even though onDelete is set.
             expect(screen.queryByRole("button", { name: "Delete milestone" })).not.toBeInTheDocument()
 
             // Edit mode but without onDelete: still nothing to delete with.
-            rerender(<DetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} />)
+            rerender(<NodeDetailCard milestone={milestone()} state="available" todos={[]} isGoal={false} />)
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             expect(screen.queryByRole("button", { name: "Delete milestone" })).not.toBeInTheDocument()
         })

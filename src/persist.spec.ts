@@ -6,8 +6,8 @@ const slices = () => ({
     order: [ROOT_ID, "seed"],
     mirrorPos: { "view-mirror-seed": { x: 10, y: 20 } },
     tasks: [
-        { id: "task-1", text: "Scout the trail", done: false },
-        { id: "task-2", text: "Gather moonpetals", done: true }
+        { id: "task-1", text: "Scout the trail", done: false, reward: 1 },
+        { id: "task-2", text: "Gather moonpetals", done: true, reward: 1 }
     ],
     rewards: [
         { id: "reward-1", name: "Fancy coffee", price: 3 },
@@ -31,15 +31,15 @@ describe("persist", () => {
     it("round-trips the tasks list, ids and all", () => {
         const back = deserialize(serialize(slices()))
         expect(back?.tasks).toEqual([
-            { id: "task-1", text: "Scout the trail", done: false },
-            { id: "task-2", text: "Gather moonpetals", done: true }
+            { id: "task-1", text: "Scout the trail", done: false, reward: 1 },
+            { id: "task-2", text: "Gather moonpetals", done: true, reward: 1 }
         ])
     })
 
     it("preserves a completed task's completedAt timestamp", () => {
         const withCompletedAt = {
             ...slices(),
-            tasks: [{ id: "task-1", text: "done one", done: true, completedAt: 1_700_000_000_000 }]
+            tasks: [{ id: "task-1", text: "done one", done: true, completedAt: 1_700_000_000_000, reward: 1 }]
         }
         expect(deserialize(serialize(withCompletedAt))?.tasks[0]?.completedAt).toBe(1_700_000_000_000)
     })

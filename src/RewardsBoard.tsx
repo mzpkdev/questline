@@ -33,7 +33,7 @@ const PURSE_STYLE = {
 } as const
 
 // The "New reward" card panel: the milestone tree's detail-card shell (identical gold frame, radius,
-// shadow, and padding to DetailCard's CARD_STYLE), so App can drop it into the same top-right aside.
+// shadow, and padding to NodeDetailCard's CARD_STYLE), so App can drop it into the same top-right aside.
 const ADD_CARD_STYLE = {
     border: "2px solid transparent",
     borderRadius: "16px",
@@ -43,7 +43,7 @@ const ADD_CARD_STYLE = {
     padding: "18px 20px 20px"
 } as const
 
-// The card's submit button, matching DetailCard's gold action button (rounded-[11px], py-3).
+// The card's submit button, matching NodeDetailCard's gold action button (rounded-[11px], py-3).
 const ADD_BTN =
     "mt-[18px] w-full rounded-[11px] py-3 font-display text-[14px] font-bold uppercase tracking-wide text-[#3a2a0c] bg-[#e6c458] shadow-[0_3px_9px_-5px_rgba(184,137,43,0.7),inset_0_1px_0_rgba(255,255,255,0.4)] transition-colors duration-150 ease-out hover:bg-[#eccb63]"
 
@@ -201,7 +201,7 @@ function RewardTile({
 const INPUT_CLASS =
     "w-full rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-2 font-display text-[15px] font-semibold text-[#4a3410] focus:border-[#b8892b] focus:shadow-[0_0_0_2px_rgba(230,196,88,0.35)] focus:outline-none"
 
-// The "New reward" card: the milestone DetailCard's shell (same gold frame, cardSwap in / cardSwapOut
+// The "New reward" card: the milestone NodeDetailCard's shell (same gold frame, cardSwap in / cardSwapOut
 // on close) with the add form as its contents. App renders it in the identical top-right aside the
 // milestone card uses, and drives open / close (outside-click + Escape) the same way, passing
 // `closing` for the exit animation and `onExited` to unmount after it plays. Submitting adds the reward
@@ -220,7 +220,7 @@ export function AddRewardCard({
     const [replenish, setReplenish] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
 
-    // Fire onExited once the dismissal animation ends, mirroring DetailCard, so App unmounts the card
+    // Fire onExited once the dismissal animation ends, mirroring NodeDetailCard, so App unmounts the card
     // only after the exit plays.
     useEffect(() => {
         if (!closing || !onExited) return

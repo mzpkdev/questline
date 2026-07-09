@@ -655,6 +655,43 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
             expect(await screen.findByText("Guard the caravan")).toBeInTheDocument()
         })
+
+        it("edits a task's reward from its detail card, counting it toward the purse", async () => {
+            render(<App />)
+            openTasks()
+            await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
+
+            // Add a task, open its detail card, and raise its reward from the default 1 to 10.
+            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), {
+                target: { value: "Slay the bog wyrm" }
+            })
+            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Open Slay the bog wyrm" }))
+            await screen.findByTestId("task-detail-card")
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.change(screen.getByRole("spinbutton", { name: "Reward in gold" }), { target: { value: "10" } })
+
+            // Tick it done; the purse is the seeded roadmap 3 + this task's custom 10 = 13.
+            fireEvent.click(screen.getByRole("button", { name: "Check Slay the bog wyrm" }))
+            fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
+            await waitFor(() => expect(screen.getByTestId("purse")).toHaveTextContent("13"))
+        })
+
+        it("deletes a task from its detail card", async () => {
+            render(<App />)
+            openTasks()
+            await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
+
+            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), { target: { value: "Temp task" } })
+            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Open Temp task" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete task" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+
+            await waitFor(() => expect(screen.queryByText("Temp task")).toBeNull())
+            expect(screen.queryByTestId("task-detail-card")).toBeNull()
+        })
     })
 
     context("the Rewards view", () => {

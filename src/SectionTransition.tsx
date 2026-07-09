@@ -6,7 +6,7 @@
 // per-node motion in nodeMotion.ts rather than a CSS class (a class would restart if a stray
 // re-render toggled it mid-play). `animate` is captured once at mount so a later prop flip can't
 // retrigger it; App passes false for the section shown on first load, matching the app's
-// "no animation on initial mount" rule (cf. useNodeMotion / useCheckPop / DetailCard's cardSwap).
+// "no animation on initial mount" rule (cf. useNodeMotion / useCheckPop / NodeDetailCard's cardSwap).
 
 import { type ReactNode, useEffect, useRef } from "react"
 import { prefersReducedMotion } from "./nodeMotion"

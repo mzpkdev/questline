@@ -10,7 +10,7 @@ import { useCheckPop } from "./nodeMotion"
 // fields (name, description, checklist item text / delete / add) commit live through the on* edit
 // callbacks. Adding sub-/parent milestones is still visual-only. The App remounts this card via a
 // React key on selection change, so both the cardSwap animation and the edit toggle reset per node.
-export type DetailCardProps = {
+export type NodeDetailCardProps = {
     milestone: Milestone
     state: MilestoneState
     todos: Todo[]
@@ -170,7 +170,7 @@ function ChecklistItem({
     )
 }
 
-export function DetailCard(props: DetailCardProps) {
+export function NodeDetailCard(props: NodeDetailCardProps) {
     const {
         milestone,
         state,
@@ -454,6 +454,21 @@ export function DetailCard(props: DetailCardProps) {
 
                     {milestone.description && (
                         <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.description}</p>
+                    )}
+
+                    {earnsGold && (
+                        <div className="mb-[15px]">
+                            <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
+                            <div className="flex items-center gap-2">
+                                <Coin size={20} className="flex-none" />
+                                <span className="font-display text-[15px] font-bold text-[#6f5316]">
+                                    {milestone.reward}
+                                </span>
+                                <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
+                                    gold on completion
+                                </span>
+                            </div>
+                        </div>
                     )}
 
                     {showChecklist && (

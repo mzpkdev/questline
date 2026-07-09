@@ -8,12 +8,6 @@
 import type { Task } from "./tasks"
 import { type Project, ROOT_ID } from "./project"
 
-// Gold minted for marking a done task in the app-level to-do list. Completing a milestone or a goal
-// instead pays that node's own `reward` (seeded from DEFAULT_GOAL_REWARD / DEFAULT_NODE_REWARD in
-// milestones.ts and editable per node), so those bonuses live on the milestone rather than here.
-// Ticking a milestone checklist box mints nothing; it only gates when the milestone can be completed.
-export const TASK_GOLD = 1
-
 // A reward is a name and a price in gold. Ids are minted like node/view/task ids (`reward-N`) so a
 // React key and a removal track the item, not its position.
 export type Reward = {
@@ -40,9 +34,9 @@ export const SEED_REWARDS: Reward[] = [
 ]
 
 // Total gold earned: across every roadmap, each completed milestone (and mastered tier-0 goal) pays
-// its own `reward`, and each done task in the app-level to-do list pays TASK_GOLD. A mastered id with
-// no surviving milestone record contributes nothing. The Root hub is skipped -- it's the home for
-// views, not real work, so its lone node never mints gold.
+// its own `reward`, and each done task in the app-level to-do list pays its own `reward`. A mastered
+// id with no surviving milestone record contributes nothing. The Root hub is skipped -- it's the home
+// for views, not real work, so its lone node never mints gold.
 export function earnedGold(projects: Record<string, Project>, tasks: Task[]): number {
     let total = 0
     for (const [id, project] of Object.entries(projects)) {
@@ -52,7 +46,7 @@ export function earnedGold(projects: Record<string, Project>, tasks: Task[]): nu
             if (milestone) total += milestone.reward
         }
     }
-    for (const task of tasks) if (task.done) total += TASK_GOLD
+    for (const task of tasks) if (task.done) total += task.reward
     return total
 }
 

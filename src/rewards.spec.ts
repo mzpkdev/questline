@@ -1,6 +1,5 @@
 import {
     addReward,
-    TASK_GOLD,
     earnedGold,
     redeem,
     REDEEMED_TTL_MS,
@@ -11,6 +10,7 @@ import {
     visible
 } from "./rewards"
 import { DEFAULT_GOAL_REWARD, DEFAULT_NODE_REWARD, type Milestone, type Todo } from "./milestones"
+import { DEFAULT_TASK_REWARD, type Task } from "./tasks"
 import { newProject, type Project, ROOT_ID, rootProject } from "./project"
 
 const list = (): Reward[] => [
@@ -189,13 +189,13 @@ describe("rewards", () => {
             expect(earnedGold(projects, [])).toBe(0)
         })
 
-        it("pays TASK_GOLD per done task in the to-do list", () => {
-            const tasks = [
-                { id: "b1", text: "one", done: true },
-                { id: "b2", text: "two", done: false },
-                { id: "b3", text: "three", done: true }
+        it("pays each done task its own reward", () => {
+            const tasks: Task[] = [
+                { id: "b1", text: "one", done: true, reward: 2 },
+                { id: "b2", text: "two", done: false, reward: 5 },
+                { id: "b3", text: "three", done: true, reward: 3 }
             ]
-            expect(earnedGold({}, tasks)).toBe(2 * TASK_GOLD)
+            expect(earnedGold({}, tasks)).toBe(5) // 2 + 3; the undone one pays nothing
         })
 
         it("skips the Root hub, so its node never mints gold", () => {
@@ -209,8 +209,8 @@ describe("rewards", () => {
                 a: projectWith("a", ["n1"]),
                 b: projectWith("b", ["b-goal"])
             }
-            const tasks = [{ id: "b1", text: "one", done: true }]
-            expect(earnedGold(projects, tasks)).toBe(DEFAULT_NODE_REWARD + DEFAULT_GOAL_REWARD + TASK_GOLD)
+            const tasks: Task[] = [{ id: "b1", text: "one", done: true, reward: DEFAULT_TASK_REWARD }]
+            expect(earnedGold(projects, tasks)).toBe(DEFAULT_NODE_REWARD + DEFAULT_GOAL_REWARD + DEFAULT_TASK_REWARD)
         })
 
         it("is zero with nothing completed", () => {

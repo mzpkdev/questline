@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { addTask, type Task, remove, reorder, SEED_TASKS, toggle, visible } from "./tasks"
+import { addTask, edit, type Task, remove, reorder, SEED_TASKS, toggle, visible } from "./tasks"
 import { TasksBoard } from "./TasksBoard"
+import { TaskDetailCard } from "./TaskDetailCard"
 import { Corners } from "./Corners"
-import { DetailCard } from "./DetailCard"
+import { NodeDetailCard } from "./NodeDetailCard"
 import { GoalCelebration } from "./GoalCelebration"
 import { complete, descendantsOf, parentOf, stateOf, uncomplete } from "./graph"
 import { IoButtons } from "./IoButtons"
@@ -134,6 +135,11 @@ export function App() {
     // each redeemed reward (computed below), clamped at zero.
     const [rewards, setRewards] = useState<Reward[]>(boot.rewards)
     const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync">("roadmap")
+    // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
+    // id the card actually shows -- `displayTaskId` trails `selectedTaskId` on dismissal so the exit
+    // animation can play before the card unmounts (mirrors selectedId / displayId for milestones).
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+    const [displayTaskId, setDisplayTaskId] = useState<string | null>(null)
     // The section on screen at first load appears instantly; every section entered afterward plays the
     // SectionTransition fade + rise. Flipped off just after the initial mount (below).
     const firstSectionRef = useRef(true)
@@ -190,6 +196,10 @@ export function App() {
         if (selectedId !== null) setDisplayId(selectedId)
     }, [selectedId])
 
+    useEffect(() => {
+        if (selectedTaskId !== null) setDisplayTaskId(selectedTaskId)
+    }, [selectedTaskId])
+
     // Initial mount is done: from here on, a section change remounts SectionTransition (keyed by
     // section) and plays its entrance.
     useEffect(() => {
@@ -206,6 +216,41 @@ export function App() {
             setAddRewardShown(false)
         }
     }, [section])
+
+    // Leaving the Tasks view closes any open task detail card outright (both the intent and the
+    // trailing display id), so re-entering doesn't flash a stale card mid-exit.
+    useEffect(() => {
+        if (section !== "tasks") {
+            setSelectedTaskId(null)
+            setDisplayTaskId(null)
+        }
+    }, [section])
+
+    // Dismiss the task detail card on Escape or a click outside it, but not on a task tile (which
+    // selects) or the tab bar. Mirrors the milestone card / add-reward dismissal.
+    useEffect(() => {
+        if (selectedTaskId === null) return
+        const onPointerDown = (event: PointerEvent) => {
+            const target = event.target as Element | null
+            if (
+                target?.closest("[data-task-detail-card]") ||
+                target?.closest("[data-task-tile]") ||
+                target?.closest("[data-tabbar]")
+            ) {
+                return
+            }
+            setSelectedTaskId(null)
+        }
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setSelectedTaskId(null)
+        }
+        document.addEventListener("pointerdown", onPointerDown)
+        document.addEventListener("keydown", onKeyDown)
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown)
+            document.removeEventListener("keydown", onKeyDown)
+        }
+    }, [selectedTaskId])
 
     // Dismiss the add-reward card on Escape or a click outside it (but not on the + trigger, which
     // toggles it), mirroring how the milestone detail card is dismissed.
@@ -339,6 +384,17 @@ export function App() {
         (activeId: string, overId: string) => setTasks((prev) => reorder(prev, activeId, overId)),
         []
     )
+    // Open a task's detail card, and edit its name / reward in place. Deleting from the card removes the
+    // task and closes the card.
+    const selectTask = useCallback((id: string) => setSelectedTaskId(id), [])
+    const editTaskItem = useCallback(
+        (id: string, patch: { text?: string; reward?: number }) => setTasks((prev) => edit(prev, id, patch)),
+        []
+    )
+    const deleteTaskItem = useCallback((id: string) => {
+        setTasks((prev) => remove(prev, id))
+        setSelectedTaskId(null)
+    }, [])
 
     // Rewards: open the shop, and add / redeem / remove its rewards. One global shelf, so these never
     // touch the active project. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
@@ -827,6 +883,12 @@ export function App() {
         })
     }, [view, mirrorPos])
 
+    // The task backing the open task detail card, keyed off the trailing displayTaskId so the card
+    // survives dismissal long enough to animate out (looked up in the full list, so a done task within
+    // its TTL still resolves). Absent once its task is deleted, which unmounts the card immediately.
+    const displayedTask = displayTaskId !== null ? tasks.find((task) => task.id === displayTaskId) : undefined
+    const taskClosing = selectedTaskId === null && displayTaskId !== null
+
     const closing = selectedId === null && displayId !== null
     // A selected mirror shows the shared card in view mode; synthesize a milestone for its name.
     const shownIsView = displayId !== null && displayId.startsWith(VIEW_MIRROR_PREFIX)
@@ -897,15 +959,34 @@ export function App() {
                     animate={!firstSectionRef.current}
                 >
                 {section === "tasks" ? (
-                    <div className="absolute inset-0 z-10 overflow-auto">
-                        <TasksBoard
-                            items={visible(tasks, Date.now())}
-                            onAdd={addTaskItem}
-                            onToggle={toggleTask}
-                            onRemove={removeTask}
-                            onReorder={reorderTask}
-                        />
-                    </div>
+                    <>
+                        <div className="absolute inset-0 z-10 overflow-auto">
+                            <TasksBoard
+                                items={visible(tasks, Date.now())}
+                                onAdd={addTaskItem}
+                                onToggle={toggleTask}
+                                onRemove={removeTask}
+                                onReorder={reorderTask}
+                                onSelect={selectTask}
+                                selectedId={selectedTaskId}
+                            />
+                        </div>
+                        {displayedTask && (
+                            <aside
+                                data-task-detail-card=""
+                                className="absolute right-4 top-4 z-20 w-[320px] max-w-[calc(100%-2rem)]"
+                            >
+                                <TaskDetailCard
+                                    key={displayedTask.id}
+                                    task={displayedTask}
+                                    closing={taskClosing}
+                                    onEdit={(patch) => editTaskItem(displayedTask.id, patch)}
+                                    onDelete={() => deleteTaskItem(displayedTask.id)}
+                                    onExited={() => setDisplayTaskId(null)}
+                                />
+                            </aside>
+                        )}
+                    </>
                 ) : section === "rewards" ? (
                     <>
                         <div className="absolute inset-0 z-10 overflow-auto">
@@ -958,7 +1039,7 @@ export function App() {
                                 data-detail-card=""
                                 className="absolute right-4 top-4 z-20 w-[320px] max-w-[calc(100%-2rem)]"
                             >
-                                <DetailCard
+                                <NodeDetailCard
                                     key={shown.id}
                                     milestone={shown}
                                     state={stateOf(shown.id, active.mastered, active.edges)}

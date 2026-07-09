@@ -3,7 +3,7 @@
 // browser keeps it suspended until then), and a mute flag that persists across reloads. main.tsx wraps
 // <App/> in this provider; components reach the kit with useSfx() and the mute toggle with useSfxMute().
 //
-// Firing rules live at the call sites, not here -- see App.tsx / DetailCard.tsx / IoButtons.tsx /
+// Firing rules live at the call sites, not here -- see App.tsx / NodeDetailCard.tsx / IoButtons.tsx /
 // SyncBoard.tsx, where effects fire from event handlers (or effects that observe a real state change),
 // never from a pure module or a render body.
 

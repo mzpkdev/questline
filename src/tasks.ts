@@ -11,6 +11,9 @@ export type Task = {
     id: string
     text: string
     done: boolean
+    // Gold minted when this task is checked off. Seeded from DEFAULT_TASK_REWARD when the task is
+    // created, then editable per task in its detail card.
+    reward: number
     // Epoch ms of the flip to done. Set when checked off, cleared when re-opened (so re-completing
     // restarts the window). Absent on tasks completed before this was tracked.
     completedAt?: number
@@ -19,29 +22,35 @@ export type Task = {
 // How long a completed task stays on the board before it drops off: 14 days.
 export const DONE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
+// Default gold a task pays when checked off, used to seed a new task's `reward`.
+export const DEFAULT_TASK_REWARD = 1
+
 // A tiny first-run tutorial, like the sample roadmap's self-teaching nodes: three tasks whose text
 // explains the view itself (checking one off, dragging to reorder, adding and removing). Shown only
 // on a truly fresh start, and replaced the moment the user edits their own list.
 export const SEED_TASKS: Task[] = [
-    { id: "task-1", text: "Tick a task to complete it and earn gold to spend on rewards.", done: false },
-    { id: "task-2", text: "Grab the handle on the left to drag a task into any order.", done: false },
-    { id: "task-3", text: "Add your own above, and hover a task to remove it.", done: false }
+    { id: "task-1", text: "Tick a task to complete it and earn gold to spend on rewards.", done: false, reward: DEFAULT_TASK_REWARD },
+    { id: "task-2", text: "Grab the handle on the left to drag a task into any order.", done: false, reward: DEFAULT_TASK_REWARD },
+    { id: "task-3", text: "Add your own above, and hover a task to remove it.", done: false, reward: DEFAULT_TASK_REWARD }
 ]
 
-// Append a new task with the given id. Blank / whitespace-only text is ignored (returns the same
-// list), so the board never grows an empty tile.
+// Append a new task with the given id, carrying the default reward. Blank / whitespace-only text is
+// ignored (returns the same list), so the board never grows an empty tile.
 export function addTask(list: Task[], id: string, text: string): Task[] {
     const trimmed = text.trim()
-    return trimmed ? [...list, { id, text: trimmed, done: false }] : list
+    return trimmed ? [...list, { id, text: trimmed, done: false, reward: DEFAULT_TASK_REWARD }] : list
 }
 
 // Flip one task by id. Checking it off stamps `completedAt` with `now`; re-opening drops the stamp so a
-// later re-completion restarts its 14-day window. An unknown id keeps the same reference.
+// later re-completion restarts its 14-day window (the reward is kept either way). An unknown id keeps
+// the same reference.
 export function toggle(list: Task[], id: string, now: number): Task[] {
     if (!list.some((task) => task.id === id)) return list
     return list.map((task) => {
         if (task.id !== id) return task
-        return task.done ? { id: task.id, text: task.text, done: false } : { ...task, done: true, completedAt: now }
+        return task.done
+            ? { id: task.id, text: task.text, done: false, reward: task.reward }
+            : { ...task, done: true, completedAt: now }
     })
 }
 
@@ -49,6 +58,20 @@ export function toggle(list: Task[], id: string, now: number): Task[] {
 export function remove(list: Task[], id: string): Task[] {
     const next = list.filter((task) => task.id !== id)
     return next.length === list.length ? list : next
+}
+
+// Edit a task's text and/or reward by id. Text is taken as given (trimming is an add-time concern);
+// reward is clamped to a whole number of at least 0. An unknown id keeps the same reference.
+export function edit(list: Task[], id: string, patch: { text?: string; reward?: number }): Task[] {
+    if (!list.some((task) => task.id === id)) return list
+    return list.map((task) => {
+        if (task.id !== id) return task
+        return {
+            ...task,
+            ...(patch.text !== undefined ? { text: patch.text } : {}),
+            ...(patch.reward !== undefined ? { reward: Math.max(0, Math.round(patch.reward)) } : {})
+        }
+    })
 }
 
 // Move `activeId` to sit where `overId` is, sliding the rest along. A no-op (same reference) when the

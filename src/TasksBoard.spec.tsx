@@ -3,15 +3,30 @@ import type { Task } from "./tasks"
 import { TasksBoard } from "./TasksBoard"
 
 const items: Task[] = [
-    { id: "b1", text: "Scout the trail", done: false },
-    { id: "b2", text: "Gather moonpetals", done: true }
+    { id: "b1", text: "Scout the trail", done: false, reward: 1 },
+    { id: "b2", text: "Gather moonpetals", done: true, reward: 1 }
 ]
 
 const noop = () => {}
 
+// Render with no-op handlers; each test overrides only the ones it asserts on.
+function renderBoard(overrides: Partial<Parameters<typeof TasksBoard>[0]> = {}) {
+    return render(
+        <TasksBoard
+            items={items}
+            onAdd={noop}
+            onToggle={noop}
+            onRemove={noop}
+            onReorder={noop}
+            onSelect={noop}
+            {...overrides}
+        />
+    )
+}
+
 describe("TasksBoard", () => {
     it("renders each task, with done ones checked", () => {
-        render(<TasksBoard items={items} onAdd={noop} onToggle={noop} onRemove={noop} onReorder={noop} />)
+        renderBoard()
         expect(screen.getByText("Scout the trail")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Check Scout the trail" })).toHaveAttribute("aria-pressed", "false")
         expect(screen.getByRole("button", { name: "Uncheck Gather moonpetals" })).toHaveAttribute(
@@ -22,21 +37,28 @@ describe("TasksBoard", () => {
 
     it("toggles a task by id", () => {
         const onToggle = vi.fn()
-        render(<TasksBoard items={items} onAdd={noop} onToggle={onToggle} onRemove={noop} onReorder={noop} />)
+        renderBoard({ onToggle })
         fireEvent.click(screen.getByRole("button", { name: "Check Scout the trail" }))
         expect(onToggle).toHaveBeenCalledWith("b1")
     })
 
     it("removes a task by id", () => {
         const onRemove = vi.fn()
-        render(<TasksBoard items={items} onAdd={noop} onToggle={noop} onRemove={onRemove} onReorder={noop} />)
+        renderBoard({ onRemove })
         fireEvent.click(screen.getByRole("button", { name: "Remove Gather moonpetals" }))
         expect(onRemove).toHaveBeenCalledWith("b2")
     })
 
+    it("opens a task's detail by id when its name is clicked", () => {
+        const onSelect = vi.fn()
+        renderBoard({ onSelect })
+        fireEvent.click(screen.getByRole("button", { name: "Open Scout the trail" }))
+        expect(onSelect).toHaveBeenCalledWith("b1")
+    })
+
     it("adds a task from the form and clears the input", () => {
         const onAdd = vi.fn()
-        render(<TasksBoard items={items} onAdd={onAdd} onToggle={noop} onRemove={noop} onReorder={noop} />)
+        renderBoard({ onAdd })
         const input = screen.getByRole("textbox", { name: "New task" })
         fireEvent.change(input, { target: { value: "Tame the griffon" } })
         fireEvent.click(screen.getByRole("button", { name: "Add task" }))
@@ -46,20 +68,20 @@ describe("TasksBoard", () => {
 
     it("ignores a blank submission", () => {
         const onAdd = vi.fn()
-        render(<TasksBoard items={items} onAdd={onAdd} onToggle={noop} onRemove={noop} onReorder={noop} />)
+        renderBoard({ onAdd })
         fireEvent.change(screen.getByRole("textbox", { name: "New task" }), { target: { value: "   " } })
         fireEvent.click(screen.getByRole("button", { name: "Add task" }))
         expect(onAdd).not.toHaveBeenCalled()
     })
 
     it("exposes a drag handle per task for reordering", () => {
-        render(<TasksBoard items={items} onAdd={noop} onToggle={noop} onRemove={noop} onReorder={noop} />)
+        renderBoard()
         expect(screen.getByRole("button", { name: "Reorder Scout the trail" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Reorder Gather moonpetals" })).toBeInTheDocument()
     })
 
     it("shows an empty-state message with no tasks", () => {
-        render(<TasksBoard items={[]} onAdd={noop} onToggle={noop} onRemove={noop} onReorder={noop} />)
+        renderBoard({ items: [] })
         expect(screen.getByText(/no tasks posted/i)).toBeInTheDocument()
     })
 })
