@@ -689,7 +689,9 @@ describe("Rewards & gold (e2e)", () => {
             openShop()
             fireEvent.click(await screen.findByRole("button", { name: "Remove Fancy coffee" }))
             expect(await screen.findByText("Remove this reward?")).toBeInTheDocument()
-            expect(screen.getByRole("button", { name: "Open Fancy coffee" })).toBeInTheDocument() // not yet removed
+            // Still on the shelf: the open modal marks the background aria-hidden, so assert via the DOM
+            // node rather than by role (which excludes hidden elements).
+            expect(document.querySelector('[data-reward-id="reward-1"]')).not.toBeNull() // not yet removed
         })
 
         it("removes the reward from the shelf once the deletion is confirmed", async () => {
