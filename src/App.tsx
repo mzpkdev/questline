@@ -22,6 +22,7 @@ import type { Milestone, MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
 import { newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
+import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
 import { TabBar } from "./TabBar"
@@ -133,6 +134,9 @@ export function App() {
     // each redeemed reward (computed below), clamped at zero.
     const [rewards, setRewards] = useState<Reward[]>(boot.rewards)
     const [section, setSection] = useState<"roadmap" | "bounties" | "merchant" | "sync">("roadmap")
+    // The section on screen at first load appears instantly; every section entered afterward plays the
+    // SectionTransition fade + rise. Flipped off just after the initial mount (below).
+    const firstSectionRef = useRef(true)
     // The "New reward" card, shown in the same top-right aside as the milestone detail card. `open` is
     // the intent; `shown` trails it so the exit animation can play before the card unmounts (mirrors
     // selectedId / displayId).
@@ -185,6 +189,12 @@ export function App() {
     useEffect(() => {
         if (selectedId !== null) setDisplayId(selectedId)
     }, [selectedId])
+
+    // Initial mount is done: from here on, a section change remounts SectionTransition (keyed by
+    // section) and plays its entrance.
+    useEffect(() => {
+        firstSectionRef.current = false
+    }, [])
 
     // Reveal the add-reward card on open; leaving the Merchant view discards it outright.
     useEffect(() => {
@@ -845,6 +855,11 @@ export function App() {
             />
             <div ref={boardRef} className="board-surface relative isolate flex-1 overflow-hidden">
                 <Corners />
+                {/* Keyed so a section change animates; within the roadmap, a tab switch (activeId) does too. */}
+                <SectionTransition
+                    key={section === "roadmap" ? `roadmap:${activeId}` : section}
+                    animate={!firstSectionRef.current}
+                >
                 {section === "bounties" ? (
                     <div className="absolute inset-0 z-10 overflow-auto">
                         <BountiesBoard
@@ -943,6 +958,7 @@ export function App() {
                         <GoalCelebration burst={burst} />
                     </>
                 )}
+                </SectionTransition>
             </div>
         </div>
     )
