@@ -92,7 +92,11 @@ function usePurseBump(gold: number) {
 type RewardsBoardProps = {
     gold: number
     rewards: Reward[]
+    // The reward whose detail card is open, ringed on the shelf.
+    selectedId?: string | null
     onRedeem: (id: string) => void
+    // Opens the reward's detail card (rendered by App in the shared detail-card aside).
+    onSelectReward: (id: string) => void
     // Opens the "New reward" card (rendered by App in the shared detail-card aside).
     onOpenAdd: () => void
     onRemoveReward: (id: string) => void
@@ -104,18 +108,44 @@ const redeemedOn = (ms: number) => new Date(ms).toLocaleDateString(undefined, { 
 function RewardTile({
     reward,
     gold,
+    selected,
     onRedeem,
+    onSelect,
     onRequestRemove
 }: {
     reward: Reward
     gold: number
+    selected?: boolean
     onRedeem: (id: string) => void
+    onSelect: (id: string) => void
     onRequestRemove: (reward: Reward) => void
 }) {
     const cardRef = useRef<HTMLDivElement>(null)
     const redeemed = reward.redeemedAt !== undefined
     const affordable = !redeemed && gold >= reward.price
     const need = reward.price - gold
+
+    // The auto-replenish badge, shared by the read span (redeemed tiles) and the Open button.
+    const replenishBadge = reward.replenish && (
+        <svg
+            viewBox="0 0 24 24"
+            width={13}
+            height={13}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mt-0.5 flex-none text-[#b0954e]"
+            aria-label="Auto-replenishes"
+        >
+            <title>Auto-replenishes</title>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+            <path d="M3 21v-5h5" />
+        </svg>
+    )
 
     const redeem = () => {
         if (!affordable) return
@@ -127,9 +157,14 @@ function RewardTile({
         <div
             ref={cardRef}
             data-reward-id={reward.id}
+            // The whole tile opens the detail card (redeem / remove stop propagation); redeemed tiles are
+            // locked, so they don't.
+            onClick={redeemed ? undefined : () => onSelect(reward.id)}
             className={`relative flex min-h-[132px] flex-col gap-3 rounded-[15px] p-4 transition-[box-shadow] duration-150 ease-out animate-[itemIn_0.25s_ease] ${
                 affordable ? CARD_SHADOW : CARD_SHADOW_SUBTLE
-            } ${redeemed ? "opacity-[0.58]" : affordable ? "" : "opacity-[0.92]"}`}
+            } ${redeemed ? "opacity-[0.58]" : `cursor-pointer ${affordable ? "" : "opacity-[0.92]"}`} ${
+                selected ? "ring-2 ring-[#e6c458] ring-offset-1 ring-offset-[#f6edd6]" : ""
+            }`}
             style={affordable ? CARD_STYLE : CARD_LOCKED_STYLE}
         >
             {/* Redeemed rewards are locked in: no remove affordance. */}
@@ -137,39 +172,34 @@ function RewardTile({
                 <button
                     type="button"
                     aria-label={`Remove ${reward.name}`}
-                    onClick={() => onRequestRemove(reward)}
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        onRequestRemove(reward)
+                    }}
                     className={`${ioButtonClass} absolute right-3 top-3 text-[15px] leading-none`}
                 >
                     &times;
                 </button>
             )}
-            <span
-                className={`inline-flex items-start gap-1.5 break-words pr-8 font-display text-[16px] font-semibold leading-tight ${
-                    redeemed ? "text-[#a2916c] line-through" : affordable ? "text-[#6f5316]" : "text-[#8a7c5a]"
-                }`}
-            >
-                {reward.name}
-                {reward.replenish && (
-                    <svg
-                        viewBox="0 0 24 24"
-                        width={13}
-                        height={13}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2.2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="mt-0.5 flex-none text-[#b0954e]"
-                        aria-label="Auto-replenishes"
-                    >
-                        <title>Auto-replenishes</title>
-                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-                        <path d="M21 3v5h-5" />
-                        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-                        <path d="M3 21v-5h5" />
-                    </svg>
-                )}
-            </span>
+            {/* Redeemed tiles are locked in (read-only); unredeemed ones open the detail card to edit. */}
+            {redeemed ? (
+                <span className="inline-flex items-start gap-1.5 break-words pr-8 font-display text-[16px] font-semibold leading-tight text-[#a2916c] line-through">
+                    {reward.name}
+                    {replenishBadge}
+                </span>
+            ) : (
+                <button
+                    type="button"
+                    aria-label={`Open ${reward.name}`}
+                    onClick={() => onSelect(reward.id)}
+                    className={`inline-flex items-start gap-1.5 break-words bg-transparent pr-8 text-left font-display text-[16px] font-semibold leading-tight transition-colors duration-150 ease-out hover:text-[#8a641d] ${
+                        affordable ? "text-[#6f5316]" : "text-[#8a7c5a]"
+                    }`}
+                >
+                    {reward.name}
+                    {replenishBadge}
+                </button>
+            )}
             <span
                 className={`mt-auto inline-flex items-center gap-1.5 font-display text-[17px] font-bold ${
                     affordable ? "text-[#4a3410]" : "text-[#8a7c5a]"
@@ -187,7 +217,10 @@ function RewardTile({
                     type="button"
                     aria-label={`Redeem ${reward.name}`}
                     disabled={!affordable}
-                    onClick={redeem}
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        redeem()
+                    }}
                     className={affordable ? UNLOCK_BTN : OFF_BTN}
                 >
                     {affordable ? "Redeem" : `Need ${need} more`}
@@ -201,20 +234,79 @@ function RewardTile({
 const INPUT_CLASS =
     "w-full rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-2 font-display text-[15px] font-semibold text-[#4a3410] focus:border-[#b8892b] focus:shadow-[0_0_0_2px_rgba(230,196,88,0.35)] focus:outline-none"
 
-// The "New reward" card: the milestone NodeDetailCard's shell (same gold frame, cardSwap in / cardSwapOut
-// on close) with the add form as its contents. App renders it in the identical top-right aside the
-// milestone card uses, and drives open / close (outside-click + Escape) the same way, passing
-// `closing` for the exit animation and `onExited` to unmount after it plays. Submitting adds the reward
-// (App then closes the card); a blank name is ignored.
-export function AddRewardCard({
+// The pencil-button look and delete-button look, mirroring TaskDetailCard.
+const PENCIL_STYLE = {
+    background: "rgba(255,255,255,0.45)",
+    color: "#9a7a34",
+    border: "1px solid rgba(138,100,29,0.3)"
+} as const
+const DELETE_BTN_CLASS =
+    "mt-4 w-full rounded-[11px] border-[1.5px] border-solid border-[#a5482a]/40 bg-transparent py-3 font-display text-[14px] font-bold uppercase tracking-wide text-[#a5482a] transition-colors duration-150 ease-out hover:bg-[#a5482a]/10"
+
+// The auto-replenish checkbox, shared by the add form and the edit view.
+function ReplenishCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+    return (
+        <label className="mt-4 flex cursor-pointer select-none items-start gap-2.5">
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(event.target.checked)}
+                className="sr-only"
+            />
+            <span
+                className={`mt-0.5 grid size-5 flex-none place-items-center rounded-md border-[1.5px] transition-colors duration-150 ease-out ${
+                    checked ? "border-[#cdb373] bg-[#ecdcae]" : "border-[#b8892b] bg-[#fffdf5]"
+                }`}
+            >
+                {checked && (
+                    <svg
+                        viewBox="0 0 24 24"
+                        width={13}
+                        height={13}
+                        fill="none"
+                        stroke="#3a2a0c"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M5 12l5 5L20 6" />
+                    </svg>
+                )}
+            </span>
+            <span className="text-[14px] leading-tight text-[#5a4a2c]">
+                Auto-replenish
+                <small className="mt-0.5 block text-[12px] italic text-[#a2916c]">
+                    Restocks a fresh copy each time it's redeemed
+                </small>
+            </span>
+        </label>
+    )
+}
+
+// The reward detail card: the milestone NodeDetailCard's gold-framed shell in the top-right aside. With
+// no `reward` it is the blank "New reward" add form (submit adds; a blank name is ignored). With a
+// `reward` it opens in a read view whose pencil flips to an edit view (name / price / auto-replenish,
+// patched live like TaskDetailCard) plus a delete. App drives open / close (outside-click + Escape) and
+// passes `closing` / `onExited` for the exit animation, mirroring the task and milestone cards.
+export function RewardDetailCard({
+    reward,
     onAdd,
+    onEdit,
+    onDelete,
     closing,
     onExited
 }: {
-    onAdd: (name: string, price: number, replenish: boolean) => void
+    reward?: Reward
+    onAdd?: (name: string, price: number, replenish: boolean) => void
+    onEdit?: (patch: { name?: string; price?: number; replenish?: boolean }) => void
+    onDelete?: () => void
     closing?: boolean
     onExited?: () => void
 }) {
+    const [editing, setEditing] = useState(false)
+    const [confirmOpen, setConfirmOpen] = useState(false)
+    // Add-mode buffer (idle while editing an existing reward, which patches live through onEdit).
     const [name, setName] = useState("")
     const [price, setPrice] = useState("")
     const [replenish, setReplenish] = useState(false)
@@ -234,7 +326,7 @@ export function AddRewardCard({
     const submit = (event: FormEvent) => {
         event.preventDefault()
         if (!name.trim()) return
-        onAdd(name, Number(price), replenish)
+        onAdd?.(name, Number(price), replenish)
         setName("")
         setPrice("")
         setReplenish(false)
@@ -247,85 +339,165 @@ export function AddRewardCard({
     return (
         <div
             ref={rootRef}
-            data-testid="add-reward-card"
+            data-testid={reward ? "reward-detail-card" : "add-reward-card"}
             className={`relative font-serif ${animation}`}
             style={ADD_CARD_STYLE}
         >
-            <form onSubmit={submit} className="flex flex-col">
-                <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">New reward</h3>
-                <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">
-                    Name it and set what it costs in gold.
-                </p>
-                {/* biome-ignore lint/a11y/noAutofocus: opening the card should take focus for a quick entry */}
-                <input
-                    autoFocus
-                    aria-label="Reward name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Reward name"
-                    maxLength={60}
-                    className={INPUT_CLASS}
-                />
-                <span className="mb-1.5 mt-4 font-display text-[10.5px] uppercase tracking-[1.5px] text-[#9a7a34]">
-                    Cost in gold
-                </span>
-                <div className="flex items-center gap-2">
-                    <Coin size={20} />
-                    <input
-                        aria-label="Cost in gold"
-                        value={price}
-                        onChange={(event) => setPrice(event.target.value)}
-                        type="number"
-                        min={1}
-                        step={1}
-                        placeholder="0"
-                        className={`${INPUT_CLASS} min-w-0 flex-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                    />
-                </div>
-                <label className="mt-4 flex cursor-pointer select-none items-start gap-2.5">
-                    <input
-                        type="checkbox"
-                        checked={replenish}
-                        onChange={(event) => setReplenish(event.target.checked)}
-                        className="sr-only"
-                    />
-                    <span
-                        className={`mt-0.5 grid size-5 flex-none place-items-center rounded-md border-[1.5px] transition-colors duration-150 ease-out ${
-                            replenish ? "border-[#cdb373] bg-[#ecdcae]" : "border-[#b8892b] bg-[#fffdf5]"
-                        }`}
+            {reward ? (
+                <>
+                    <button
+                        type="button"
+                        aria-label={editing ? "Finish editing" : "Edit"}
+                        onClick={() => setEditing((prev) => !prev)}
+                        className="absolute right-3 top-3 grid h-[30px] w-[30px] place-items-center rounded-[9px] transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
+                        style={PENCIL_STYLE}
                     >
-                        {replenish && (
-                            <svg
-                                viewBox="0 0 24 24"
-                                width={13}
-                                height={13}
-                                fill="none"
-                                stroke="#3a2a0c"
-                                strokeWidth={3}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                            >
+                        <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            width={15}
+                            height={15}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            {editing ? (
                                 <path d="M5 12l5 5L20 6" />
-                            </svg>
-                        )}
+                            ) : (
+                                <>
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                </>
+                            )}
+                        </svg>
+                    </button>
+
+                    {editing ? (
+                        <>
+                            <input
+                                aria-label="Reward name"
+                                className={`${INPUT_CLASS} pr-10`}
+                                value={reward.name}
+                                maxLength={60}
+                                onChange={(event) => onEdit?.({ name: event.target.value })}
+                            />
+                            <span className="mb-1.5 mt-4 block font-display text-[10.5px] uppercase tracking-[1.5px] text-[#9a7a34]">
+                                Cost in gold
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <Coin size={20} />
+                                <input
+                                    aria-label="Cost in gold"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={reward.price}
+                                    onChange={(event) => {
+                                        const n = event.target.valueAsNumber
+                                        onEdit?.({ price: Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1 })
+                                    }}
+                                    className={`${INPUT_CLASS} min-w-0 flex-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                />
+                            </div>
+                            <ReplenishCheckbox
+                                checked={reward.replenish ?? false}
+                                onChange={(checked) => onEdit?.({ replenish: checked })}
+                            />
+                            <button type="button" className={DELETE_BTN_CLASS} onClick={() => setConfirmOpen(true)}>
+                                Delete reward
+                            </button>
+                            <ConfirmDialog
+                                open={confirmOpen}
+                                title="Remove this reward?"
+                                message={
+                                    <>
+                                        Delete <strong className="font-semibold text-[#4a3410]">{reward.name}</strong>?
+                                        This can't be undone.
+                                    </>
+                                }
+                                confirmLabel="Remove"
+                                onConfirm={() => {
+                                    setConfirmOpen(false)
+                                    onDelete?.()
+                                }}
+                                onOpenChange={(open) => {
+                                    if (!open) setConfirmOpen(false)
+                                }}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <h3 className="mt-0.5 break-words pr-10 font-display text-[20px] font-bold text-[#4a3410]">
+                                {reward.name}
+                            </h3>
+                            <span className="mb-1.5 mt-[14px] block font-display text-[10.5px] uppercase tracking-[1.5px] text-[#9a7a34]">
+                                Cost in gold
+                            </span>
+                            <div className="flex items-center gap-2 font-display text-[17px] font-bold text-[#4a3410]">
+                                <Coin size={20} />
+                                {reward.price}
+                            </div>
+                            {reward.replenish && (
+                                <p className="mt-3 text-[13px] italic text-[#a2916c]">
+                                    Auto-replenishes: restocks a fresh copy each time it's redeemed.
+                                </p>
+                            )}
+                        </>
+                    )}
+                </>
+            ) : (
+                <form onSubmit={submit} className="flex flex-col">
+                    <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">New reward</h3>
+                    <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">
+                        Name it and set what it costs in gold.
+                    </p>
+                    {/* biome-ignore lint/a11y/noAutofocus: opening the card should take focus for a quick entry */}
+                    <input
+                        autoFocus
+                        aria-label="Reward name"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Reward name"
+                        maxLength={60}
+                        className={INPUT_CLASS}
+                    />
+                    <span className="mb-1.5 mt-4 font-display text-[10.5px] uppercase tracking-[1.5px] text-[#9a7a34]">
+                        Cost in gold
                     </span>
-                    <span className="text-[14px] leading-tight text-[#5a4a2c]">
-                        Auto-replenish
-                        <small className="mt-0.5 block text-[12px] italic text-[#a2916c]">
-                            Restocks a fresh copy each time it's redeemed
-                        </small>
-                    </span>
-                </label>
-                <button type="submit" className={ADD_BTN}>
-                    Add reward
-                </button>
-            </form>
+                    <div className="flex items-center gap-2">
+                        <Coin size={20} />
+                        <input
+                            aria-label="Cost in gold"
+                            value={price}
+                            onChange={(event) => setPrice(event.target.value)}
+                            type="number"
+                            min={1}
+                            step={1}
+                            placeholder="0"
+                            className={`${INPUT_CLASS} min-w-0 flex-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                        />
+                    </div>
+                    <ReplenishCheckbox checked={replenish} onChange={setReplenish} />
+                    <button type="submit" className={ADD_BTN}>
+                        Add reward
+                    </button>
+                </form>
+            )}
         </div>
     )
 }
 
-export function RewardsBoard({ gold, rewards, onRedeem, onOpenAdd, onRemoveReward }: RewardsBoardProps) {
+export function RewardsBoard({
+    gold,
+    rewards,
+    selectedId,
+    onRedeem,
+    onSelectReward,
+    onOpenAdd,
+    onRemoveReward
+}: RewardsBoardProps) {
     const purseRef = usePurseBump(gold)
     // The reward pending removal: set by its ×, cleared on confirm or cancel. Drives the same confirm
     // modal the tabs use before deleting.
@@ -364,7 +536,9 @@ export function RewardsBoard({ gold, rewards, onRedeem, onOpenAdd, onRemoveRewar
                         key={reward.id}
                         reward={reward}
                         gold={gold}
+                        selected={selectedId === reward.id}
                         onRedeem={onRedeem}
+                        onSelect={onSelectReward}
                         onRequestRemove={setPendingRemove}
                     />
                 ))}

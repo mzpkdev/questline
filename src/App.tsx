@@ -10,6 +10,7 @@ import { IoButtons } from "./IoButtons"
 import {
     addReward,
     earnedGold,
+    editReward,
     redeem,
     removeReward,
     type Reward,
@@ -17,7 +18,7 @@ import {
     spentGold,
     visible as visibleRewards
 } from "./rewards"
-import { AddRewardCard, RewardsBoard } from "./RewardsBoard"
+import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
 import { MilestoneTree } from "./MilestoneTree"
 import { DEFAULT_GOAL_REWARD, DEFAULT_NODE_REWARD, type Milestone, type MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
@@ -148,6 +149,11 @@ export function App() {
     // selectedId / displayId).
     const [addRewardOpen, setAddRewardOpen] = useState(false)
     const [addRewardShown, setAddRewardShown] = useState(false)
+    // The reward whose detail card is open (the intent, null once dismissed), and the id the card
+    // actually shows -- `displayRewardId` trails `selectedRewardId` on dismissal so the exit animation
+    // plays before the card unmounts (mirrors selectedTaskId / displayTaskId).
+    const [selectedRewardId, setSelectedRewardId] = useState<string | null>(null)
+    const [displayRewardId, setDisplayRewardId] = useState<string | null>(null)
     // A node to pan the canvas onto; the nonce (re)triggers centering on URL navigation.
     const [focusId, setFocusId] = useState(boot.hadHash ? (boot.selectedId ?? "") : "")
     const [focusNonce, setFocusNonce] = useState(boot.hadHash ? 1 : 0)
@@ -200,6 +206,10 @@ export function App() {
         if (selectedTaskId !== null) setDisplayTaskId(selectedTaskId)
     }, [selectedTaskId])
 
+    useEffect(() => {
+        if (selectedRewardId !== null) setDisplayRewardId(selectedRewardId)
+    }, [selectedRewardId])
+
     // Initial mount is done: from here on, a section change remounts SectionTransition (keyed by
     // section) and plays its entrance.
     useEffect(() => {
@@ -214,6 +224,8 @@ export function App() {
         if (section !== "rewards") {
             setAddRewardOpen(false)
             setAddRewardShown(false)
+            setSelectedRewardId(null)
+            setDisplayRewardId(null)
         }
     }, [section])
 
@@ -271,6 +283,33 @@ export function App() {
             document.removeEventListener("keydown", onKeyDown)
         }
     }, [addRewardShown])
+
+    // Dismiss the reward detail card on Escape or a click outside it, but not on a reward tile (which
+    // selects), the + trigger (which opens the add card), or the tab bar. Mirrors the task card.
+    useEffect(() => {
+        if (selectedRewardId === null) return
+        const onPointerDown = (event: PointerEvent) => {
+            const target = event.target as Element | null
+            if (
+                target?.closest("[data-reward-detail-card]") ||
+                target?.closest("[data-reward-id]") ||
+                target?.closest("[data-add-reward-trigger]") ||
+                target?.closest("[data-tabbar]")
+            ) {
+                return
+            }
+            setSelectedRewardId(null)
+        }
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setSelectedRewardId(null)
+        }
+        document.addEventListener("pointerdown", onPointerDown)
+        document.addEventListener("keydown", onKeyDown)
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown)
+            document.removeEventListener("keydown", onKeyDown)
+        }
+    }, [selectedRewardId])
 
     // Clicking the empty board (not the card, a node, the canvas controls, or the tab bar) dismisses.
     useEffect(() => {
@@ -379,7 +418,6 @@ export function App() {
         },
         [tasks, sfx]
     )
-    const removeTask = useCallback((id: string) => setTasks((prev) => remove(prev, id)), [])
     const reorderTask = useCallback(
         (activeId: string, overId: string) => setTasks((prev) => reorder(prev, activeId, overId)),
         []
@@ -400,13 +438,35 @@ export function App() {
     // touch the active project. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
     // balance covers the price), which spends the gold and starts the 14-day shelf window.
     const openRewards = useCallback(() => setSection("rewards"), [])
-    const toggleAddReward = useCallback(() => setAddRewardOpen((open) => !open), [])
+    // Add and edit share the one aside: opening the add card clears any selected reward, and selecting a
+    // reward closes the add card, so only one is ever mounted.
+    const toggleAddReward = useCallback(() => {
+        setSelectedRewardId(null)
+        setDisplayRewardId(null)
+        setAddRewardOpen((open) => !open)
+    }, [])
     const addRewardItem = useCallback((name: string, price: number, replenish: boolean) => {
         nextRewardId.current += 1
         setRewards((prev) => addReward(prev, `reward-${nextRewardId.current}`, name, price, replenish))
         setAddRewardOpen(false)
     }, [])
     const removeRewardItem = useCallback((id: string) => setRewards((prev) => removeReward(prev, id)), [])
+    // Open a reward's detail card, and edit its name / price / replenish in place. Deleting from the card
+    // removes the reward and closes the card.
+    const selectReward = useCallback((id: string) => {
+        setAddRewardOpen(false)
+        setAddRewardShown(false)
+        setSelectedRewardId(id)
+    }, [])
+    const editRewardItem = useCallback(
+        (id: string, patch: { name?: string; price?: number; replenish?: boolean }) =>
+            setRewards((prev) => editReward(prev, id, patch)),
+        []
+    )
+    const deleteRewardItem = useCallback((id: string) => {
+        setRewards((prev) => removeReward(prev, id))
+        setSelectedRewardId(null)
+    }, [])
     // Mint an id up front for a possible replenished copy; redeem uses it only when the reward restocks
     // (an unused id just leaves a harmless gap in the sequence).
     const redeemReward = useCallback(
@@ -417,6 +477,8 @@ export function App() {
             nextRewardId.current += 1
             const replenishId = `reward-${nextRewardId.current}`
             setRewards((prev) => redeem(prev, id, gold, Date.now(), replenishId))
+            // A redeemed reward is locked in (no edit), so close its detail card if it was the open one.
+            setSelectedRewardId((cur) => (cur === id ? null : cur))
         },
         [gold, rewards, sfx]
     )
@@ -889,6 +951,13 @@ export function App() {
     const displayedTask = displayTaskId !== null ? tasks.find((task) => task.id === displayTaskId) : undefined
     const taskClosing = selectedTaskId === null && displayTaskId !== null
 
+    // The reward backing the open reward detail card, keyed off the trailing displayRewardId (looked up
+    // in the full list so a redeemed one within its TTL still resolves). Absent once deleted, unmounting
+    // the card immediately.
+    const displayedReward =
+        displayRewardId !== null ? rewards.find((reward) => reward.id === displayRewardId) : undefined
+    const rewardClosing = selectedRewardId === null && displayRewardId !== null
+
     const closing = selectedId === null && displayId !== null
     // A selected mirror shows the shared card in view mode; synthesize a milestone for its name.
     const shownIsView = displayId !== null && displayId.startsWith(VIEW_MIRROR_PREFIX)
@@ -965,7 +1034,6 @@ export function App() {
                                 items={visible(tasks, Date.now())}
                                 onAdd={addTaskItem}
                                 onToggle={toggleTask}
-                                onRemove={removeTask}
                                 onReorder={reorderTask}
                                 onSelect={selectTask}
                                 selectedId={selectedTaskId}
@@ -993,23 +1061,39 @@ export function App() {
                             <RewardsBoard
                                 gold={gold}
                                 rewards={visibleRewards(rewards, Date.now())}
+                                selectedId={selectedRewardId}
                                 onRedeem={redeemReward}
+                                onSelectReward={selectReward}
                                 onOpenAdd={toggleAddReward}
                                 onRemoveReward={removeRewardItem}
                             />
                         </div>
-                        {addRewardShown && (
+                        {addRewardShown ? (
                             <aside
                                 data-add-reward-card=""
                                 className="absolute right-4 top-4 z-20 w-[320px] max-w-[calc(100%-2rem)]"
                             >
-                                <AddRewardCard
+                                <RewardDetailCard
                                     onAdd={addRewardItem}
                                     closing={!addRewardOpen && addRewardShown}
                                     onExited={() => setAddRewardShown(false)}
                                 />
                             </aside>
-                        )}
+                        ) : displayedReward ? (
+                            <aside
+                                data-reward-detail-card=""
+                                className="absolute right-4 top-4 z-20 w-[320px] max-w-[calc(100%-2rem)]"
+                            >
+                                <RewardDetailCard
+                                    key={displayedReward.id}
+                                    reward={displayedReward}
+                                    closing={rewardClosing}
+                                    onEdit={(patch) => editRewardItem(displayedReward.id, patch)}
+                                    onDelete={() => deleteRewardItem(displayedReward.id)}
+                                    onExited={() => setDisplayRewardId(null)}
+                                />
+                            </aside>
+                        ) : null}
                     </>
                 ) : section === "sync" ? (
                     <div className="absolute inset-0 z-10 overflow-auto">

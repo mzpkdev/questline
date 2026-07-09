@@ -16,7 +16,6 @@ function renderBoard(overrides: Partial<Parameters<typeof TasksBoard>[0]> = {}) 
             items={items}
             onAdd={noop}
             onToggle={noop}
-            onRemove={noop}
             onReorder={noop}
             onSelect={noop}
             {...overrides}
@@ -42,18 +41,20 @@ describe("TasksBoard", () => {
         expect(onToggle).toHaveBeenCalledWith("b1")
     })
 
-    it("removes a task by id", () => {
-        const onRemove = vi.fn()
-        renderBoard({ onRemove })
-        fireEvent.click(screen.getByRole("button", { name: "Remove Gather moonpetals" }))
-        expect(onRemove).toHaveBeenCalledWith("b2")
-    })
-
     it("opens a task's detail by id when its name is clicked", () => {
         const onSelect = vi.fn()
         renderBoard({ onSelect })
         fireEvent.click(screen.getByRole("button", { name: "Open Scout the trail" }))
         expect(onSelect).toHaveBeenCalledWith("b1")
+    })
+
+    it("opens a task's detail when the tile body is clicked, but not when checking it", () => {
+        const onSelect = vi.fn()
+        const onToggle = vi.fn()
+        renderBoard({ onSelect, onToggle })
+        fireEvent.click(screen.getByRole("button", { name: "Check Scout the trail" }))
+        expect(onSelect).not.toHaveBeenCalled()
+        expect(onToggle).toHaveBeenCalledWith("b1")
     })
 
     it("adds a task from the form and clears the input", () => {

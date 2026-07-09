@@ -608,7 +608,7 @@ describe("App", () => {
             expect(nodeRoot("root-goal")).toBeNull()
         })
 
-        it("adds, toggles, then removes a task", async () => {
+        it("adds and toggles a task", async () => {
             render(<App />)
             openTasks()
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
@@ -621,9 +621,6 @@ describe("App", () => {
 
             fireEvent.click(screen.getByRole("button", { name: "Check Slay the bog wyrm" }))
             expect(await screen.findByRole("button", { name: "Uncheck Slay the bog wyrm" })).toBeInTheDocument()
-
-            fireEvent.click(screen.getByRole("button", { name: "Remove Slay the bog wyrm" }))
-            await waitFor(() => expect(screen.queryByText("Slay the bog wyrm")).toBeNull())
         })
 
         it("returns to the roadmap when a tab is clicked", async () => {

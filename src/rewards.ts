@@ -66,6 +66,29 @@ export function removeReward(list: Reward[], id: string): Reward[] {
     return next.length === list.length ? list : next
 }
 
+// Edit a reward's name, price, and/or replenish flag by id. Name is taken as given (trimming is an
+// add-time concern, matching tasks.edit), price is clamped to a whole number of at least 1 (as in
+// addReward), and replenish toggles the flag (dropping it entirely when off). An unknown id keeps the
+// same reference.
+export function editReward(
+    list: Reward[],
+    id: string,
+    patch: { name?: string; price?: number; replenish?: boolean }
+): Reward[] {
+    if (!list.some((reward) => reward.id === id)) return list
+    return list.map((reward) => {
+        if (reward.id !== id) return reward
+        const next = { ...reward }
+        if (patch.name !== undefined) next.name = patch.name
+        if (patch.price !== undefined) next.price = Math.max(1, Math.round(patch.price) || 1)
+        if (patch.replenish !== undefined) {
+            if (patch.replenish) next.replenish = true
+            else delete next.replenish
+        }
+        return next
+    })
+}
+
 // Redeem a reward by id: a one-off buy that stamps `redeemedAt` with `now`, but only when it is still
 // unredeemed and the balance covers the price. An unaffordable, already-redeemed, or unknown id keeps
 // the same reference. Gold isn't mutated here; the caller derives the balance from spentGold. A

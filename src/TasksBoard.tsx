@@ -1,8 +1,8 @@
 // The Tasks view: a flat checklist rendered on the same parchment board as the roadmap, a visual
 // re-port of the mockup's todo.html. Each task is a gold-framed, cream-faced tile with an accent
 // spine, echoing the milestone nodes. Ticking a box (useCheckPop) gives it the same soft gold pop the
-// roadmap's checklist boxes have; the × removes it (revealed on hover); the add row appends one; and
-// the grip handle drag-reorders the list (dnd-kit, with pointer + keyboard support).
+// roadmap's checklist boxes have; clicking the tile opens its detail card (name / reward / delete); the
+// add row appends one; and the grip handle drag-reorders the list (dnd-kit, with pointer + keyboard support).
 
 import {
     closestCenter,
@@ -53,28 +53,25 @@ type TasksBoardProps = {
     items: Task[]
     onAdd: (text: string) => void
     onToggle: (id: string) => void
-    onRemove: (id: string) => void
     onReorder: (activeId: string, overId: string) => void
-    // Open a task's detail card (name / reward / delete). Clicking the task's name fires this.
+    // Open a task's detail card (name / reward / delete). Clicking anywhere on the tile fires this.
     onSelect: (id: string) => void
     // The task whose detail card is open, ringed to show it's selected.
     selectedId?: string | null
 }
 
-// One sortable task tile. The box bounces the moment it's ticked (useCheckPop), so checking a task
-// off feels like a stamp, exactly as it does on a milestone card. Only the grip carries the drag
-// listeners, so the check and × stay ordinary clicks.
+// One sortable task tile. Clicking the tile opens its detail card (delete lives there now); the check
+// and grip stop propagation so ticking or dragging never opens the card. The box bounces the moment
+// it's ticked (useCheckPop), so checking a task off feels like a stamp, as on a milestone card.
 function SortableTaskTile({
     task,
     selected,
     onToggle,
-    onRemove,
     onSelect
 }: {
     task: Task
     selected: boolean
     onToggle: (id: string) => void
-    onRemove: (id: string) => void
     onSelect: (id: string) => void
 }) {
     const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
@@ -85,7 +82,8 @@ function SortableTaskTile({
         <li
             ref={setNodeRef}
             data-task-tile=""
-            className={`group relative flex items-center gap-[11px] rounded-[13px] py-3 pl-[19px] pr-[15px] transition-[box-shadow] duration-200 ease-out animate-[itemIn_0.25s_ease] hover:scale-[1.015] ${TILE_SHADOW} ${
+            onClick={() => onSelect(task.id)}
+            className={`group relative flex cursor-pointer items-center gap-[11px] rounded-[13px] py-3 pl-[19px] pr-[15px] transition-[box-shadow] duration-200 ease-out animate-[itemIn_0.25s_ease] hover:scale-[1.015] ${TILE_SHADOW} ${
                 isDragging ? `${TILE_SHADOW_DRAGGING} opacity-95` : ""
             } ${task.done ? "opacity-[0.78]" : ""} ${
                 selected ? "ring-2 ring-[#e6c458] ring-offset-1 ring-offset-[#f6edd6]" : ""
@@ -107,6 +105,7 @@ function SortableTaskTile({
                 ref={setActivatorNodeRef}
                 type="button"
                 aria-label={`Reorder ${task.text}`}
+                onClick={(event) => event.stopPropagation()}
                 className="grid h-6 w-4 flex-none touch-none cursor-grab place-items-center bg-transparent text-[#c3b183] opacity-60 transition-[color,opacity] duration-150 ease-out hover:text-[#8a6b28] group-hover:opacity-100 active:cursor-grabbing"
                 {...attributes}
                 {...listeners}
@@ -125,7 +124,10 @@ function SortableTaskTile({
                 type="button"
                 aria-pressed={task.done}
                 aria-label={`${task.done ? "Uncheck" : "Check"} ${task.text}`}
-                onClick={() => onToggle(task.id)}
+                onClick={(event) => {
+                    event.stopPropagation()
+                    onToggle(task.id)
+                }}
                 className="grid h-[22px] w-[22px] flex-none place-items-center rounded-md"
                 style={task.done ? CHECK_DONE_STYLE : CHECK_STYLE}
             >
@@ -155,32 +157,11 @@ function SortableTaskTile({
             >
                 {task.text}
             </button>
-            <button
-                type="button"
-                aria-label={`Remove ${task.text}`}
-                onClick={() => onRemove(task.id)}
-                className="grid h-6 w-6 flex-none place-items-center bg-transparent text-[#c3b183] opacity-0 transition-[color,opacity] duration-150 ease-out hover:text-[#a5482a] group-hover:opacity-100 max-[600px]:opacity-60"
-            >
-                <svg
-                    viewBox="0 0 24 24"
-                    width={15}
-                    height={15}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                >
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                </svg>
-            </button>
         </li>
     )
 }
 
-export function TasksBoard({ items, onAdd, onToggle, onRemove, onReorder, onSelect, selectedId }: TasksBoardProps) {
+export function TasksBoard({ items, onAdd, onToggle, onReorder, onSelect, selectedId }: TasksBoardProps) {
     const [draft, setDraft] = useState("")
     const sensors = useSensors(
         // A 5px threshold lets a plain click on the grip pass through without starting a drag.
@@ -246,7 +227,6 @@ export function TasksBoard({ items, onAdd, onToggle, onRemove, onReorder, onSele
                                     task={task}
                                     selected={selectedId === task.id}
                                     onToggle={onToggle}
-                                    onRemove={onRemove}
                                     onSelect={onSelect}
                                 />
                             ))}

@@ -1,3 +1,6 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { App } from "./App"
+
 describe("Rewards & gold (e2e)", () => {
     context("earning gold on the roadmap", () => {
         it.todo("mints a milestone's reward into the purse when it is marked complete")
@@ -21,7 +24,7 @@ describe("Rewards & gold (e2e)", () => {
     })
 
     context("the purse", () => {
-        it.todo("shows zero gold on a fresh install before any work is done")
+        it.todo("seeds a fresh install's purse from the sample roadmap's one pre-completed milestone")
         it.todo("shows earned minus spent as the live balance")
         it.todo("exposes the balance to assistive tech via its `N gold` label")
         it.todo("updates the balance the moment gold is earned or spent, without a reload")
@@ -68,6 +71,80 @@ describe("Rewards & gold (e2e)", () => {
         it.todo("keeps the reward when the confirm dialog is cancelled")
         it.todo("offers no remove affordance on a redeemed tile")
         it.todo("leaves the purse balance unchanged when an unredeemed reward is removed")
+    })
+
+    // Implemented (not todos): the reward detail-card UI. These drive <App /> and assert only card
+    // behaviour (open / edit / delete / add-vs-edit), never gold or redeem math.
+    context("the reward detail card", () => {
+        beforeEach(() => {
+            window.history.replaceState(null, "", window.location.pathname)
+            localStorage.clear()
+        })
+        const openShop = () => fireEvent.click(screen.getByRole("button", { name: "Rewards" }))
+
+        it("opens when a reward tile is clicked", async () => {
+            render(<App />)
+            openShop()
+            await screen.findByRole("button", { name: "Open Fancy coffee" })
+
+            // Click the tile body itself (not a control), which should open the card.
+            fireEvent.click(document.querySelector('[data-reward-id="reward-1"]') as HTMLElement)
+            const card = await screen.findByTestId("reward-detail-card")
+            expect(within(card).getByRole("heading", { name: "Fancy coffee" })).toBeInTheDocument()
+        })
+
+        it("does not open the card when the tile's remove control is clicked", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Remove Fancy coffee" }))
+
+            expect(await screen.findByText("Remove this reward?")).toBeInTheDocument()
+            expect(screen.queryByTestId("reward-detail-card")).toBeNull()
+        })
+
+        it("renames a reward live through the pencil", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.change(screen.getByLabelText("Reward name"), { target: { value: "Espresso" } })
+
+            expect(await screen.findByRole("button", { name: "Open Espresso" })).toBeInTheDocument()
+        })
+
+        it("toggles auto-replenish on an existing reward", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("checkbox"))
+
+            // The tile grows the auto-replenish badge (its svg carries this title).
+            expect(await screen.findByTitle("Auto-replenishes")).toBeInTheDocument()
+        })
+
+        it("deletes a reward from its card", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete reward" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Remove" }))
+
+            await waitFor(() => expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull())
+            expect(screen.queryByTestId("reward-detail-card")).toBeNull()
+        })
+
+        it("swaps the add card for the detail card when a tile is clicked", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
+            expect(await screen.findByTestId("add-reward-card")).toBeInTheDocument()
+
+            fireEvent.click(screen.getByRole("button", { name: "Open Fancy coffee" }))
+            expect(await screen.findByTestId("reward-detail-card")).toBeInTheDocument()
+            expect(screen.queryByTestId("add-reward-card")).toBeNull()
+        })
     })
 
     context("the shelf lifecycle (14-day window)", () => {
