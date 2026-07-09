@@ -1,8 +1,8 @@
 // Tab chrome, ported from the mockup's `.tabbar` and made functional. Each tab is one roadmap
 // (a Project); its label is the goal node's name, so renaming a tab renames the goal and vice
-// versa. Double-click (or long-press on touch) a tab to rename it, × removes it. New views are
-// created from the Root node's "+ Add sub-view", not here. Styling matches the mockup: solid colors
-// via Tailwind, gold gradients / inset "ring" shadows via inline style.
+// versa. Double-click (or long-press on touch) a tab to rename it. Views are deleted from a detail
+// card's Delete button, not here; new views come from the Root node's "+ Add sub-view". Styling
+// matches the mockup: solid colors via Tailwind, gold gradients / inset "ring" shadows via inline style.
 
 import {
     type CSSProperties,
@@ -12,7 +12,6 @@ import {
     useRef,
     useState
 } from "react"
-import { ConfirmDialog } from "./ConfirmDialog"
 
 // How long a press must hold before it opens the inline rename (touch has no double-click).
 const LONG_PRESS_MS = 500
@@ -26,7 +25,6 @@ type TabBarProps = {
     activeId: string
     onSelect: (id: string) => void
     onRename: (id: string, name: string) => void
-    onRemove: (id: string) => void
     // App-level chips rendered at the leading end of the bar, ahead of the tabs.
     leading?: ReactNode
     // App-level controls pinned to the trailing (right) end of the bar, after the tabs. Right-aligned
@@ -44,10 +42,6 @@ export const activeChip = "bg-[#f4ead0] font-semibold text-[#4a3410]"
 export const inactiveChip = "bg-[#e7dabb] text-[#8a6f38] hover:bg-[#efe3c4] hover:text-[#6f5316]"
 export const activeShadow = { boxShadow: "inset 0 0 0 1px #e6c458, 0 1px 4px -1px rgba(120,80,20,0.3)" } as const
 
-// `.tab-x` remove affordance trailing each named view.
-const removeClass =
-    "ml-1.5 appearance-none bg-transparent text-[12px] leading-none text-[#b09a63] transition-colors duration-150 ease-out hover:text-[#a5482a]"
-
 // Label look for touch: suppress the iOS press-and-hold callout and the double-tap zoom so a hold
 // registers as a rename instead of a text selection.
 const LABEL_STYLE: CSSProperties = { WebkitTouchCallout: "none", touchAction: "manipulation" }
@@ -56,8 +50,6 @@ export function TabBar(props: TabBarProps) {
     // Which tab is being renamed inline, and its working text.
     const [editingId, setEditingId] = useState<string | null>(null)
     const [draft, setDraft] = useState("")
-    // The tab pending removal: set by its ×, cleared on confirm or cancel. Drives the confirm modal.
-    const [pendingRemove, setPendingRemove] = useState<TabDescriptor | null>(null)
 
     // Long-press bookkeeping: the pending timer and where the finger first landed.
     const pressTimer = useRef<number | null>(null)
@@ -168,39 +160,10 @@ export function TabBar(props: TabBarProps) {
                             )}
                             {tab.name}
                         </button>
-                        {/* Root is pinned: no remove affordance. Every other view can be deleted. */}
-                        {!tab.pinned && (
-                            <button
-                                type="button"
-                                aria-label={`Remove ${tab.name}`}
-                                className={removeClass}
-                                onClick={() => setPendingRemove(tab)}
-                            >
-                                ×
-                            </button>
-                        )}
                     </span>
                 )
             })}
             {props.trailing && <div className="ml-auto flex items-center gap-1">{props.trailing}</div>}
-            <ConfirmDialog
-                open={pendingRemove !== null}
-                title="Remove this view?"
-                message={
-                    <>
-                        Delete <strong className="font-semibold text-[#4a3410]">{pendingRemove?.name}</strong>? This
-                        can't be undone.
-                    </>
-                }
-                confirmLabel="Remove"
-                onConfirm={() => {
-                    if (pendingRemove) props.onRemove(pendingRemove.id)
-                    setPendingRemove(null)
-                }}
-                onOpenChange={(open) => {
-                    if (!open) setPendingRemove(null)
-                }}
-            />
         </div>
     )
 }

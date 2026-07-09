@@ -857,7 +857,6 @@ export function App() {
                 activeId={section === "roadmap" ? activeId : ""}
                 onSelect={switchProject}
                 onRename={renameProject}
-                onRemove={removeProject}
                 leading={
                     <NavActions
                         onOpenTasks={openTasks}

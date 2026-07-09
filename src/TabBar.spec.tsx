@@ -14,7 +14,6 @@ function renderBar(overrides: Partial<Parameters<typeof TabBar>[0]> = {}) {
         activeId: "seed",
         onSelect: vi.fn(),
         onRename: vi.fn(),
-        onRemove: vi.fn(),
         ...overrides
     }
     return { props, ...render(<TabBar {...props} />) }
@@ -35,26 +34,10 @@ describe("TabBar", () => {
         expect(props.onSelect).toHaveBeenCalledWith("view-1")
     })
 
-    it("confirms before removing a tab", async () => {
-        const { props } = renderBar()
-        await userEvent.click(screen.getByRole("button", { name: "Remove Marketing Q3" }))
-        // The modal opens; nothing is removed until the user confirms.
-        expect(props.onRemove).not.toHaveBeenCalled()
-        await userEvent.click(await screen.findByRole("button", { name: "Remove" }))
-        expect(props.onRemove).toHaveBeenCalledWith("view-1")
-    })
-
-    it("keeps the tab when the removal is dismissed", async () => {
-        const { props } = renderBar()
-        await userEvent.click(screen.getByRole("button", { name: "Remove Marketing Q3" }))
-        await userEvent.click(await screen.findByRole("button", { name: "Close" }))
-        expect(props.onRemove).not.toHaveBeenCalled()
-    })
-
-    it("gives the pinned Root tab no remove affordance", () => {
+    it("renders no per-tab remove affordance (views are deleted from the detail card)", () => {
         renderBar()
         expect(screen.queryByRole("button", { name: "Remove Quest Board" })).not.toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Remove Marketing Q3" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Remove Marketing Q3" })).not.toBeInTheDocument()
     })
 
     context("renaming a tab", () => {
