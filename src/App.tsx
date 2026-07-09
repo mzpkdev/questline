@@ -795,11 +795,7 @@ export function App() {
                     <>
                         <IoButtons onExport={handleExport} onImport={handleImport} />
                         {sync.enabled && (
-                            <SyncNavButton
-                                active={section === "sync"}
-                                status={sync.status}
-                                onOpen={() => setSection("sync")}
-                            />
+                            <SyncNavButton on={sync.active} onOpen={() => setSection("sync")} />
                         )}
                     </>
                 }
