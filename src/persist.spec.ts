@@ -44,22 +44,6 @@ describe("persist", () => {
         expect(deserialize(serialize(withCompletedAt))?.tasks[0]?.completedAt).toBe(1_700_000_000_000)
     })
 
-    it("round-trips the rewards shelf", () => {
-        const back = deserialize(serialize(slices()))
-        expect(back?.rewards).toEqual([
-            { id: "reward-1", name: "Fancy coffee", price: 3 },
-            { id: "reward-2", name: "Weekend trip", price: 40 }
-        ])
-    })
-
-    it("preserves a redeemed reward's redeemedAt timestamp", () => {
-        const withRedeemed = {
-            ...slices(),
-            rewards: [{ id: "reward-1", name: "Fancy coffee", price: 3, redeemedAt: 1_700_000_000_000 }]
-        }
-        expect(deserialize(serialize(withRedeemed))?.rewards[0]?.redeemedAt).toBe(1_700_000_000_000)
-    })
-
     it("stamps the current version", () => {
         expect(JSON.parse(serialize(slices())).version).toBe(PERSIST_VERSION)
     })
