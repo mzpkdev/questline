@@ -296,6 +296,16 @@ export function App() {
         setFocusNonce((n) => n + 1)
     }, [])
 
+    // A click on any canvas node (a milestone or a Root-hub view chip): a subtle selection tick, then
+    // select it.
+    const selectFromCanvas = useCallback(
+        (id: string) => {
+            sfx.tick()
+            setSelectedId(id)
+        },
+        [sfx]
+    )
+
     // Bounties: open the app-level list, and add / toggle / remove its items. One global list, so
     // these never touch the active project.
     const openBounties = useCallback(() => setSection("bounties"), [])
@@ -305,10 +315,10 @@ export function App() {
     }, [])
     const toggleBounty = useCallback(
         (id: string) => {
-            // Crossing a bounty off (a to-do completed) pops; re-opening it is silent. Decided from
-            // current state, not inside the updater (which StrictMode double-invokes in dev).
+            // Crossing a task off (the standalone to-do list) rings the coin cue; re-opening it is
+            // silent. Decided from current state, not inside the updater (StrictMode double-invokes it).
             const bounty = bounties.find((item) => item.id === id)
-            if (bounty && !bounty.done) sfx.pop()
+            if (bounty && !bounty.done) sfx.coin()
             setBounties((prev) => toggle(prev, id, Date.now()))
         },
         [bounties, sfx]
@@ -347,10 +357,10 @@ export function App() {
     const toggleTodo = useCallback(
         (index: number) => {
             if (selectedId === null) return
-            // Crossing a checklist item off (a to-do completed) pops; un-ticking is silent. Decided from
+            // Crossing a checklist item off (a to-do completed) ticks; un-ticking is silent. Decided from
             // current state, not inside the updater (which StrictMode double-invokes in dev).
             const current = active?.todos[selectedId]?.[index]
-            if (current && !current.done) sfx.pop()
+            if (current && !current.done) sfx.tick()
             updateActive((project) => {
                 const list = project.todos[selectedId]
                 if (!list) return project
@@ -880,7 +890,7 @@ export function App() {
                                 <MilestoneTree
                                     key={activeId}
                                     selectedId={selectedId}
-                                    onSelect={setSelectedId}
+                                    onSelect={selectFromCanvas}
                                     mastered={active.mastered}
                                     milestones={view.milestones}
                                     edges={view.edges}

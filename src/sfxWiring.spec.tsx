@@ -3,7 +3,7 @@
 // (event handler -> useSfx -> kit -> WebAudio) fires the expected cue, not just that the kit works in
 // isolation. jsdom has no WebAudio, so the fake is what makes the kit audible here.
 
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { App } from "./App"
 import { SfxProvider } from "./SfxProvider"
 
@@ -61,7 +61,7 @@ describe("sfx wiring", () => {
 
     afterEach(() => vi.unstubAllGlobals())
 
-    it("pops when a to-do is crossed off, and stays silent on plain navigation", () => {
+    it("rings the coin cue when a task is crossed off, and stays silent on plain navigation", () => {
         render(
             <SfxProvider>
                 <App />
@@ -72,9 +72,37 @@ describe("sfx wiring", () => {
         fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
         expect(voices).toHaveLength(0)
 
-        // Cross a seeded bounty off: toggleBounty() on an open item -> pluck (triangle @ 587.33).
+        // Cross a seeded task off: toggleBounty() on an open item -> coin (sine @ 1046.5).
         fireEvent.click(screen.getByRole("button", { name: /^Check Tick a bounty/ }))
-        expect(voices.some((voice) => voice.type === "triangle" && voice.frequency === 587.33)).toBe(true)
+        expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 1046.5)).toBe(true)
+    })
+
+    it("ticks subtly when a milestone node or a view chip is selected", async () => {
+        render(
+            <SfxProvider>
+                <App />
+            </SfxProvider>
+        )
+
+        // The Root hub's own goal is a milestone node (carries data-id + data-state); wait for React
+        // Flow to mount it, then click it -> selectFromCanvas() -> tick (sine @ 880).
+        const node = await waitFor(() => {
+            const el = document.querySelector('[data-id="root-goal"][data-state]')
+            if (!el) throw new Error("root milestone node not mounted")
+            return el
+        })
+        fireEvent.click(node)
+        expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 880)).toBe(true)
+
+        // A Root-hub view chip (the mirrored sample roadmap) selects with the same tick.
+        voices = []
+        const chip = await waitFor(() => {
+            const el = document.querySelector("[data-view-node]")
+            if (!el) throw new Error("view chip not mounted")
+            return el
+        })
+        fireEvent.click(chip)
+        expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 880)).toBe(true)
     })
 
     it("stays silent while muted", () => {

@@ -46,14 +46,15 @@ export type SoundEffect = () => void
  * controls. Frozen so callers can destructure freely without risk of reassigning an effect.
  *
  * @property blip    - A soft single bell tap -- a light confirm (used for the unmute cue). ~160ms.
- * @property pop     - A warm harp-like pluck (fundamental + a quiet octave) -- a single to-do or bounty
- *                     crossed off. Triangle, ~200ms.
+ * @property pop     - A warm harp-like pluck (fundamental + a quiet octave). A spare cue; the app
+ *                     currently uses tick for crossing a to-do off. Triangle, ~200ms.
  * @property success - Two rising struck hand-bells with inharmonic overtones -- a milestone completed.
  *                     Sine, ~550ms.
  * @property error   - A soft low two-note fall -- a muted "denied", not a buzzer. Triangle, ~280ms.
- * @property tick    - A very short, very quiet click -- lightweight incidental feedback. Sine, ~50ms.
- * @property coin    - A bright metallic clink -- gold dropped into the purse when a reward is redeemed.
- *                     Sine bells, higher/tighter than success. ~280ms.
+ * @property tick    - A very short, very quiet click -- selecting a node or chip, and ticking a
+ *                     milestone's checklist box. Sine, ~50ms.
+ * @property coin    - A bright metallic clink -- gold into the purse when a reward is redeemed, or a
+ *                     standalone task crossed off. Sine bells, higher/tighter than success. ~280ms.
  * @property fanfare - The finale: a regal rising bell arpeggio over a low root with a shimmer on top --
  *                     a whole quest's goal completed. The loudest/longest cue; pairs with the on-screen
  *                     goal celebration. ~950ms.
