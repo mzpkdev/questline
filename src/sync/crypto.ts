@@ -46,14 +46,13 @@ export async function deriveKeys(code: string): Promise<{ id: string; key: Crypt
     return { id: toBase64Url(new Uint8Array(idBits)), key }
 }
 
-// Encrypt a string to base64url(version ‖ iv ‖ ciphertext). A new random IV every call is required:
-// reusing a nonce under one key breaks GCM, so this must never be derived from the plaintext.
-export async function encrypt(key: CryptoKey, plaintext: string): Promise<string> {
+// Encrypt raw bytes to base64url(version ‖ iv ‖ ciphertext). A new random IV every call is required:
+// reusing a nonce under one key breaks GCM, so this must never be derived from the plaintext. Bytes in
+// (not a string) so callers can encrypt already-compressed payloads; `encrypt` is the string wrapper.
+export async function encryptBytes(key: CryptoKey, data: Uint8Array<ArrayBuffer>): Promise<string> {
     const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES))
     const aad = new Uint8Array([BLOB_VERSION])
-    const ct = new Uint8Array(
-        await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, key, utf8(plaintext))
-    )
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, key, data))
     const out = new Uint8Array(1 + IV_BYTES + ct.length)
     out[0] = BLOB_VERSION
     out.set(iv, 1)
@@ -61,10 +60,14 @@ export async function encrypt(key: CryptoKey, plaintext: string): Promise<string
     return toBase64Url(out)
 }
 
-// Reverse of encrypt, or null on anything we don't understand (bad base64, short/truncated blob, wrong
-// version, failed auth tag from a wrong key or tampering). Callers treat null like deserialize's null:
-// reject, change nothing.
-export async function decrypt(key: CryptoKey, blob: string): Promise<string | null> {
+export async function encrypt(key: CryptoKey, plaintext: string): Promise<string> {
+    return encryptBytes(key, utf8(plaintext))
+}
+
+// Reverse of encryptBytes, or null on anything we don't understand (bad base64, short/truncated blob,
+// wrong version, failed auth tag from a wrong key or tampering). Callers treat null like deserialize's
+// null: reject, change nothing.
+export async function decryptBytes(key: CryptoKey, blob: string): Promise<Uint8Array<ArrayBuffer> | null> {
     try {
         const bytes = fromBase64Url(blob)
         if (bytes.length < MIN_BLOB_BYTES) return null
@@ -74,10 +77,15 @@ export async function decrypt(key: CryptoKey, blob: string): Promise<string | nu
         const ct = bytes.subarray(1 + IV_BYTES)
         const aad = new Uint8Array([version])
         const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad }, key, ct)
-        return decoder.decode(pt)
+        return new Uint8Array(pt)
     } catch {
         return null
     }
+}
+
+export async function decrypt(key: CryptoKey, blob: string): Promise<string | null> {
+    const bytes = await decryptBytes(key, blob)
+    return bytes === null ? null : decoder.decode(bytes)
 }
 
 function deriveBits(ikm: CryptoKey, info: string): Promise<ArrayBuffer> {

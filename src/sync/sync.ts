@@ -8,7 +8,8 @@
 // versions to decide reconcile; this module just carries them.
 
 import { deserialize, type PersistedSlices, serialize } from "../persist"
-import { decrypt, deriveKeys, encrypt } from "./crypto"
+import { deflate, inflate } from "./compress"
+import { decryptBytes, deriveKeys, encryptBytes } from "./crypto"
 
 // The plaintext we encrypt: the persist wire string plus reconcile metadata. Separate from the persist
 // format so persist.ts stays untouched; `updatedAt` is only a human-readable hint (the server version
@@ -50,8 +51,16 @@ export async function pull(code: string): Promise<PullResult | null> {
     const res = await fetch(`${base}${BLOB_PATH}${id}`, { method: "GET" })
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`sync pull failed: ${res.status}`)
-    const plaintext = await decrypt(key, await res.text())
-    if (plaintext === null) return null
+    const bytes = await decryptBytes(key, await res.text())
+    if (bytes === null) return null
+    // Decrypt gives the compressed payload; inflate back to the envelope JSON. Bad/garbage data throws
+    // here, treated like a failed decrypt: reject, change nothing.
+    let plaintext: string
+    try {
+        plaintext = await inflate(bytes)
+    } catch {
+        return null
+    }
     const envelope = parseEnvelope(plaintext)
     if (!envelope) return null
     const slices = deserialize(envelope.data)
@@ -71,7 +80,9 @@ export async function push(
     if (!base) return { ok: true, version: 0 }
     const { id, key } = await deriveKeys(code)
     const envelope: Envelope = { v: ENVELOPE_VERSION, updatedAt, data: serialize(slices) }
-    const body = await encrypt(key, JSON.stringify(envelope))
+    // Compress the envelope, then encrypt the compressed bytes: the 1 MiB blob cap measures the
+    // encrypted body, and DEFLATE only bites before encryption (ciphertext won't compress).
+    const body = await encryptBytes(key, await deflate(JSON.stringify(envelope)))
     const res = await fetch(`${base}${BLOB_PATH}${id}`, {
         method: "PUT",
         headers: { "content-type": "text/plain" },

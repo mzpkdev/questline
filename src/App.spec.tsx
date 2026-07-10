@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { decompressFromUTF16 } from "lz-string"
 import { App } from "./App"
 
 // React Flow wraps each custom node in its own div that also carries data-id; our node's
@@ -12,6 +13,9 @@ const viewNode = (id: string) => document.querySelector(`[data-view-node][data-i
 // nodes aren't on screen. Clicking the sample tab (labelled after its goal) switches to it and
 // selects that goal, mirroring how the seed view was reached before.
 const openSampleTab = () => fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
+
+// localStorage now holds lz-string-compressed JSON; unpack it to assert on the saved roadmap text.
+const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v3") ?? "") ?? ""
 
 describe("App", () => {
     // The app reads/writes window.location.hash for routing; reset it so tests don't leak into each other.
@@ -501,7 +505,7 @@ describe("App", () => {
 
             // A minimal valid export: Root plus one view whose goal is `solo-goal`.
             const imported = {
-                version: 2,
+                version: 3,
                 projects: {
                     root: {
                         id: "root",
@@ -546,7 +550,8 @@ describe("App", () => {
                 order: ["root", "solo"],
                 mirrorPos: {},
                 tasks: [],
-                rewards: []
+                rewards: [],
+                banked: { earned: 0, spent: 0 }
             }
             fireEvent.change(screen.getByTestId("import-input"), {
                 target: { files: [exportFile(JSON.stringify(imported))] }
@@ -579,7 +584,7 @@ describe("App", () => {
             // Rename the goal, then wait past the 400ms autosave debounce.
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.change(screen.getByDisplayValue("Learn Questline"), { target: { value: "Restored Launch" } })
-            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Restored Launch"), {
+            await waitFor(() => expect(savedRoadmap()).toContain("Restored Launch"), {
                 timeout: 2000
             })
 
@@ -643,7 +648,7 @@ describe("App", () => {
             })
             fireEvent.click(screen.getByRole("button", { name: "Add task" }))
             await screen.findByText("Guard the caravan")
-            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Guard the caravan"), {
+            await waitFor(() => expect(savedRoadmap()).toContain("Guard the caravan"), {
                 timeout: 2000
             })
 

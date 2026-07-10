@@ -6,12 +6,13 @@
 // is rebuilt into a Set on the way back in. Scope is data-only: the open tab/selection is not
 // persisted, so a load opens the default tab.
 
+import { compressToUTF16, decompressFromUTF16 } from "lz-string"
 import type { Task } from "./tasks"
 import type { Banked, Reward } from "./rewards"
 import type { Project } from "./project"
 
-export const PERSIST_VERSION = 2
-export const STORAGE_KEY = "questline:v2"
+export const PERSIST_VERSION = 3
+export const STORAGE_KEY = "questline:v3"
 
 export type MirrorPos = Record<string, { x: number; y: number }>
 
@@ -37,11 +38,10 @@ type WireState = {
     projects: Record<string, WireProject>
     order: string[]
     mirrorPos: MirrorPos
-    // The app-level Tasks checklist and the Rewards shelf. Both required in the v2 wire format.
+    // The app-level Tasks checklist and the Rewards shelf. Both required in the v3 wire format.
     tasks: Task[]
     rewards: Reward[]
-    // Optional on the wire: saves/exports from before compaction simply omit it and load as zeros.
-    banked?: Banked
+    banked: Banked
 }
 
 // Live slices -> the JSON string written to a file or to localStorage.
@@ -62,7 +62,7 @@ export function serialize(slices: PersistedSlices): string {
     return JSON.stringify(wire)
 }
 
-// JSON string -> live slices, or null if the text is not a v2 roadmap file we fully understand (bad
+// JSON string -> live slices, or null if the text is not a v3 roadmap file we fully understand (bad
 // JSON, wrong version, or any missing/mistyped field). No salvage: a malformed file is rejected
 // wholesale, so callers treat null as "reject, change nothing". Only Project.mastered is transformed
 // (array back to a Set); every other field is trusted exactly as written.
@@ -78,24 +78,28 @@ export function deserialize(text: string): PersistedSlices | null {
     for (const [id, project] of Object.entries(raw.projects)) {
         projects[id] = { ...project, mastered: new Set(project.mastered) }
     }
-    const banked = isBanked(raw.banked) ? raw.banked : { earned: 0, spent: 0 }
-    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks: raw.tasks, rewards: raw.rewards, banked }
+    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks: raw.tasks, rewards: raw.rewards, banked: raw.banked }
 }
 
-// Best-effort read of the autosaved state, or null when absent/corrupt.
+// Best-effort read of the autosaved state, or null when absent/corrupt. v3 saves are lz-string-packed
+// into UTF-16 (localStorage stores strings, so this is its densest form). No migration: older v1/v2
+// data lived under a different key and is simply never read.
 export function loadState(): PersistedSlices | null {
     try {
         const text = localStorage.getItem(STORAGE_KEY)
-        return text ? deserialize(text) : null
+        if (!text) return null
+        const unpacked = decompressFromUTF16(text)
+        return unpacked ? deserialize(unpacked) : null
     } catch {
         return null
     }
 }
 
-// Best-effort autosave. A full or unavailable store (private mode) is swallowed, never thrown.
+// Best-effort autosave, lz-string-compressed. A full or unavailable store (private mode) is swallowed,
+// never thrown. Export/import and sync keep the plain JSON of serialize(); only localStorage is packed.
 export function saveState(slices: PersistedSlices): void {
     try {
-        localStorage.setItem(STORAGE_KEY, serialize(slices))
+        localStorage.setItem(STORAGE_KEY, compressToUTF16(serialize(slices)))
     } catch {
         // ignore: autosave is best-effort
     }
@@ -122,7 +126,7 @@ function isWireState(value: unknown): value is WireState {
     if (typeof v.mirrorPos !== "object" || v.mirrorPos === null) return false
     if (!Array.isArray(v.tasks) || !v.tasks.every(isTask)) return false
     if (!Array.isArray(v.rewards) || !v.rewards.every(isReward)) return false
-    if (v.banked !== undefined && !isBanked(v.banked)) return false
+    if (!isBanked(v.banked)) return false
     return Object.values(v.projects as Record<string, unknown>).every(isWireProject)
 }
 

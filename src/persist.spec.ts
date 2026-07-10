@@ -1,3 +1,4 @@
+import { decompressFromUTF16 } from "lz-string"
 import { deserialize, loadState, maxCounter, PERSIST_VERSION, STORAGE_KEY, saveState, serialize } from "./persist"
 import { ROOT_ID, rootProject, seedProject } from "./project"
 
@@ -49,14 +50,14 @@ describe("persist", () => {
         expect(JSON.parse(serialize(slices())).version).toBe(PERSIST_VERSION)
     })
 
-    it("round-trips banked totals, defaulting them to zero for a file without them", () => {
+    it("round-trips banked totals and rejects a file missing them", () => {
         const withBanked = { ...slices(), banked: { earned: 12, spent: 5 } }
         expect(deserialize(serialize(withBanked))?.banked).toEqual({ earned: 12, spent: 5 })
 
-        // A pre-compaction file omits `banked` entirely: it loads as zeros, not null.
-        const legacy = JSON.parse(serialize(slices()))
-        delete legacy.banked
-        expect(deserialize(JSON.stringify(legacy))?.banked).toEqual({ earned: 0, spent: 0 })
+        // v3 requires banked: a file without it is rejected wholesale, not defaulted.
+        const missing = JSON.parse(serialize(slices()))
+        delete missing.banked
+        expect(deserialize(JSON.stringify(missing))).toBeNull()
     })
 
     it("rejects non-JSON, wrong version, and malformed shapes as null", () => {
@@ -89,6 +90,14 @@ describe("persist", () => {
         saveState(slices())
         expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull()
         expect(loadState()?.projects.seed?.mastered).toBeInstanceOf(Set)
+    })
+
+    it("compresses the localStorage save", () => {
+        saveState(slices())
+        const stored = localStorage.getItem(STORAGE_KEY) ?? ""
+        // The stored form is lz-string-packed, not raw JSON, and unpacks back to it.
+        expect(stored).not.toBe(serialize(slices()))
+        expect(decompressFromUTF16(stored)).toBe(serialize(slices()))
     })
 
     it("finds the highest counter and ignores suffixed ids", () => {

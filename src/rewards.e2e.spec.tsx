@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { decompressFromUTF16 } from "lz-string"
 import { App } from "./App"
 import { SfxProvider } from "./SfxProvider"
 import { REDEEMED_TTL_MS } from "./rewards"
@@ -61,6 +62,9 @@ const openSampleTab = () => fireEvent.click(screen.getByRole("button", { name: "
 // The purse pill carries aria-label `N gold`; read the number back for balance assertions.
 const purse = () => screen.getByTestId("purse")
 const balance = () => Number((purse().getAttribute("aria-label") ?? "").replace(/ gold$/, ""))
+
+// localStorage holds lz-string-compressed JSON now; unpack it to assert on the saved roadmap text.
+const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v3") ?? "") ?? ""
 
 // Real wall-clock, captured before any Date.now spy so frozen-time tests can still let RTL's waitFor
 // tick against real time when they aren't pinning the clock.
@@ -942,7 +946,7 @@ describe("Rewards & gold (e2e)", () => {
             // just any save -- the initial seed save also contains "Fancy coffee".
             await waitFor(
                 () => {
-                    const saved = localStorage.getItem("questline:v2")
+                    const saved = savedRoadmap()
                     expect(saved).toContain("Fancy coffee")
                     expect(saved).not.toContain("Movie night")
                 },
@@ -961,7 +965,7 @@ describe("Rewards & gold (e2e)", () => {
             const first = render(<App />)
             openShop()
             await addRewardViaCard("Sushi", 4)
-            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Sushi"), { timeout: 2000 })
+            await waitFor(() => expect(savedRoadmap()).toContain("Sushi"), { timeout: 2000 })
 
             first.unmount()
             render(<App />)
@@ -975,7 +979,7 @@ describe("Rewards & gold (e2e)", () => {
             openShop()
             fireEvent.click(await screen.findByRole("button", { name: "Redeem Fancy coffee" })) // balance 3 -> 0
             await screen.findByText(/^Redeemed /)
-            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("redeemedAt"), { timeout: 2000 })
+            await waitFor(() => expect(savedRoadmap()).toContain("redeemedAt"), { timeout: 2000 })
 
             first.unmount()
             render(<App />)
@@ -991,7 +995,7 @@ describe("Rewards & gold (e2e)", () => {
             await earnViaTask("Chore", 2) // +2 task
             openShop()
             await waitFor(() => expect(balance()).toBe(BASE_GOLD + 5))
-            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Chore"), { timeout: 2000 })
+            await waitFor(() => expect(savedRoadmap()).toContain("Chore"), { timeout: 2000 })
 
             first.unmount()
             render(<App />)
@@ -1007,7 +1011,7 @@ describe("Rewards & gold (e2e)", () => {
             await earnViaTask("Old chore", 2) // completedAt stamped at `start`
             openShop()
             await waitFor(() => expect(balance()).toBe(BASE_GOLD + 2))
-            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Old chore"), { timeout: 2000 })
+            await waitFor(() => expect(savedRoadmap()).toContain("Old chore"), { timeout: 2000 })
 
             // Age it past the 14-day window and reload: boot folds it into banked and drops the record.
             setNow(start + DONE_TTL_MS + 1)
@@ -1019,7 +1023,7 @@ describe("Rewards & gold (e2e)", () => {
 
             await waitFor(
                 () => {
-                    const saved = localStorage.getItem("questline:v2")
+                    const saved = savedRoadmap()
                     expect(saved).not.toContain("Old chore") // record gone
                     expect(saved).toContain('"earned":2') // folded into banked
                 },
