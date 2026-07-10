@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addTask, edit, type Task, remove, reorder, SEED_TASKS, toggle, visible } from "./tasks"
 import { TasksBoard } from "./TasksBoard"
 import { TaskDetailCard } from "./TaskDetailCard"
@@ -34,6 +34,9 @@ import { TabBar } from "./TabBar"
 import { SyncBoard } from "./sync/SyncBoard"
 import { SyncNavButton } from "./sync/SyncNavButton"
 import { useSync } from "./sync/useSync"
+
+// Lazy so Excalidraw's bundle + CSS only load when the Draw tab is opened, not on first paint.
+const ExcalidrawBoard = lazy(() => import("./ExcalidrawBoard").then((m) => ({ default: m.ExcalidrawBoard })))
 
 // Auto-placement for a new sub-milestone: drop it a tier below the parent (matches the seed's ~160px
 // tier gap) and fan each extra sibling to the right so repeated adds don't stack exactly.
@@ -152,7 +155,7 @@ export function App() {
     // Gold earned/spent by tasks and rewards pruned past their 14-day window (folded in at load by
     // compact()). Added to the live sums so the balance is unchanged by that compaction.
     const [banked, setBanked] = useState<Banked>(boot.banked)
-    const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync">("roadmap")
+    const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync" | "excalidraw">("roadmap")
     // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
     // id the card actually shows -- `displayTaskId` trails `selectedTaskId` on dismissal so the exit
     // animation can play before the card unmounts (mirrors selectedId / displayId for milestones).
@@ -464,6 +467,7 @@ export function App() {
     // touch the active project. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
     // balance covers the price), which spends the gold and starts the 14-day shelf window.
     const openRewards = useCallback(() => setSection("rewards"), [])
+    const openExcalidraw = useCallback(() => setSection("excalidraw"), [])
     // Add and edit share the one aside: opening the add card clears any selected reward, and selecting a
     // reward closes the add card, so only one is ever mounted.
     const toggleAddReward = useCallback(() => {
@@ -1042,6 +1046,8 @@ export function App() {
                         tasksActive={section === "tasks"}
                         onOpenRewards={openRewards}
                         rewardsActive={section === "rewards"}
+                        onOpenExcalidraw={openExcalidraw}
+                        excalidrawActive={section === "excalidraw"}
                     />
                 }
                 trailing={
@@ -1134,6 +1140,16 @@ export function App() {
                     <div className="absolute inset-0 z-10 overflow-auto">
                         <SyncBoard sync={sync} />
                     </div>
+                ) : section === "excalidraw" ? (
+                    <Suspense
+                        fallback={
+                            <div className="absolute inset-0 z-10 grid place-items-center text-[15px] italic text-[#a2916c]">
+                                Loading canvas...
+                            </div>
+                        }
+                    >
+                        <ExcalidrawBoard />
+                    </Suspense>
                 ) : (
                     <>
                         <div className="absolute inset-0 z-10">

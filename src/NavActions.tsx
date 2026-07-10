@@ -27,16 +27,23 @@ type NavActionsProps = {
     onOpenRewards?: () => void
     // Highlights the Rewards chip (active-tab look) while its view is showing.
     rewardsActive?: boolean
+    // Opens the Excalidraw (Draw) canvas view.
+    onOpenExcalidraw?: () => void
+    // Highlights the Draw chip (active-tab look) while its view is showing.
+    excalidrawActive?: boolean
 }
 
 export function NavActions({
     onOpenTasks,
     tasksActive = false,
     onOpenRewards,
-    rewardsActive = false
+    rewardsActive = false,
+    onOpenExcalidraw,
+    excalidrawActive = false
 }: NavActionsProps) {
     const tasksClass = `${chipBase} ${tasksActive ? activeChip : inactiveChip} gap-1.5`
     const rewardsClass = `${chipBase} ${rewardsActive ? activeChip : inactiveChip} gap-1.5`
+    const excalidrawClass = `${chipBase} ${excalidrawActive ? activeChip : inactiveChip} gap-1.5`
     return (
         <>
             <button
@@ -72,6 +79,21 @@ export function NavActions({
                     <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" />
                 </svg>
                 Tasks
+            </button>
+            <button
+                type="button"
+                className={excalidrawClass}
+                style={excalidrawActive ? activeShadow : undefined}
+                title="Draw"
+                aria-pressed={excalidrawActive}
+                onClick={onOpenExcalidraw}
+            >
+                {/* A pencil (lucide pencil). */}
+                <svg {...iconProps}>
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+                Draw
             </button>
         </>
     )

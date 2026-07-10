@@ -1,0 +1,59 @@
+/* Reskin the Excalidraw editor to the questline parchment + gold look through its own CSS custom
+   properties. Excalidraw defines light values on `.excalidraw` (base) and only adds `.theme--dark` for
+   dark, so there is no `theme--light` class to hook. The doubled `.excalidraw.excalidraw` selector
+   (specificity 0,2,0) beats Excalidraw's own `.excalidraw` defaults (0,1,0) regardless of stylesheet
+   order, which matters because Vite's dev HMR can inject Excalidraw's CSS after ours. The canvas
+   background is set via viewBackgroundColor. Var-only, no class hacks, so it survives upgrades. */
+.excalidraw.excalidraw {
+    /* Active tool / selection accent: deep gold with a cream icon, light golds for tints. */
+    --color-primary: #b8892b;
+    --color-primary-darker: #9a7423;
+    --color-primary-darkest: #7d5e1c;
+    --color-primary-hover: #a67d26;
+    --color-primary-light: #f2e4b8;
+    --color-primary-light-darker: #ecdcae;
+    --color-on-primary: #fffdf5;
+
+    /* Sliders (font size, opacity): tan track, gold thumb. */
+    --color-slider-track: #e0d3ad;
+    --color-slider-thumb: #b8892b;
+
+    /* Surface ramp (0.18 token system behind buttons, controls, and text). Remapped to a parchment
+       ladder, keeping Excalidraw's elevation order lightest -> raised, with brown text on top. */
+    --color-surface-lowest: #fffdf5;
+    --color-surface-low: #f6edd6;
+    --color-surface-mid: #faf2dc;
+    --color-surface-high: #f4ecd0;
+    --color-on-surface: #4a3410;
+    --color-surface-primary-container: #ecdcae;
+    --color-on-primary-container: #6f5316;
+
+    /* Surfaces: parchment backdrop, transparent islands (float over the canvas), cream popups, tan borders. */
+    --default-bg-color: #f6edd6;
+    --island-bg-color: #f6edd6;
+    --default-border-color: #d8c48f;
+    --dialog-border-color: #d8c48f;
+    --overlay-bg-color: rgba(58, 42, 12, 0.4);
+
+    /* Island (toolbar / zoom / panels) shadow + radius, matching the roadmap cards. */
+    --shadow-island: 0 6px 16px -10px rgba(60, 40, 10, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    --border-radius-lg: 13px;
+
+    --popup-bg-color: #faf2dc;
+    --popup-secondary-bg-color: #efe1bd;
+    --popup-text-color: #4a3410;
+
+    --input-bg-color: #fffdf5;
+    --input-border-color: #d8c48f;
+    --input-hover-bg-color: #f6eccf;
+    --input-label-color: #9a7a34;
+
+    --button-hover-bg: #f4ead0;
+    --focus-highlight-color: #e6c458;
+    --select-highlight-color: #e6c458;
+    --link-color: #8a641d;
+
+    /* Scrollbars (panel / menu overflow): light tan thumb (matches the slider track), gold on hover. */
+    --scrollbar-thumb: #e0d3ad;
+    --scrollbar-thumb-hover: #b8892b;
+}
