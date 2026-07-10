@@ -771,6 +771,36 @@ describe("Rewards & gold (e2e)", () => {
         })
     })
 
+    context("the delete confirm modal", () => {
+        it("stays open when the reward modal itself is clicked (only outside / x closes it)", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete reward" }))
+            const title = await screen.findByText("Remove this reward?")
+
+            // A click inside the modal (a portal outside the card) must not start the card's dismissal.
+            // Firing animationEnd would complete any exit that got triggered, so a caught bug unmounts here.
+            fireEvent.pointerDown(title)
+            fireEvent.animationEnd(screen.getByTestId("reward-detail-card"))
+            expect(screen.getByText("Remove this reward?")).toBeInTheDocument()
+        })
+
+        it("stays open when the task modal itself is clicked", async () => {
+            render(<App />)
+            openTasksView()
+            fireEvent.click(await screen.findByRole("button", { name: /^Open Tick a task/ }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete task" }))
+            const title = await screen.findByText("Delete this task?")
+
+            fireEvent.pointerDown(title)
+            fireEvent.animationEnd(screen.getByTestId("task-detail-card"))
+            expect(screen.getByText("Delete this task?")).toBeInTheDocument()
+        })
+    })
+
     // Implemented (not todos): the reward detail-card UI. These drive <App /> and assert only card
     // behaviour (open / edit / delete / add-vs-edit), never gold or redeem math.
     context("the reward detail card", () => {

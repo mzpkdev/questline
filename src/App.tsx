@@ -264,7 +264,8 @@ export function App() {
             if (
                 target?.closest("[data-task-detail-card]") ||
                 target?.closest("[data-task-tile]") ||
-                target?.closest("[data-tabbar]")
+                target?.closest("[data-tabbar]") ||
+                target?.closest('[role="alertdialog"]')
             ) {
                 return
             }
@@ -311,7 +312,8 @@ export function App() {
                 target?.closest("[data-reward-detail-card]") ||
                 target?.closest("[data-reward-id]") ||
                 target?.closest("[data-add-reward-trigger]") ||
-                target?.closest("[data-tabbar]")
+                target?.closest("[data-tabbar]") ||
+                target?.closest('[role="alertdialog"]')
             ) {
                 return
             }
