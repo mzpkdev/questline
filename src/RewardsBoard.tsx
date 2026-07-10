@@ -157,12 +157,12 @@ function RewardTile({
         <div
             ref={cardRef}
             data-reward-id={reward.id}
-            // The whole tile opens the detail card (redeem / remove stop propagation); redeemed tiles are
-            // locked, so they don't.
-            onClick={redeemed ? undefined : () => onSelect(reward.id)}
-            className={`relative flex min-h-[132px] flex-col gap-3 rounded-[15px] p-4 transition-[box-shadow] duration-150 ease-out animate-[itemIn_0.25s_ease] ${
+            // The whole tile opens the detail card (redeem / remove stop propagation). Redeemed tiles
+            // open too, so a redeemed reward can be edited like any other.
+            onClick={() => onSelect(reward.id)}
+            className={`relative flex min-h-[132px] cursor-pointer flex-col gap-3 rounded-[15px] p-4 transition-[box-shadow] duration-150 ease-out animate-[itemIn_0.25s_ease] ${
                 affordable ? CARD_SHADOW : CARD_SHADOW_SUBTLE
-            } ${redeemed ? "opacity-[0.58]" : `cursor-pointer ${affordable ? "" : "opacity-[0.92]"}`} ${
+            } ${redeemed ? "opacity-[0.58]" : affordable ? "" : "opacity-[0.92]"} ${
                 selected ? "ring-2 ring-[#e6c458] ring-offset-1 ring-offset-[#f6edd6]" : ""
             }`}
             style={affordable ? CARD_STYLE : CARD_LOCKED_STYLE}
@@ -181,25 +181,18 @@ function RewardTile({
                     &times;
                 </button>
             )}
-            {/* Redeemed tiles are locked in (read-only); unredeemed ones open the detail card to edit. */}
-            {redeemed ? (
-                <span className="inline-flex items-start gap-1.5 break-words pr-8 font-display text-[16px] font-semibold leading-tight text-[#a2916c] line-through">
-                    {reward.name}
-                    {replenishBadge}
-                </span>
-            ) : (
-                <button
-                    type="button"
-                    aria-label={`Open ${reward.name}`}
-                    onClick={() => onSelect(reward.id)}
-                    className={`inline-flex items-start gap-1.5 break-words bg-transparent pr-8 text-left font-display text-[16px] font-semibold leading-tight transition-colors duration-150 ease-out hover:text-[#8a641d] ${
-                        affordable ? "text-[#6f5316]" : "text-[#8a7c5a]"
-                    }`}
-                >
-                    {reward.name}
-                    {replenishBadge}
-                </button>
-            )}
+            {/* The name opens the detail card (redeemed included, so it edits like any other reward). */}
+            <button
+                type="button"
+                aria-label={`Open ${reward.name}`}
+                onClick={() => onSelect(reward.id)}
+                className={`inline-flex items-start gap-1.5 break-words bg-transparent pr-8 text-left font-display text-[16px] font-semibold leading-tight transition-colors duration-150 ease-out hover:text-[#8a641d] ${
+                    redeemed ? "text-[#a2916c] line-through" : affordable ? "text-[#6f5316]" : "text-[#8a7c5a]"
+                }`}
+            >
+                {reward.name}
+                {replenishBadge}
+            </button>
             <span
                 className={`mt-auto inline-flex items-center gap-1.5 font-display text-[17px] font-bold ${
                     affordable ? "text-[#4a3410]" : "text-[#8a7c5a]"
@@ -294,6 +287,7 @@ export function RewardDetailCard({
     onAdd,
     onEdit,
     onDelete,
+    onUnredeem,
     closing,
     onExited
 }: {
@@ -301,6 +295,7 @@ export function RewardDetailCard({
     onAdd?: (name: string, price: number, replenish: boolean) => void
     onEdit?: (patch: { name?: string; price?: number; replenish?: boolean }) => void
     onDelete?: () => void
+    onUnredeem?: () => void
     closing?: boolean
     onExited?: () => void
 }) {
@@ -443,6 +438,16 @@ export function RewardDetailCard({
                                 <p className="mt-3 text-[13px] italic text-[#a2916c]">
                                     Auto-replenishes: restocks a fresh copy each time it's redeemed.
                                 </p>
+                            )}
+                            {reward.redeemedAt !== undefined && (
+                                <>
+                                    <p className="mt-3 text-[13px] italic text-[#a2916c]">
+                                        Redeemed {redeemedOn(reward.redeemedAt)}.
+                                    </p>
+                                    <button type="button" className={ADD_BTN} onClick={onUnredeem}>
+                                        Unredeem
+                                    </button>
+                                </>
                             )}
                         </>
                     )}

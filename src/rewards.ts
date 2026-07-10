@@ -105,6 +105,19 @@ export function redeem(list: Reward[], id: string, gold: number, now: number, re
     return next
 }
 
+// Un-redeem a reward by id: clears its `redeemedAt` so it leaves spentGold and its gold returns to the
+// purse, back to an ordinary unredeemed tile. A not-redeemed or unknown id keeps the same reference.
+export function unredeem(list: Reward[], id: string): Reward[] {
+    const reward = list.find((r) => r.id === id)
+    if (!reward || reward.redeemedAt === undefined) return list
+    return list.map((r) => {
+        if (r.id !== id) return r
+        const next = { ...r }
+        delete next.redeemedAt
+        return next
+    })
+}
+
 // Total gold spent: the price of every redeemed reward, counting ones that have aged off the shelf so a
 // spend is never refunded when its tile disappears.
 export function spentGold(list: Reward[]): number {

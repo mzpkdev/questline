@@ -18,6 +18,7 @@ import {
     type Reward,
     SEED_REWARDS,
     spentGold,
+    unredeem,
     visible as visibleRewards
 } from "./rewards"
 import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
@@ -445,10 +446,17 @@ export function App() {
         (id: string, patch: { text?: string; reward?: number }) => setTasks((prev) => edit(prev, id, patch)),
         []
     )
-    const deleteTaskItem = useCallback((id: string) => {
-        setTasks((prev) => remove(prev, id))
-        setSelectedTaskId(null)
-    }, [])
+    const deleteTaskItem = useCallback(
+        (id: string) => {
+            // Deleting is gold-neutral: a done task's reward is already in the balance, so bank it before
+            // dropping the record (an open task contributed nothing).
+            const task = tasks.find((t) => t.id === id)
+            if (task && task.done) setBanked((b) => ({ ...b, earned: b.earned + task.reward }))
+            setTasks((prev) => remove(prev, id))
+            setSelectedTaskId(null)
+        },
+        [tasks]
+    )
 
     // Rewards: open the shop, and add / redeem / remove its rewards. One global shelf, so these never
     // touch the active project. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
@@ -479,10 +487,19 @@ export function App() {
             setRewards((prev) => editReward(prev, id, patch)),
         []
     )
-    const deleteRewardItem = useCallback((id: string) => {
-        setRewards((prev) => removeReward(prev, id))
-        setSelectedRewardId(null)
-    }, [])
+    const deleteRewardItem = useCallback(
+        (id: string) => {
+            // Gold-neutral: a redeemed reward's price is already spent, so bank it before dropping the
+            // record (an unredeemed one contributed nothing, so no bank).
+            const reward = rewards.find((r) => r.id === id)
+            if (reward && reward.redeemedAt !== undefined) setBanked((b) => ({ ...b, spent: b.spent + reward.price }))
+            setRewards((prev) => removeReward(prev, id))
+            setSelectedRewardId(null)
+        },
+        [rewards]
+    )
+    // Un-redeem a reward: clears its redeemedAt, so the spend drops out and the gold returns.
+    const unredeemRewardItem = useCallback((id: string) => setRewards((prev) => unredeem(prev, id)), [])
     // Mint an id up front for a possible replenished copy; redeem uses it only when the reward restocks
     // (an unused id just leaves a harmless gap in the sequence).
     const redeemReward = useCallback(
@@ -493,8 +510,6 @@ export function App() {
             nextRewardId.current += 1
             const replenishId = `reward-${nextRewardId.current}`
             setRewards((prev) => redeem(prev, id, gold, Date.now(), replenishId))
-            // A redeemed reward is locked in (no edit), so close its detail card if it was the open one.
-            setSelectedRewardId((cur) => (cur === id ? null : cur))
         },
         [gold, rewards, sfx]
     )
@@ -1107,6 +1122,7 @@ export function App() {
                                     closing={rewardClosing}
                                     onEdit={(patch) => editRewardItem(displayedReward.id, patch)}
                                     onDelete={() => deleteRewardItem(displayedReward.id)}
+                                    onUnredeem={() => unredeemRewardItem(displayedReward.id)}
                                     onExited={() => setDisplayRewardId(null)}
                                 />
                             </aside>

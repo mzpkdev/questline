@@ -315,6 +315,24 @@ describe("Rewards & gold (e2e)", () => {
             expect(balance()).toBe(BASE_GOLD)
         })
 
+        it("keeps the balance when a done task is deleted (banks the earn)", async () => {
+            render(<App />)
+            await earnViaTask("Chore", 2) // balance BASE_GOLD + 2
+            openShop()
+            await waitFor(() => expect(balance()).toBe(BASE_GOLD + 2))
+
+            // Delete the done task from its card; its earned gold is banked, so the balance holds.
+            openTasksView()
+            fireEvent.click(await screen.findByRole("button", { name: "Open Chore" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete task" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+            await waitFor(() => expect(screen.queryByRole("button", { name: "Open Chore" })).toBeNull())
+
+            openShop()
+            expect(balance()).toBe(BASE_GOLD + 2)
+        })
+
         it("keeps earned gold when a completed task ages off the board after 14 days", async () => {
             const start = Date.UTC(2026, 6, 9, 12)
             setNow(start)
@@ -333,27 +351,6 @@ describe("Rewards & gold (e2e)", () => {
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 1)
-        })
-
-        it("loses a done task's reward when the task is deleted", async () => {
-            render(<App />)
-            openTasksView()
-            fireEvent.click(await screen.findByRole("button", { name: /^Check Tick a task/ }))
-            await screen.findByRole("button", { name: /^Uncheck Tick a task/ })
-
-            openShop()
-            await screen.findByRole("button", { name: "Open Fancy coffee" })
-            expect(balance()).toBe(BASE_GOLD + 1)
-
-            // Delete the done task from its detail card; its gold leaves the purse.
-            openTasksView()
-            fireEvent.click(await screen.findByRole("button", { name: /^Open Tick a task/ }))
-            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Delete task" }))
-            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
-
-            openShop()
-            await waitFor(() => expect(balance()).toBe(BASE_GOLD))
         })
 
         it("combines task gold with roadmap gold in a single purse total", async () => {
@@ -429,18 +426,19 @@ describe("Rewards & gold (e2e)", () => {
             expect(await screen.findByText(`Redeemed ${stamped}`)).toBeInTheDocument()
         })
 
-        it("keeps the redeemed tile on the shelf but strips its Redeem and Remove actions", async () => {
+        it("keeps a redeemed tile openable for edits, with no re-redeem or tile-remove control", async () => {
             render(<App />)
             openShop()
             fireEvent.click(await screen.findByRole("button", { name: "Redeem Fancy coffee" }))
             await screen.findByText(/^Redeemed /)
 
-            // The tile stays on the shelf...
+            // The tile stays on the shelf, with no re-redeem and no tile-level remove...
             expect(document.querySelector('[data-reward-id="reward-1"]')).not.toBeNull()
-            // ...but is locked in: no Redeem, no Remove, and no way to open it for edits.
             expect(screen.queryByRole("button", { name: "Redeem Fancy coffee" })).toBeNull()
             expect(screen.queryByRole("button", { name: "Remove Fancy coffee" })).toBeNull()
-            expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull()
+            // ...but it opens the detail card for edits, like any other reward.
+            fireEvent.click(screen.getByRole("button", { name: "Open Fancy coffee" }))
+            expect(await screen.findByTestId("reward-detail-card")).toBeInTheDocument()
         })
 
         it("plays the coin sound only when the redemption actually goes through", async () => {
@@ -485,6 +483,22 @@ describe("Rewards & gold (e2e)", () => {
 
             // Movie night (12) can no longer be afforded, so its Redeem is gated.
             expect(screen.getByRole("button", { name: "Redeem Movie night" })).toBeDisabled()
+        })
+
+        it("un-redeems from the detail card, returning the gold", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Redeem Fancy coffee" })) // 3 -> 0
+            await screen.findByText(/^Redeemed /)
+            expect(balance()).toBe(0)
+
+            // Open the redeemed tile and un-redeem from the card.
+            fireEvent.click(screen.getByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Unredeem" }))
+
+            // The gold is back and the tile is redeemable again.
+            await waitFor(() => expect(balance()).toBe(BASE_GOLD))
+            expect(await screen.findByRole("button", { name: "Redeem Fancy coffee" })).toBeEnabled()
         })
     })
 
@@ -558,8 +572,9 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(screen.getByRole("button", { name: "Redeem Latte" }))
 
             // The spent copy is stamped redeemed, and a fresh, unredeemed copy is dropped back on the shelf.
+            // Both are openable now, so two Open Latte tiles are present.
             await screen.findByText(/^Redeemed /)
-            expect(screen.getByRole("button", { name: "Open Latte" })).toBeInTheDocument()
+            expect(screen.getAllByRole("button", { name: "Open Latte" })).toHaveLength(2)
         })
 
         it("keeps the spent copy on the shelf lingering out its window beside the restock", async () => {
@@ -569,9 +584,10 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(screen.getByRole("button", { name: "Redeem Latte" }))
             await screen.findByText(/^Redeemed /)
 
-            // Both are present at once: the spent copy (redeemed, lingering) and the restocked copy (openable).
+            // Both are present at once: the spent copy (redeemed, lingering) and the restocked copy. Both
+            // open now, so there is one Redeemed label beside two Open Latte tiles.
             expect(screen.getByText(/^Redeemed /)).toBeInTheDocument()
-            expect(screen.getByRole("button", { name: "Open Latte" })).toBeInTheDocument()
+            expect(screen.getAllByRole("button", { name: "Open Latte" })).toHaveLength(2)
         })
 
         it("lets a replenish reward be redeemed again once the balance covers it", async () => {
@@ -596,8 +612,8 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(await screen.findByRole("button", { name: "Redeem Fancy coffee" }))
             await screen.findByText(/^Redeemed /)
 
-            // Only the one spent tile remains; no fresh copy respawns.
-            expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull()
+            // Only the one spent tile remains (openable now); no fresh copy respawns, so exactly one.
+            expect(screen.getAllByRole("button", { name: "Open Fancy coffee" })).toHaveLength(1)
             expect(screen.getAllByText("Fancy coffee")).toHaveLength(1)
         })
     })
@@ -735,6 +751,23 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(await screen.findByRole("button", { name: "Remove" }))
             await waitFor(() => expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull())
             expect(balance()).toBe(BASE_GOLD)
+        })
+
+        it("keeps the balance when a redeemed reward is deleted (banks the spend)", async () => {
+            render(<App />)
+            openShop()
+            fireEvent.click(await screen.findByRole("button", { name: "Redeem Fancy coffee" })) // 3 -> 0
+            await screen.findByText(/^Redeemed /)
+            expect(balance()).toBe(0)
+
+            // Delete the redeemed reward from its card; the spend is banked, so it never refunds.
+            fireEvent.click(screen.getByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete reward" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Remove" }))
+            await waitFor(() => expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull())
+
+            expect(balance()).toBe(0)
         })
     })
 

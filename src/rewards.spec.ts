@@ -1,4 +1,4 @@
-import { compact, REDEEMED_TTL_MS } from "./rewards"
+import { compact, REDEEMED_TTL_MS, unredeem } from "./rewards"
 import { DONE_TTL_MS } from "./tasks"
 
 // A clock well past both 14-day windows, so ages are computed against a stable "now".
@@ -58,5 +58,18 @@ describe("compact", () => {
         expect(out.tasks).toBe(tasks)
         expect(out.rewards).toBe(rewards)
         expect(out.banked).toBe(banked)
+    })
+})
+
+describe("unredeem", () => {
+    it("clears redeemedAt so the reward is unredeemed again", () => {
+        const out = unredeem([{ id: "r", name: "x", price: 3, redeemedAt: 123 }], "r")
+        expect(out[0]?.redeemedAt).toBeUndefined()
+    })
+
+    it("is a no-op (same reference) for a not-redeemed or unknown id", () => {
+        const list = [{ id: "r", name: "x", price: 3 }]
+        expect(unredeem(list, "r")).toBe(list)
+        expect(unredeem(list, "nope")).toBe(list)
     })
 })
