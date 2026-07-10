@@ -4,6 +4,7 @@ import { TasksBoard } from "./TasksBoard"
 import { TaskDetailCard } from "./TaskDetailCard"
 import { Corners } from "./Corners"
 import { NodeDetailCard } from "./NodeDetailCard"
+import { ConfirmDialog } from "./ConfirmDialog"
 import { GoalCelebration } from "./GoalCelebration"
 import { complete, descendantsOf, parentOf, stateOf, uncomplete } from "./graph"
 import { IoButtons } from "./IoButtons"
@@ -883,6 +884,12 @@ export function App() {
         if (sync.pendingAdopt !== null || sync.conflict) setSection("sync")
     }, [sync.pendingAdopt, sync.conflict])
 
+    // Warn once when sync is stalled by an over-limit push; reset so a later oversize warns again.
+    const [oversizedDismissed, setOversizedDismissed] = useState(false)
+    useEffect(() => {
+        if (!sync.oversized) setOversizedDismissed(false)
+    }, [sync.oversized])
+
     const tabs = order.flatMap((id) => {
         const project = projects[id]
         const goal = project?.milestones[project.goalId]
@@ -1216,6 +1223,21 @@ export function App() {
                 )}
                 </SectionTransition>
             </div>
+            <ConfirmDialog
+                open={sync.oversized && !oversizedDismissed}
+                title="Data too large to sync"
+                message={
+                    <>
+                        Your data has grown past the sync size limit, so changes have stopped syncing to your other
+                        devices. Everything is still saved on this device; remove some content to resume syncing.
+                    </>
+                }
+                confirmLabel="Got it"
+                onConfirm={() => setOversizedDismissed(true)}
+                onOpenChange={(open) => {
+                    if (!open) setOversizedDismissed(true)
+                }}
+            />
         </div>
     )
 }

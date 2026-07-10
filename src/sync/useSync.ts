@@ -39,6 +39,9 @@ export type UseSyncResult = {
     pendingAdopt: string | null
     // Both sides diverged; the user must choose. Null when there's no conflict.
     conflict: boolean
+    // The last push was rejected as too large (413): local data is safe, but remote sync is stalled
+    // until the roadmap shrinks. Cleared on the next successful push.
+    oversized: boolean
     enable: () => void
     disable: () => void
     regenerate: () => void
@@ -51,6 +54,8 @@ export function useSync(slices: PersistedSlices, applyRemote: (slices: Persisted
     const enabled = syncEnabled()
 
     const [status, setStatus] = useState<SyncStatus>(enabled ? "idle" : "off")
+    // Set when a push is rejected as too large (413); the app surfaces a one-off warning modal.
+    const [oversized, setOversized] = useState(false)
     const [code, setCode] = useState<string | null>(() => (enabled ? readCode() : null))
     // A pairing code from the URL fragment, captured during render (before any effect can strip the
     // fragment) and held until the user confirms. Ignored when it's already this device's own code.
@@ -95,8 +100,10 @@ export function useSync(slices: PersistedSlices, applyRemote: (slices: Persisted
             if (outcome.ok) {
                 dirtyRef.current = false
                 writeVersion(outcome.version)
+                setOversized(false)
                 setStatus("idle")
             } else {
+                if (outcome.status === 413) setOversized(true)
                 setStatus("error")
             }
         } catch {
@@ -290,6 +297,7 @@ export function useSync(slices: PersistedSlices, applyRemote: (slices: Persisted
         pairingLink: code ? pairingLink(code) : null,
         pendingAdopt,
         conflict: conflict !== null,
+        oversized,
         enable: startFresh,
         disable,
         regenerate: startFresh,
