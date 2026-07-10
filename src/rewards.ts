@@ -25,6 +25,10 @@ export type Reward = {
 // How long a redeemed reward lingers on the shelf before it drops off: 14 days (mirrors tasks).
 export const REDEEMED_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
+// Defaults for a reward created straight from the shelf's + tile (then edited in its card).
+export const DEFAULT_REWARD_NAME = "New Reward"
+export const DEFAULT_REWARD_PRICE = 5
+
 // First-run shop so the shelves aren't bare on a fresh install: three everyday treats a regular person
 // might reward themselves with, cheap to dear. Shown only until the user edits their own list.
 export const SEED_REWARDS: Reward[] = [

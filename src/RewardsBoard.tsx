@@ -5,10 +5,10 @@
 // first cut, so redeeming just spends gold and leaves the card on the shelf (App owns the state; the
 // pure ops + gold rule live in rewards.ts).
 
-import { type FormEvent, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
-import { ioButtonClass } from "./IoButtons"
+import { PlusIcon } from "./PlusIcon"
 import type { Reward } from "./rewards"
 import { prefersReducedMotion } from "./nodeMotion"
 
@@ -97,9 +97,8 @@ type RewardsBoardProps = {
     onRedeem: (id: string) => void
     // Opens the reward's detail card (rendered by App in the shared detail-card aside).
     onSelectReward: (id: string) => void
-    // Opens the "New reward" card (rendered by App in the shared detail-card aside).
-    onOpenAdd: () => void
-    onRemoveReward: (id: string) => void
+    // Creates a default reward and opens its detail card in edit mode (App handles select + edit).
+    onAddReward: () => void
 }
 
 // Short date for a redeemed reward's tile, e.g. "Jul 8".
@@ -110,15 +109,13 @@ function RewardTile({
     gold,
     selected,
     onRedeem,
-    onSelect,
-    onRequestRemove
+    onSelect
 }: {
     reward: Reward
     gold: number
     selected?: boolean
     onRedeem: (id: string) => void
     onSelect: (id: string) => void
-    onRequestRemove: (reward: Reward) => void
 }) {
     const cardRef = useRef<HTMLDivElement>(null)
     const redeemed = reward.redeemedAt !== undefined
@@ -167,20 +164,6 @@ function RewardTile({
             }`}
             style={affordable ? CARD_STYLE : CARD_LOCKED_STYLE}
         >
-            {/* Redeemed rewards are locked in: no remove affordance. */}
-            {!redeemed && (
-                <button
-                    type="button"
-                    aria-label={`Remove ${reward.name}`}
-                    onClick={(event) => {
-                        event.stopPropagation()
-                        onRequestRemove(reward)
-                    }}
-                    className={`${ioButtonClass} absolute right-3 top-3 text-[15px] leading-none`}
-                >
-                    &times;
-                </button>
-            )}
             {/* The name opens the detail card (redeemed included, so it edits like any other reward). */}
             <button
                 type="button"
@@ -277,35 +260,41 @@ function ReplenishCheckbox({ checked, onChange }: { checked: boolean; onChange: 
     )
 }
 
-// The reward detail card: the milestone NodeDetailCard's gold-framed shell in the top-right aside. With
-// no `reward` it is the blank "New reward" add form (submit adds; a blank name is ignored). With a
-// `reward` it opens in a read view whose pencil flips to an edit view (name / price / auto-replenish,
-// patched live like TaskDetailCard) plus a delete. App drives open / close (outside-click + Escape) and
-// passes `closing` / `onExited` for the exit animation, mirroring the task and milestone cards.
+// The reward detail card: the milestone NodeDetailCard's gold-framed shell in the top-right aside. It
+// opens in a read view whose pencil flips to an edit view (name / price / auto-replenish, patched live
+// like TaskDetailCard) plus a delete; `initialEditing` opens straight in edit mode (a just-created
+// reward), focusing its name. App drives open / close (outside-click + Escape) and passes
+// `closing` / `onExited` for the exit animation, mirroring the task and milestone cards.
 export function RewardDetailCard({
     reward,
-    onAdd,
     onEdit,
     onDelete,
     onUnredeem,
+    initialEditing = false,
     closing,
     onExited
 }: {
-    reward?: Reward
-    onAdd?: (name: string, price: number, replenish: boolean) => void
+    reward: Reward
     onEdit?: (patch: { name?: string; price?: number; replenish?: boolean }) => void
     onDelete?: () => void
     onUnredeem?: () => void
+    initialEditing?: boolean
     closing?: boolean
     onExited?: () => void
 }) {
-    const [editing, setEditing] = useState(false)
+    const [editing, setEditing] = useState(initialEditing)
     const [confirmOpen, setConfirmOpen] = useState(false)
-    // Add-mode buffer (idle while editing an existing reward, which patches live through onEdit).
-    const [name, setName] = useState("")
-    const [price, setPrice] = useState("")
-    const [replenish, setReplenish] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
+    const nameRef = useRef<HTMLInputElement>(null)
+
+    // A just-created reward opens in edit mode: focus and select its name so a rename is one keystroke
+    // away. Mount-only (the card remounts per reward), so it never steals focus on a later edit toggle.
+    useEffect(() => {
+        if (initialEditing) {
+            nameRef.current?.focus()
+            nameRef.current?.select()
+        }
+    }, [initialEditing])
 
     // Fire onExited once the dismissal animation ends, mirroring NodeDetailCard, so App unmounts the card
     // only after the exit plays.
@@ -318,15 +307,6 @@ export function RewardDetailCard({
         return () => el.removeEventListener("animationend", handleEnd)
     }, [closing, onExited])
 
-    const submit = (event: FormEvent) => {
-        event.preventDefault()
-        if (!name.trim()) return
-        onAdd?.(name, Number(price), replenish)
-        setName("")
-        setPrice("")
-        setReplenish(false)
-    }
-
     const animation = closing
         ? "animate-[cardSwapOut_0.2s_ease-in_forwards]"
         : "animate-[cardSwap_0.26s_cubic-bezier(0.2,0.75,0.25,1)]"
@@ -334,11 +314,10 @@ export function RewardDetailCard({
     return (
         <div
             ref={rootRef}
-            data-testid={reward ? "reward-detail-card" : "add-reward-card"}
+            data-testid="reward-detail-card"
             className={`relative font-serif ${animation}`}
             style={ADD_CARD_STYLE}
         >
-            {reward ? (
                 <>
                     <button
                         type="button"
@@ -372,6 +351,7 @@ export function RewardDetailCard({
                     {editing ? (
                         <>
                             <input
+                                ref={nameRef}
                                 aria-label="Reward name"
                                 className={`${INPUT_CLASS} pr-10`}
                                 value={reward.name}
@@ -452,47 +432,6 @@ export function RewardDetailCard({
                         </>
                     )}
                 </>
-            ) : (
-                <form onSubmit={submit} noValidate className="flex flex-col">
-                    {/* App-level validation only (a blank name is ignored, the price is coerced in addReward),
-                        so bypass native constraint validation -- otherwise a fractional / sub-1 price would fail
-                        the min/step check and silently block the submit instead of being coerced. */}
-                    <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">New reward</h3>
-                    <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">
-                        Name it and set what it costs in gold.
-                    </p>
-                    {/* biome-ignore lint/a11y/noAutofocus: opening the card should take focus for a quick entry */}
-                    <input
-                        autoFocus
-                        aria-label="Reward name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        placeholder="Reward name"
-                        maxLength={60}
-                        className={INPUT_CLASS}
-                    />
-                    <span className="mb-1.5 mt-4 font-display text-[10.5px] uppercase tracking-[1.5px] text-[#9a7a34]">
-                        Cost in gold
-                    </span>
-                    <div className="flex items-center gap-2">
-                        <Coin size={20} />
-                        <input
-                            aria-label="Cost in gold"
-                            value={price}
-                            onChange={(event) => setPrice(event.target.value)}
-                            type="number"
-                            min={1}
-                            step={1}
-                            placeholder="0"
-                            className={`${INPUT_CLASS} min-w-0 flex-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                        />
-                    </div>
-                    <ReplenishCheckbox checked={replenish} onChange={setReplenish} />
-                    <button type="submit" className={ADD_BTN}>
-                        Add reward
-                    </button>
-                </form>
-            )}
         </div>
     )
 }
@@ -503,13 +442,9 @@ export function RewardsBoard({
     selectedId,
     onRedeem,
     onSelectReward,
-    onOpenAdd,
-    onRemoveReward
+    onAddReward
 }: RewardsBoardProps) {
     const purseRef = usePurseBump(gold)
-    // The reward pending removal: set by its ×, cleared on confirm or cancel. Drives the same confirm
-    // modal the tabs use before deleting.
-    const [pendingRemove, setPendingRemove] = useState<Reward | null>(null)
 
     return (
         <div className="mx-auto w-[95%] max-w-[1040px] px-1 py-10">
@@ -547,7 +482,6 @@ export function RewardsBoard({
                         selected={selectedId === reward.id}
                         onRedeem={onRedeem}
                         onSelect={onSelectReward}
-                        onRequestRemove={setPendingRemove}
                     />
                 ))}
                 <button
@@ -555,42 +489,13 @@ export function RewardsBoard({
                     data-add-reward-trigger=""
                     aria-label="Add a reward"
                     title="Add a reward"
-                    onClick={onOpenAdd}
-                    className="grid min-h-[132px] w-full place-items-center rounded-[15px] border-2 border-dashed border-[#cdb373] bg-transparent text-[#b79a52] opacity-50 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
+                    onClick={onAddReward}
+                    className="flex min-h-[132px] w-full items-center justify-center gap-2 rounded-[15px] border-2 border-dashed border-[#cdb373] bg-transparent font-display text-[12.5px] font-semibold uppercase tracking-[1px] text-[#b79a52] opacity-60 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
                 >
-                    <svg
-                        viewBox="0 0 24 24"
-                        width={40}
-                        height={40}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={1.8}
-                        strokeLinecap="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M12 5v14M5 12h14" />
-                    </svg>
+                    <PlusIcon />
+                    Add Reward
                 </button>
             </div>
-
-            <ConfirmDialog
-                open={pendingRemove !== null}
-                title="Remove this reward?"
-                message={
-                    <>
-                        Delete <strong className="font-semibold text-[#4a3410]">{pendingRemove?.name}</strong>? This
-                        can't be undone.
-                    </>
-                }
-                confirmLabel="Remove"
-                onConfirm={() => {
-                    if (pendingRemove) onRemoveReward(pendingRemove.id)
-                    setPendingRemove(null)
-                }}
-                onOpenChange={(open) => {
-                    if (!open) setPendingRemove(null)
-                }}
-            />
         </div>
     )
 }

@@ -14,7 +14,8 @@ const slices = () => ({
         { id: "reward-1", name: "Fancy coffee", price: 3 },
         { id: "reward-2", name: "Weekend trip", price: 40 }
     ],
-    banked: { earned: 0, spent: 0 }
+    banked: { earned: 0, spent: 0 },
+    notes: []
 })
 
 describe("persist", () => {
@@ -44,6 +45,26 @@ describe("persist", () => {
             tasks: [{ id: "task-1", text: "done one", done: true, completedAt: 1_700_000_000_000, reward: 1 }]
         }
         expect(deserialize(serialize(withCompletedAt))?.tasks[0]?.completedAt).toBe(1_700_000_000_000)
+    })
+
+    it("round-trips Draw notes, scene and all", () => {
+        const withNotes = {
+            ...slices(),
+            notes: [{ id: "note-1", title: "Sketch", scene: { elements: [{ id: "a" }], appState: {}, files: {} }, updatedAt: 42 }]
+        }
+        expect(deserialize(serialize(withNotes))?.notes).toEqual(withNotes.notes)
+    })
+
+    it("defaults a missing notes list to empty (a pre-notes v3 save)", () => {
+        const legacy = JSON.parse(serialize(slices()))
+        delete legacy.notes
+        expect(deserialize(JSON.stringify(legacy))?.notes).toEqual([])
+    })
+
+    it("rejects a malformed note", () => {
+        const valid = JSON.parse(serialize(slices()))
+        // A note missing its scene is malformed and rejects the whole file.
+        expect(deserialize(JSON.stringify({ ...valid, notes: [{ id: "note-1", title: "x", updatedAt: 1 }] }))).toBeNull()
     })
 
     it("stamps the current version", () => {

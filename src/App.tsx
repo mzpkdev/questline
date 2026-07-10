@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { addTask, edit, type Task, remove, reorder, SEED_TASKS, toggle, visible } from "./tasks"
+import { addTask, DEFAULT_TASK_NAME, edit, type Task, remove, reorder, SEED_TASKS, toggle, visible } from "./tasks"
 import { TasksBoard } from "./TasksBoard"
 import { TaskDetailCard } from "./TaskDetailCard"
 import { Corners } from "./Corners"
@@ -12,6 +12,8 @@ import {
     addReward,
     type Banked,
     compact,
+    DEFAULT_REWARD_NAME,
+    DEFAULT_REWARD_PRICE,
     earnedGold,
     editReward,
     redeem,
@@ -26,6 +28,7 @@ import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
 import { MilestoneTree } from "./MilestoneTree"
 import { DEFAULT_GOAL_REWARD, DEFAULT_NODE_REWARD, type Milestone, type MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
+import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
 import { deleteMilestone, newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
 import { SectionTransition } from "./SectionTransition"
@@ -36,7 +39,9 @@ import { SyncBoard } from "./sync/SyncBoard"
 import { SyncNavButton } from "./sync/SyncNavButton"
 import { useSync } from "./sync/useSync"
 
-// Lazy so Excalidraw's bundle + CSS only load when the Draw tab is opened, not on first paint.
+// Lazy so Excalidraw's bundle + CSS only load when the Draw tab is opened, not on first paint. Both
+// the notes wall (DrawBoard renders thumbnails via Excalidraw's exporter) and the editor share that chunk.
+const DrawBoard = lazy(() => import("./DrawBoard").then((m) => ({ default: m.DrawBoard })))
 const ExcalidrawBoard = lazy(() => import("./ExcalidrawBoard").then((m) => ({ default: m.ExcalidrawBoard })))
 
 // Auto-placement for a new sub-milestone: drop it a tier below the parent (matches the seed's ~160px
@@ -61,12 +66,14 @@ type Boot = {
     tasks: Task[]
     rewards: Reward[]
     banked: Banked
+    notes: Note[]
     activeId: string
     selectedId: string | null
     nextNodeId: number
     nextViewId: number
     nextTaskId: number
     nextRewardId: number
+    nextNoteId: number
     hadHash: boolean
 }
 function computeBoot(): Boot {
@@ -79,6 +86,8 @@ function computeBoot(): Boot {
     // from before these views simply had none, and loads empty rather than re-seeding.
     const rawTasks = loaded?.tasks ?? SEED_TASKS
     const rawRewards = loaded?.rewards ?? SEED_REWARDS
+    // Draw notes start empty (no tutorial seed); an existing save loads whatever it had.
+    const notes = loaded?.notes ?? []
     // Counters resume past whatever ids the loaded/seed data already uses. Computed before pruning so a
     // banked-away id is never reissued.
     const nextNodeId = maxCounter(
@@ -93,6 +102,10 @@ function computeBoot(): Boot {
     const nextRewardId = maxCounter(
         rawRewards.map((reward) => reward.id),
         "reward"
+    )
+    const nextNoteId = maxCounter(
+        notes.map((note) => note.id),
+        "note"
     )
     // Fold any task/reward already past its 14-day window into the banked totals and drop it, so storage
     // stays small across reloads while the balance (banked + live) is unchanged.
@@ -109,10 +122,12 @@ function computeBoot(): Boot {
         tasks,
         rewards,
         banked,
+        notes,
         nextNodeId,
         nextViewId,
         nextTaskId,
-        nextRewardId
+        nextRewardId,
+        nextNoteId
     }
 
     const hashId = window.location.hash.slice(1)
@@ -144,6 +159,9 @@ export function App() {
     // `selectedId` on dismissal so the exit animation can play before the card unmounts.
     const [selectedId, setSelectedId] = useState<string | null>(boot.selectedId)
     const [displayId, setDisplayId] = useState<string | null>(boot.selectedId)
+    // A milestone just added via the detail card: its card opens in edit mode so the name is editable at
+    // once. Cleared the moment that card mounts, so re-selecting the node later opens the read view.
+    const [editOnAddId, setEditOnAddId] = useState<string | null>(null)
     // Dragged positions of Root's mirror nodes, keyed by mirror id. Mirrors are otherwise derived, so
     // their layout lives here rather than in any project.
     const [mirrorPos, setMirrorPos] = useState<Record<string, { x: number; y: number }>>(boot.mirrorPos)
@@ -156,25 +174,32 @@ export function App() {
     // Gold earned/spent by tasks and rewards pruned past their 14-day window (folded in at load by
     // compact()). Added to the live sums so the balance is unchanged by that compaction.
     const [banked, setBanked] = useState<Banked>(boot.banked)
+    // The Draw wall: standalone Excalidraw notes. `editingNoteId` picks the note open in the full editor;
+    // null shows the masonry grid of all notes.
+    const [notes, setNotes] = useState<Note[]>(boot.notes)
+    const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+    // The just-added scribble, ringed briefly on the wall so a new card is easy to spot.
+    const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null)
     const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync" | "excalidraw">("roadmap")
     // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
     // id the card actually shows -- `displayTaskId` trails `selectedTaskId` on dismissal so the exit
     // animation can play before the card unmounts (mirrors selectedId / displayId for milestones).
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
     const [displayTaskId, setDisplayTaskId] = useState<string | null>(null)
+    // A task just added: its detail card opens in edit mode so the name is editable at once. Cleared the
+    // moment that card mounts, so re-selecting the task later opens the read view.
+    const [editOnAddTaskId, setEditOnAddTaskId] = useState<string | null>(null)
     // The section on screen at first load appears instantly; every section entered afterward plays the
     // SectionTransition fade + rise. Flipped off just after the initial mount (below).
     const firstSectionRef = useRef(true)
-    // The "New reward" card, shown in the same top-right aside as the milestone detail card. `open` is
-    // the intent; `shown` trails it so the exit animation can play before the card unmounts (mirrors
-    // selectedId / displayId).
-    const [addRewardOpen, setAddRewardOpen] = useState(false)
-    const [addRewardShown, setAddRewardShown] = useState(false)
     // The reward whose detail card is open (the intent, null once dismissed), and the id the card
     // actually shows -- `displayRewardId` trails `selectedRewardId` on dismissal so the exit animation
     // plays before the card unmounts (mirrors selectedTaskId / displayTaskId).
     const [selectedRewardId, setSelectedRewardId] = useState<string | null>(null)
     const [displayRewardId, setDisplayRewardId] = useState<string | null>(null)
+    // A reward just created from the shelf's + tile: its card opens in edit mode. Cleared once that card
+    // mounts, so re-selecting the reward later opens the read view.
+    const [editOnAddRewardId, setEditOnAddRewardId] = useState<string | null>(null)
     // A node to pan the canvas onto; the nonce (re)triggers centering on URL navigation.
     const [focusId, setFocusId] = useState(boot.hadHash ? (boot.selectedId ?? "") : "")
     const [focusNonce, setFocusNonce] = useState(boot.hadHash ? 1 : 0)
@@ -183,6 +208,7 @@ export function App() {
     const nextNodeId = useRef(boot.nextNodeId)
     const nextTaskId = useRef(boot.nextTaskId)
     const nextRewardId = useRef(boot.nextRewardId)
+    const nextNoteId = useRef(boot.nextNoteId)
     // Fires the finale fanfare when the active tab's goal crosses into complete, anchored on that
     // goal node. Tracked per tab (seeded on first sight) so switching onto an already-done goal
     // doesn't fire; the burst carries the goal's board-relative centre + a nonce to (re)play.
@@ -223,13 +249,31 @@ export function App() {
         if (selectedId !== null) setDisplayId(selectedId)
     }, [selectedId])
 
+    // Consume the edit-on-add flag once the target node's card has mounted (edit state has latched), so a
+    // later re-select of that same node opens the read view instead.
+    useEffect(() => {
+        if (editOnAddId !== null && displayId === editOnAddId) setEditOnAddId(null)
+    }, [editOnAddId, displayId])
+
     useEffect(() => {
         if (selectedTaskId !== null) setDisplayTaskId(selectedTaskId)
     }, [selectedTaskId])
 
+    // Consume the edit-on-add flag once the added task's card has mounted (edit state has latched), so a
+    // later re-select of that task opens the read view instead.
+    useEffect(() => {
+        if (editOnAddTaskId !== null && displayTaskId === editOnAddTaskId) setEditOnAddTaskId(null)
+    }, [editOnAddTaskId, displayTaskId])
+
     useEffect(() => {
         if (selectedRewardId !== null) setDisplayRewardId(selectedRewardId)
     }, [selectedRewardId])
+
+    // Consume the edit-on-add flag once the new reward's card has mounted (edit state has latched), so a
+    // later re-select of that reward opens the read view instead.
+    useEffect(() => {
+        if (editOnAddRewardId !== null && displayRewardId === editOnAddRewardId) setEditOnAddRewardId(null)
+    }, [editOnAddRewardId, displayRewardId])
 
     // Initial mount is done: from here on, a section change remounts SectionTransition (keyed by
     // section) and plays its entrance.
@@ -237,14 +281,9 @@ export function App() {
         firstSectionRef.current = false
     }, [])
 
-    // Reveal the add-reward card on open; leaving the Rewards view discards it outright.
-    useEffect(() => {
-        if (addRewardOpen) setAddRewardShown(true)
-    }, [addRewardOpen])
+    // Leaving the Rewards view closes any open reward detail card outright.
     useEffect(() => {
         if (section !== "rewards") {
-            setAddRewardOpen(false)
-            setAddRewardShown(false)
             setSelectedRewardId(null)
             setDisplayRewardId(null)
         }
@@ -259,6 +298,18 @@ export function App() {
         }
     }, [section])
 
+    // Leaving the Draw view drops back to the wall, so re-entering never reopens a stale editor.
+    useEffect(() => {
+        if (section !== "excalidraw") setEditingNoteId(null)
+    }, [section])
+
+    // Fade the new-scribble highlight ring shortly after it's added.
+    useEffect(() => {
+        if (highlightNoteId === null) return
+        const timer = setTimeout(() => setHighlightNoteId(null), 1600)
+        return () => clearTimeout(timer)
+    }, [highlightNoteId])
+
     // Dismiss the task detail card on Escape or a click outside it, but not on a task tile (which
     // selects) or the tab bar. Mirrors the milestone card / add-reward dismissal.
     useEffect(() => {
@@ -268,6 +319,7 @@ export function App() {
             if (
                 target?.closest("[data-task-detail-card]") ||
                 target?.closest("[data-task-tile]") ||
+                target?.closest("[data-add-task-trigger]") ||
                 target?.closest("[data-tabbar]") ||
                 target?.closest('[role="alertdialog"]')
             ) {
@@ -285,26 +337,6 @@ export function App() {
             document.removeEventListener("keydown", onKeyDown)
         }
     }, [selectedTaskId])
-
-    // Dismiss the add-reward card on Escape or a click outside it (but not on the + trigger, which
-    // toggles it), mirroring how the milestone detail card is dismissed.
-    useEffect(() => {
-        if (!addRewardShown) return
-        const onPointerDown = (event: PointerEvent) => {
-            const target = event.target as Element | null
-            if (target?.closest("[data-add-reward-card]") || target?.closest("[data-add-reward-trigger]")) return
-            setAddRewardOpen(false)
-        }
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setAddRewardOpen(false)
-        }
-        document.addEventListener("pointerdown", onPointerDown)
-        document.addEventListener("keydown", onKeyDown)
-        return () => {
-            document.removeEventListener("pointerdown", onPointerDown)
-            document.removeEventListener("keydown", onKeyDown)
-        }
-    }, [addRewardShown])
 
     // Dismiss the reward detail card on Escape or a click outside it, but not on a reward tile (which
     // selects), the + trigger (which opens the add card), or the tab bar. Mirrors the task card.
@@ -403,9 +435,9 @@ export function App() {
     // Autosave the app's data (not the open tab) 400ms after the last change, so a drag — which
     // fires moveMilestone rapidly — coalesces into a single write.
     useEffect(() => {
-        const timer = setTimeout(() => saveState({ projects, order, mirrorPos, tasks, rewards, banked }), 400)
+        const timer = setTimeout(() => saveState({ projects, order, mirrorPos, tasks, rewards, banked, notes }), 400)
         return () => clearTimeout(timer)
-    }, [projects, order, mirrorPos, tasks, rewards, banked])
+    }, [projects, order, mirrorPos, tasks, rewards, banked, notes])
 
     // Select a node and pan the canvas onto it; the URL hash follows the selection.
     const focusNode = useCallback((id: string) => {
@@ -427,9 +459,14 @@ export function App() {
     // Tasks: open the app-level list, and add / toggle / remove its items. One global list, so
     // these never touch the active project.
     const openTasks = useCallback(() => setSection("tasks"), [])
-    const addTaskItem = useCallback((text: string) => {
+    // The list's + tile adds a default task, then selects it and opens its card in edit mode so its
+    // name/reward are editable straight away (mirrors adding a reward or a milestone).
+    const addTaskItem = useCallback(() => {
         nextTaskId.current += 1
-        setTasks((prev) => addTask(prev, `task-${nextTaskId.current}`, text))
+        const id = `task-${nextTaskId.current}`
+        setTasks((prev) => addTask(prev, id, DEFAULT_TASK_NAME))
+        setSelectedTaskId(id)
+        setEditOnAddTaskId(id)
     }, [])
     const toggleTask = useCallback(
         (id: string) => {
@@ -468,27 +505,43 @@ export function App() {
     // touch the active project. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
     // balance covers the price), which spends the gold and starts the 14-day shelf window.
     const openRewards = useCallback(() => setSection("rewards"), [])
-    const openExcalidraw = useCallback(() => setSection("excalidraw"), [])
-    // Add and edit share the one aside: opening the add card clears any selected reward, and selecting a
-    // reward closes the add card, so only one is ever mounted.
-    const toggleAddReward = useCallback(() => {
-        setSelectedRewardId(null)
-        setDisplayRewardId(null)
-        setAddRewardOpen((open) => !open)
+    // The Draw wall. Opening it always lands on the grid (never straight into a note); a new note opens
+    // its blank canvas at once. Renames and scene edits patch the one flat notes list (never a project).
+    const openExcalidraw = useCallback(() => {
+        setEditingNoteId(null)
+        setSection("excalidraw")
     }, [])
-    const addRewardItem = useCallback((name: string, price: number, replenish: boolean) => {
+    const openNote = useCallback((id: string) => setEditingNoteId(id), [])
+    const backToNotes = useCallback(() => setEditingNoteId(null), [])
+    // Add an empty scribble to the wall (newest first); it stays on the grid, opened only on click, and
+    // is ringed briefly so it's easy to spot.
+    const addNoteItem = useCallback(() => {
+        nextNoteId.current += 1
+        const id = `note-${nextNoteId.current}`
+        setNotes((prev) => addNote(prev, id, Date.now()))
+        setHighlightNoteId(id)
+    }, [])
+    const renameNoteItem = useCallback((id: string, title: string) => setNotes((prev) => renameNote(prev, id, title)), [])
+    const updateNoteSceneItem = useCallback(
+        (id: string, scene: Note["scene"]) => setNotes((prev) => updateNoteScene(prev, id, scene, Date.now())),
+        []
+    )
+    const deleteNoteItem = useCallback((id: string) => {
+        setNotes((prev) => removeNote(prev, id))
+        setEditingNoteId((current) => (current === id ? null : current))
+    }, [])
+    // The shelf's + tile creates a default reward on the spot, selects it, and opens its card in edit
+    // mode so the name/price are editable at once (mirrors adding a task or a milestone).
+    const addRewardDefault = useCallback(() => {
         nextRewardId.current += 1
-        setRewards((prev) => addReward(prev, `reward-${nextRewardId.current}`, name, price, replenish))
-        setAddRewardOpen(false)
+        const id = `reward-${nextRewardId.current}`
+        setRewards((prev) => addReward(prev, id, DEFAULT_REWARD_NAME, DEFAULT_REWARD_PRICE))
+        setSelectedRewardId(id)
+        setEditOnAddRewardId(id)
     }, [])
-    const removeRewardItem = useCallback((id: string) => setRewards((prev) => removeReward(prev, id)), [])
     // Open a reward's detail card, and edit its name / price / replenish in place. Deleting from the card
     // removes the reward and closes the card.
-    const selectReward = useCallback((id: string) => {
-        setAddRewardOpen(false)
-        setAddRewardShown(false)
-        setSelectedRewardId(id)
-    }, [])
+    const selectReward = useCallback((id: string) => setSelectedRewardId(id), [])
     const editRewardItem = useCallback(
         (id: string, patch: { name?: string; price?: number; replenish?: boolean }) =>
             setRewards((prev) => editReward(prev, id, patch)),
@@ -687,6 +740,7 @@ export function App() {
                 mastered: uncomplete(parentId, project.mastered, edges)
             }
         })
+        setEditOnAddId(childId)
         focusNode(childId)
     }, [selectedId, updateActive, focusNode])
 
@@ -718,6 +772,7 @@ export function App() {
             const edges: MilestoneEdge[] = [...project.edges, [goalId, project.goalId]]
             return { ...project, milestones, edges, goalId }
         })
+        setEditOnAddId(goalId)
         focusNode(goalId)
     }, [activeId, updateActive, focusNode])
 
@@ -767,12 +822,15 @@ export function App() {
             setProjects((prev) => ({ ...prev, [id]: project }))
             setOrder((prev) => [...prev, id])
             if (activate) {
-                // Open the new view and focus its goal.
+                // Open the new view and focus its goal, card in edit mode so its name is editable at once.
                 setActiveId(id)
+                setEditOnAddId(project.goalId)
                 focusNode(project.goalId)
             } else {
-                // Stay in the Root hub and focus the new view's chip.
-                focusNode(`${VIEW_MIRROR_PREFIX}${id}`)
+                // Stay in the Root hub and focus the new view's chip, its card open in edit mode.
+                const mirrorId = `${VIEW_MIRROR_PREFIX}${id}`
+                setEditOnAddId(mirrorId)
+                focusNode(mirrorId)
             }
         },
         [focusNode]
@@ -823,8 +881,8 @@ export function App() {
 
     // Serialize the app's data (not the open tab) for the Export button to download.
     const handleExport = useCallback(
-        () => serialize({ projects, order, mirrorPos, tasks, rewards, banked }),
-        [projects, order, mirrorPos, tasks, rewards, banked]
+        () => serialize({ projects, order, mirrorPos, tasks, rewards, banked, notes }),
+        [projects, order, mirrorPos, tasks, rewards, banked, notes]
     )
 
     // Replace the whole app from a loaded state -- an imported file or a roadmap synced down from another
@@ -837,6 +895,8 @@ export function App() {
         setTasks(loaded.tasks)
         setRewards(loaded.rewards)
         setBanked(loaded.banked)
+        setNotes(loaded.notes)
+        setEditingNoteId(null)
         setSection("roadmap")
         nextNodeId.current = maxCounter(
             Object.values(loaded.projects).flatMap((project) => Object.keys(project.milestones)),
@@ -850,6 +910,10 @@ export function App() {
         nextRewardId.current = maxCounter(
             loaded.rewards.map((reward) => reward.id),
             "reward"
+        )
+        nextNoteId.current = maxCounter(
+            loaded.notes.map((note) => note.id),
+            "note"
         )
         const nextActive = loaded.order.find((id) => id !== ROOT_ID && loaded.projects[id]) ?? ROOT_ID
         setActiveId(nextActive)
@@ -873,8 +937,8 @@ export function App() {
     // Cross-device sync: opt-in, end-to-end encrypted, and inert unless VITE_SYNC_URL is set at build.
     // It reads the same slices the autosave persists and applies an incoming roadmap through applyLoaded.
     const syncSlices = useMemo<PersistedSlices>(
-        () => ({ projects, order, mirrorPos, tasks, rewards, banked }),
-        [projects, order, mirrorPos, tasks, rewards, banked]
+        () => ({ projects, order, mirrorPos, tasks, rewards, banked, notes }),
+        [projects, order, mirrorPos, tasks, rewards, banked, notes]
     )
     const sync = useSync(syncSlices, applyLoaded)
 
@@ -1040,6 +1104,10 @@ export function App() {
     const deleteDescendantCount =
         canDelete && deleteKind === "milestone" && active && shown ? descendantsOf(shown.id, active.edges).length : 0
 
+    // The Draw note open in the editor (null → show the wall). A deleted id resolves to undefined, which
+    // falls back to the wall.
+    const editingNote = editingNoteId !== null ? notes.find((note) => note.id === editingNoteId) : undefined
+
     return (
         <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#f6edd6]">
             <TabBar
@@ -1076,7 +1144,7 @@ export function App() {
                 >
                 {section === "tasks" ? (
                     <>
-                        <div className="absolute inset-0 z-10 overflow-auto">
+                        <div className="themed-scroll absolute inset-0 z-10 overflow-auto">
                             <TasksBoard
                                 items={visible(tasks, Date.now())}
                                 onAdd={addTaskItem}
@@ -1097,6 +1165,7 @@ export function App() {
                                     closing={taskClosing}
                                     onEdit={(patch) => editTaskItem(displayedTask.id, patch)}
                                     onDelete={() => deleteTaskItem(displayedTask.id)}
+                                    initialEditing={displayedTask.id === editOnAddTaskId}
                                     onExited={() => setDisplayTaskId(null)}
                                 />
                             </aside>
@@ -1104,29 +1173,17 @@ export function App() {
                     </>
                 ) : section === "rewards" ? (
                     <>
-                        <div className="absolute inset-0 z-10 overflow-auto">
+                        <div className="themed-scroll absolute inset-0 z-10 overflow-auto">
                             <RewardsBoard
                                 gold={gold}
                                 rewards={visibleRewards(rewards, Date.now())}
                                 selectedId={selectedRewardId}
                                 onRedeem={redeemReward}
                                 onSelectReward={selectReward}
-                                onOpenAdd={toggleAddReward}
-                                onRemoveReward={removeRewardItem}
+                                onAddReward={addRewardDefault}
                             />
                         </div>
-                        {addRewardShown ? (
-                            <aside
-                                data-add-reward-card=""
-                                className="absolute right-4 top-4 z-20 w-[320px] max-w-[calc(100%-2rem)]"
-                            >
-                                <RewardDetailCard
-                                    onAdd={addRewardItem}
-                                    closing={!addRewardOpen && addRewardShown}
-                                    onExited={() => setAddRewardShown(false)}
-                                />
-                            </aside>
-                        ) : displayedReward ? (
+                        {displayedReward ? (
                             <aside
                                 data-reward-detail-card=""
                                 className="absolute right-4 top-4 z-20 w-[320px] max-w-[calc(100%-2rem)]"
@@ -1138,13 +1195,14 @@ export function App() {
                                     onEdit={(patch) => editRewardItem(displayedReward.id, patch)}
                                     onDelete={() => deleteRewardItem(displayedReward.id)}
                                     onUnredeem={() => unredeemRewardItem(displayedReward.id)}
+                                    initialEditing={displayedReward.id === editOnAddRewardId}
                                     onExited={() => setDisplayRewardId(null)}
                                 />
                             </aside>
                         ) : null}
                     </>
                 ) : section === "sync" ? (
-                    <div className="absolute inset-0 z-10 overflow-auto">
+                    <div className="themed-scroll absolute inset-0 z-10 overflow-auto">
                         <SyncBoard sync={sync} />
                     </div>
                 ) : section === "excalidraw" ? (
@@ -1155,7 +1213,25 @@ export function App() {
                             </div>
                         }
                     >
-                        <ExcalidrawBoard />
+                        {editingNote ? (
+                            <ExcalidrawBoard
+                                key={editingNote.id}
+                                note={editingNote}
+                                onChange={(scene) => updateNoteSceneItem(editingNote.id, scene)}
+                                onBack={backToNotes}
+                                onDelete={() => deleteNoteItem(editingNote.id)}
+                            />
+                        ) : (
+                            <div className="themed-scroll absolute inset-0 z-10 overflow-auto">
+                                <DrawBoard
+                                    notes={notes}
+                                    onOpen={openNote}
+                                    onAdd={addNoteItem}
+                                    onRename={renameNoteItem}
+                                    highlightId={highlightNoteId}
+                                />
+                            </div>
+                        )}
                     </Suspense>
                 ) : (
                     <>
@@ -1214,6 +1290,7 @@ export function App() {
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}
                                     descendantCount={deleteDescendantCount}
+                                    initialEditing={shown.id === editOnAddId}
                                     onExited={() => setDisplayId(null)}
                                 />
                             </aside>

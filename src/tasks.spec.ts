@@ -15,10 +15,10 @@ const three = (): Task[] => [
 
 describe("tasks", () => {
     context("addTask", () => {
-        it("appends a new, incomplete task with the given id and the default reward", () => {
+        it("prepends a new, incomplete task with the given id and the default reward", () => {
             expect(addTask([{ id: "b1", text: "one", done: false, reward: 1 }], "b2", "two")).toEqual([
-                { id: "b1", text: "one", done: false, reward: 1 },
-                { id: "b2", text: "two", done: false, reward: DEFAULT_TASK_REWARD }
+                { id: "b2", text: "two", done: false, reward: DEFAULT_TASK_REWARD },
+                { id: "b1", text: "one", done: false, reward: 1 }
             ])
         })
 

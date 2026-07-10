@@ -18,6 +18,14 @@
     --color-slider-track: #e0d3ad;
     --color-slider-thumb: #b8892b;
 
+    /* Grays remapped to the slider's tan track, so muted button fills and keybinding hints sit on the
+       parchment ladder instead of Excalidraw's cool grays. */
+    --button-gray-3: var(--color-slider-track);
+    --keybinding-color: var(--color-slider-track);
+
+    /* Active button outline: the slider's gold thumb, matching the selection accent. */
+    --button-active-border: var(--color-slider-thumb);
+
     /* Surface ramp (0.18 token system behind buttons, controls, and text). Remapped to a parchment
        ladder, keeping Excalidraw's elevation order lightest -> raised, with brown text on top. */
     --color-surface-lowest: #fffdf5;
@@ -56,4 +64,15 @@
     /* Scrollbars (panel / menu overflow): light tan thumb (matches the slider track), gold on hover. */
     --scrollbar-thumb: #e0d3ad;
     --scrollbar-thumb-hover: #b8892b;
+}
+
+/* Hide the Library button: notes are self-contained sketches, no shared component library. */
+.excalidraw .sidebar-trigger {
+    display: none;
+}
+
+/* Context-menu divider: recolor Excalidraw's cool-gray rule to the slider's tan. Doubled selector
+   beats its default regardless of stylesheet order (Vite HMR can inject Excalidraw's CSS after ours). */
+.excalidraw.excalidraw .context-menu-item-separator {
+    border-top-color: var(--color-slider-track);
 }

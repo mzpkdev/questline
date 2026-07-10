@@ -25,6 +25,9 @@ export const DONE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 // Default gold a task pays when checked off, used to seed a new task's `reward`.
 export const DEFAULT_TASK_REWARD = 1
 
+// Name for a task created from the list's + tile (then renamed in its detail card).
+export const DEFAULT_TASK_NAME = "New Task"
+
 // A tiny first-run tutorial, like the sample roadmap's self-teaching nodes: three tasks whose text
 // explains the view itself (checking one off, dragging to reorder, adding and removing). Shown only
 // on a truly fresh start, and replaced the moment the user edits their own list.
@@ -34,11 +37,11 @@ export const SEED_TASKS: Task[] = [
     { id: "task-3", text: "Add your own above, and hover a task to remove it.", done: false, reward: DEFAULT_TASK_REWARD }
 ]
 
-// Append a new task with the given id, carrying the default reward. Blank / whitespace-only text is
-// ignored (returns the same list), so the board never grows an empty tile.
+// Prepend a new task with the given id (newest on top), carrying the default reward. Blank /
+// whitespace-only text is ignored (returns the same list), so the board never grows an empty tile.
 export function addTask(list: Task[], id: string, text: string): Task[] {
     const trimmed = text.trim()
-    return trimmed ? [...list, { id, text: trimmed, done: false, reward: DEFAULT_TASK_REWARD }] : list
+    return trimmed ? [{ id, text: trimmed, done: false, reward: DEFAULT_TASK_REWARD }, ...list] : list
 }
 
 // Flip one task by id. Checking it off stamps `completedAt` with `now`; re-opening drops the stamp so a

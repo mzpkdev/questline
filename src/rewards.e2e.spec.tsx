@@ -91,28 +91,27 @@ async function completeFinishMilestone() {
 // Post a task worth `reward` gold and check it off, minting `reward` into the purse. Leaves the Tasks view.
 async function earnViaTask(text: string, reward = 1) {
     openTasksView()
-    const input = await screen.findByRole("textbox", { name: "New task" })
-    fireEvent.change(input, { target: { value: text } })
-    fireEvent.click(screen.getByRole("button", { name: "Add task" }))
-    await screen.findByRole("button", { name: `Open ${text}` })
+    // The + tile adds a default task and opens its card in edit mode; name it (and set the reward), dismiss.
+    fireEvent.click(await screen.findByRole("button", { name: "Add task" }))
+    const card = await screen.findByTestId("task-detail-card")
+    fireEvent.change(within(card).getByLabelText("Task name"), { target: { value: text } })
     if (reward !== 1) {
-        fireEvent.click(screen.getByRole("button", { name: `Open ${text}` }))
-        fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
-        fireEvent.change(screen.getByLabelText("Reward in gold"), { target: { value: String(reward) } })
-        fireEvent.keyDown(document, { key: "Escape" })
+        fireEvent.change(within(card).getByLabelText("Reward in gold"), { target: { value: String(reward) } })
     }
-    fireEvent.click(screen.getByRole("button", { name: `Check ${text}` }))
+    fireEvent.keyDown(document, { key: "Escape" })
+    fireEvent.click(await screen.findByRole("button", { name: `Check ${text}` }))
     await screen.findByRole("button", { name: `Uncheck ${text}` })
 }
 
-// Add a reward through the shop's add card (name + price, optionally auto-replenish). Assumes the shop is open.
+// Add a reward: the shelf's + tile instantly creates a default reward and opens its card in edit mode;
+// set the name / price (and optional auto-replenish), then dismiss. Assumes the shop is open.
 async function addRewardViaCard(name: string, price: number, replenish = false) {
     fireEvent.click(screen.getByRole("button", { name: "Add a reward" }))
-    const card = await screen.findByTestId("add-reward-card")
+    const card = await screen.findByTestId("reward-detail-card")
     fireEvent.change(within(card).getByLabelText("Reward name"), { target: { value: name } })
     fireEvent.change(within(card).getByLabelText("Cost in gold"), { target: { value: String(price) } })
     if (replenish) fireEvent.click(within(card).getByRole("checkbox"))
-    fireEvent.click(within(card).getByRole("button", { name: "Add reward" }))
+    fireEvent.keyDown(document, { key: "Escape" })
     await screen.findByRole("button", { name: `Open ${name}` })
 }
 
@@ -157,7 +156,9 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
+            // The new view's card opens in edit mode; finish editing to reveal the View action.
+            fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
             fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
 
@@ -266,7 +267,7 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(step)
             await screen.findByRole("heading", { name: /break it into steps/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
             await waitFor(() => expect(nodeRoot("break-steps")?.getAttribute("data-state")).not.toBe("mastered"))
 
             openShop()
@@ -619,36 +620,21 @@ describe("Rewards & gold (e2e)", () => {
     })
 
     context("adding a reward", () => {
-        it("opens the New reward card from the dashed add tile", async () => {
+        it("creates a default reward and opens it in edit mode from the dashed add tile", async () => {
             render(<App />)
             openShop()
             fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
-            expect(await screen.findByTestId("add-reward-card")).toBeInTheDocument()
+            // A default reward lands on the shelf, its card open in edit mode (the name field is live).
+            expect(await screen.findByRole("button", { name: "Open New Reward" })).toBeInTheDocument()
+            const card = await screen.findByTestId("reward-detail-card")
+            expect(within(card).getByLabelText("Reward name")).toBeInTheDocument()
         })
 
-        it("adds a named, priced reward to the shelf and closes the card", async () => {
+        it("adds a named, priced reward via the card", async () => {
             render(<App />)
             openShop()
             await addRewardViaCard("Sushi", 4)
             expect(screen.getByRole("button", { name: "Open Sushi" })).toBeInTheDocument()
-
-            // The card plays its exit animation, then unmounts.
-            fireEvent.animationEnd(screen.getByTestId("add-reward-card"), { bubbles: true })
-            expect(screen.queryByTestId("add-reward-card")).toBeNull()
-        })
-
-        it("ignores a blank / whitespace-only name", async () => {
-            render(<App />)
-            openShop()
-            fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
-            const card = await screen.findByTestId("add-reward-card")
-            fireEvent.change(within(card).getByLabelText("Reward name"), { target: { value: "   " } })
-            fireEvent.change(within(card).getByLabelText("Cost in gold"), { target: { value: "5" } })
-            fireEvent.click(within(card).getByRole("button", { name: "Add reward" }))
-
-            // No tile added (only the three seed rewards remain), and the card stays open awaiting a real name.
-            expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(3)
-            expect(screen.getByTestId("add-reward-card")).toBeInTheDocument()
         })
 
         it("coerces the price to a whole number of at least 1", async () => {
@@ -668,56 +654,49 @@ describe("Rewards & gold (e2e)", () => {
             expect(await screen.findByTitle("Auto-replenishes")).toBeInTheDocument()
         })
 
-        it("dismisses the card on Escape and on a click outside it", async () => {
+        it("keeps the new reward when its card is dismissed on Escape", async () => {
             render(<App />)
             openShop()
-
-            // Escape closes it.
             fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
-            const first = await screen.findByTestId("add-reward-card")
+            await screen.findByTestId("reward-detail-card")
             fireEvent.keyDown(document, { key: "Escape" })
-            fireEvent.animationEnd(first, { bubbles: true })
-            expect(screen.queryByTestId("add-reward-card")).toBeNull()
-
-            // A click on the empty board (outside the card and its + trigger) closes it too.
-            fireEvent.click(screen.getByRole("button", { name: "Add a reward" }))
-            const second = await screen.findByTestId("add-reward-card")
-            fireEvent.pointerDown(document.body)
-            fireEvent.animationEnd(second, { bubbles: true })
-            expect(screen.queryByTestId("add-reward-card")).toBeNull()
+            // Instant-create persists: the reward stays on the shelf even without editing.
+            expect(await screen.findByRole("button", { name: "Open New Reward" })).toBeInTheDocument()
         })
 
-        it("discards the unsubmitted card when leaving the Rewards view", async () => {
+        it("persists a just-created reward across leaving and returning to the shop", async () => {
             render(<App />)
             openShop()
             fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
-            const card = await screen.findByTestId("add-reward-card")
-            fireEvent.change(within(card).getByLabelText("Reward name"), { target: { value: "Draft" } })
+            await screen.findByRole("button", { name: "Open New Reward" })
 
-            // Leave for the roadmap, then come back: the card is gone and the draft was never added.
             openSampleTab()
             await waitForNode("learn")
             openShop()
-            expect(screen.queryByTestId("add-reward-card")).toBeNull()
-            expect(screen.queryByRole("button", { name: "Open Draft" })).toBeNull()
+            expect(await screen.findByRole("button", { name: "Open New Reward" })).toBeInTheDocument()
         })
     })
 
     context("removing a reward", () => {
+        // Deletion lives only in the detail card now (no tile × ): open the card, Edit, then Delete reward.
+        const openCardDelete = async () => {
+            fireEvent.click(await screen.findByRole("button", { name: "Open Fancy coffee" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete reward" }))
+        }
+
         it("asks for confirmation before deleting an unredeemed reward", async () => {
             render(<App />)
             openShop()
-            fireEvent.click(await screen.findByRole("button", { name: "Remove Fancy coffee" }))
+            await openCardDelete()
             expect(await screen.findByText("Remove this reward?")).toBeInTheDocument()
-            // Still on the shelf: the open modal marks the background aria-hidden, so assert via the DOM
-            // node rather than by role (which excludes hidden elements).
             expect(document.querySelector('[data-reward-id="reward-1"]')).not.toBeNull() // not yet removed
         })
 
         it("removes the reward from the shelf once the deletion is confirmed", async () => {
             render(<App />)
             openShop()
-            fireEvent.click(await screen.findByRole("button", { name: "Remove Fancy coffee" }))
+            await openCardDelete()
             fireEvent.click(await screen.findByRole("button", { name: "Remove" }))
             await waitFor(() => expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull())
         })
@@ -725,7 +704,7 @@ describe("Rewards & gold (e2e)", () => {
         it("keeps the reward when the confirm dialog is cancelled", async () => {
             render(<App />)
             openShop()
-            fireEvent.click(await screen.findByRole("button", { name: "Remove Fancy coffee" }))
+            await openCardDelete()
             await screen.findByText("Remove this reward?")
             fireEvent.click(screen.getByRole("button", { name: "Close" }))
 
@@ -733,11 +712,10 @@ describe("Rewards & gold (e2e)", () => {
             expect(screen.getByRole("button", { name: "Open Fancy coffee" })).toBeInTheDocument()
         })
 
-        it("offers no remove affordance on a redeemed tile", async () => {
+        it("offers no tile-level remove affordance", async () => {
             render(<App />)
             openShop()
-            fireEvent.click(await screen.findByRole("button", { name: "Redeem Fancy coffee" }))
-            await screen.findByText(/^Redeemed /)
+            await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(screen.queryByRole("button", { name: "Remove Fancy coffee" })).toBeNull()
         })
 
@@ -747,7 +725,7 @@ describe("Rewards & gold (e2e)", () => {
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD)
 
-            fireEvent.click(screen.getByRole("button", { name: "Remove Fancy coffee" }))
+            await openCardDelete()
             fireEvent.click(await screen.findByRole("button", { name: "Remove" }))
             await waitFor(() => expect(screen.queryByRole("button", { name: "Open Fancy coffee" })).toBeNull())
             expect(balance()).toBe(BASE_GOLD)
@@ -821,15 +799,6 @@ describe("Rewards & gold (e2e)", () => {
             expect(within(card).getByRole("heading", { name: "Fancy coffee" })).toBeInTheDocument()
         })
 
-        it("does not open the card when the tile's remove control is clicked", async () => {
-            render(<App />)
-            openShop()
-            fireEvent.click(await screen.findByRole("button", { name: "Remove Fancy coffee" }))
-
-            expect(await screen.findByText("Remove this reward?")).toBeInTheDocument()
-            expect(screen.queryByTestId("reward-detail-card")).toBeNull()
-        })
-
         it("renames a reward live through the pencil", async () => {
             render(<App />)
             openShop()
@@ -863,15 +832,17 @@ describe("Rewards & gold (e2e)", () => {
             expect(screen.queryByTestId("reward-detail-card")).toBeNull()
         })
 
-        it("swaps the add card for the detail card when a tile is clicked", async () => {
+        it("swaps the detail card to another reward when its tile is clicked", async () => {
             render(<App />)
             openShop()
+            // Instant-create opens the new reward's card in edit mode...
             fireEvent.click(await screen.findByRole("button", { name: "Add a reward" }))
-            expect(await screen.findByTestId("add-reward-card")).toBeInTheDocument()
+            const card = await screen.findByTestId("reward-detail-card")
+            expect(within(card).getByLabelText("Reward name")).toHaveValue("New Reward")
 
+            // ...and clicking a different tile swaps the card to that reward's read view.
             fireEvent.click(screen.getByRole("button", { name: "Open Fancy coffee" }))
-            expect(await screen.findByTestId("reward-detail-card")).toBeInTheDocument()
-            expect(screen.queryByTestId("add-reward-card")).toBeNull()
+            expect(await screen.findByRole("heading", { name: "Fancy coffee" })).toBeInTheDocument()
         })
     })
 
@@ -880,7 +851,7 @@ describe("Rewards & gold (e2e)", () => {
         // touching gold: bounce out to the Tasks view and back.
         async function rerenderShop() {
             openTasksView()
-            await screen.findByRole("textbox", { name: "New task" })
+            await screen.findByRole("button", { name: "Add task" })
             openShop()
             await screen.findByTestId("purse")
         }
@@ -1000,9 +971,11 @@ describe("Rewards & gold (e2e)", () => {
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(3)
 
-            // Remove one, let it autosave, and remount: the saved shelf loads as-is (two rewards), never
-            // re-seeded back to three.
-            fireEvent.click(screen.getByRole("button", { name: "Remove Movie night" }))
+            // Remove one from its card, let it autosave, and remount: the saved shelf loads as-is (two
+            // rewards), never re-seeded back to three.
+            fireEvent.click(screen.getByRole("button", { name: "Open Movie night" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete reward" }))
             fireEvent.click(await screen.findByRole("button", { name: "Remove" }))
             await waitFor(() => expect(screen.queryByRole("button", { name: "Open Movie night" })).toBeNull())
             // Wait for the post-removal autosave specifically (kept rewards present, removed one gone), not
@@ -1108,7 +1081,7 @@ describe("Rewards & gold (e2e)", () => {
 
             // Bounce through Tasks and the roadmap; the purse reads the same each time we return.
             openTasksView()
-            await screen.findByRole("textbox", { name: "New task" })
+            await screen.findByRole("button", { name: "Add task" })
             openShop()
             expect(balance()).toBe(6)
 

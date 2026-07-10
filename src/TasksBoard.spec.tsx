@@ -57,22 +57,11 @@ describe("TasksBoard", () => {
         expect(onToggle).toHaveBeenCalledWith("b1")
     })
 
-    it("adds a task from the form and clears the input", () => {
+    it("adds a task from the dashed add tile", () => {
         const onAdd = vi.fn()
         renderBoard({ onAdd })
-        const input = screen.getByRole("textbox", { name: "New task" })
-        fireEvent.change(input, { target: { value: "Tame the griffon" } })
         fireEvent.click(screen.getByRole("button", { name: "Add task" }))
-        expect(onAdd).toHaveBeenCalledWith("Tame the griffon")
-        expect(input).toHaveValue("")
-    })
-
-    it("ignores a blank submission", () => {
-        const onAdd = vi.fn()
-        renderBoard({ onAdd })
-        fireEvent.change(screen.getByRole("textbox", { name: "New task" }), { target: { value: "   " } })
-        fireEvent.click(screen.getByRole("button", { name: "Add task" }))
-        expect(onAdd).not.toHaveBeenCalled()
+        expect(onAdd).toHaveBeenCalled()
     })
 
     it("exposes a drag handle per task for reordering", () => {
@@ -83,6 +72,6 @@ describe("TasksBoard", () => {
 
     it("shows an empty-state message with no tasks", () => {
         renderBoard({ items: [] })
-        expect(screen.getByText(/no tasks posted/i)).toBeInTheDocument()
+        expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
     })
 })

@@ -102,7 +102,9 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
+            // The new view's card opens in edit mode; finish editing to reveal the View action.
+            fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
             expect(screen.queryByTestId("goal-celebration")).toBeNull()
 
@@ -158,7 +160,9 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
+            // The new view's card opens in edit mode; finish editing to reveal the View action.
+            fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
 
             // A lone goal node named "New Quest"; the seed roadmap is gone.
@@ -206,7 +210,7 @@ describe("App", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a milestone/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
 
             await waitFor(() => expect(nodeRoot("node-1")).not.toBeNull())
             expect(nodeRoot("node-1")?.textContent).toContain("New Milestone")
@@ -224,7 +228,7 @@ describe("App", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a milestone/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
 
             // The new node becomes the selection, so the url follows it.
             await waitFor(() => expect(window.location.hash).toBe("#node-1"))
@@ -243,7 +247,7 @@ describe("App", () => {
             fireEvent.click(step)
             await screen.findByRole("heading", { name: /break it into steps/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
 
             // The new child is incomplete, so the completed node drops to locked.
             await waitFor(() => expect(nodeRoot("break-steps")?.getAttribute("data-state")).toBe("locked"))
@@ -258,7 +262,7 @@ describe("App", () => {
 
             // Entering the tab selects its goal; add a parent from its edit mode.
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add parent milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add parent milestone" }))
 
             await waitFor(() => expect(nodeRoot("node-1")).not.toBeNull())
             // The new node renders at goal size; the old goal drops to normal size.
@@ -269,7 +273,7 @@ describe("App", () => {
             expect(screen.queryByRole("button", { name: "Learn Questline" })).toBeNull()
         })
 
-        it("offers no + Add parent milestone on the Root tab", async () => {
+        it("offers no Add parent milestone on the Root tab", async () => {
             render(<App />)
             await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
 
@@ -277,8 +281,8 @@ describe("App", () => {
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
 
-            expect(screen.queryByRole("button", { name: "+ Add parent milestone" })).not.toBeInTheDocument()
-            expect(screen.getByRole("button", { name: "+ Add sub-milestone" })).toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Add parent milestone" })).not.toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Add sub-milestone" })).toBeInTheDocument()
         })
     })
 
@@ -379,7 +383,7 @@ describe("App", () => {
             await waitFor(() => expect(nodeRoot("learn")).not.toBeNull())
         })
 
-        it("adds a descendant view chip via + Add sub-view on a chip", async () => {
+        it("adds a descendant view chip via Add sub-view on a chip", async () => {
             render(<App />)
 
             const chip = await waitFor(() => {
@@ -391,13 +395,13 @@ describe("App", () => {
             fireEvent.click(chip)
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
 
             // A new sub-view chip appears in the hub (we stay on Root).
             await waitFor(() => expect(viewNode("view-mirror-view-1")).not.toBeNull())
         })
 
-        it("adds a top-level view chip via + Add sub-view on the Root node", async () => {
+        it("adds a top-level view chip via Add sub-view on the Root node", async () => {
             render(<App />)
             await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
 
@@ -405,7 +409,7 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
 
             await waitFor(() => expect(viewNode("view-mirror-view-1")).not.toBeNull())
         })
@@ -418,7 +422,9 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "+ Add sub-view" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
+            // The new view's card opens in edit mode; finish editing to reveal the View action.
+            fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
             fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
 
@@ -618,10 +624,11 @@ describe("App", () => {
             openTasks()
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
-            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), {
-                target: { value: "Slay the bog wyrm" }
-            })
+            // The + tile adds a default task and opens its card in edit mode; name it, then dismiss.
             fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            await screen.findByTestId("task-detail-card")
+            fireEvent.change(screen.getByLabelText("Task name"), { target: { value: "Slay the bog wyrm" } })
+            fireEvent.keyDown(document, { key: "Escape" })
             expect(await screen.findByText("Slay the bog wyrm")).toBeInTheDocument()
 
             fireEvent.click(screen.getByRole("button", { name: "Check Slay the bog wyrm" }))
@@ -643,10 +650,10 @@ describe("App", () => {
             openTasks()
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
-            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), {
-                target: { value: "Guard the caravan" }
-            })
             fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            await screen.findByTestId("task-detail-card")
+            fireEvent.change(screen.getByLabelText("Task name"), { target: { value: "Guard the caravan" } })
+            fireEvent.keyDown(document, { key: "Escape" })
             await screen.findByText("Guard the caravan")
             await waitFor(() => expect(savedRoadmap()).toContain("Guard the caravan"), {
                 timeout: 2000
@@ -663,14 +670,12 @@ describe("App", () => {
             openTasks()
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
-            fireEvent.change(screen.getByRole("textbox", { name: "New task" }), { target: { value: "Temp task" } })
+            // The + tile adds a default task and opens its card in edit mode, so Delete task is right there.
             fireEvent.click(screen.getByRole("button", { name: "Add task" }))
-            fireEvent.click(await screen.findByRole("button", { name: "Open Temp task" }))
-            fireEvent.click(await screen.findByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Delete task" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete task" }))
             fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
 
-            await waitFor(() => expect(screen.queryByText("Temp task")).toBeNull())
+            await waitFor(() => expect(screen.queryByText("New Task")).toBeNull())
             expect(screen.queryByTestId("task-detail-card")).toBeNull()
         })
     })

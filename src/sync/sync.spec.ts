@@ -12,7 +12,8 @@ const slices = () => ({
     mirrorPos: {},
     tasks: [],
     rewards: [],
-    banked: { earned: 0, spent: 0 }
+    banked: { earned: 0, spent: 0 },
+    notes: []
 })
 
 describe("sync client", () => {

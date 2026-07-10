@@ -25,6 +25,27 @@ body {
     box-shadow: inset 0 0 120px rgba(120, 80, 20, 0.06);
 }
 
+/* Thin, parchment-themed scrollbar for the app's scrollable views (Tasks / Rewards / Sync / Scribbles):
+   transparent track, tan thumb that deepens to gold on hover. */
+.themed-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #cdb373 transparent;
+}
+.themed-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.themed-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.themed-scroll::-webkit-scrollbar-thumb {
+    background: #cdb373;
+    border-radius: 9999px;
+}
+.themed-scroll::-webkit-scrollbar-thumb:hover {
+    background: #b8892b;
+}
+
 /* Every interactive control gets the pointer cursor (covers buttons added later too). */
 button:not(:disabled),
 [role="button"],

@@ -21,9 +21,8 @@ import {
     verticalListSortingStrategy
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { type CSSProperties, type FormEvent, useState } from "react"
+import type { CSSProperties } from "react"
 import type { Task } from "./tasks"
-import { ioButtonClass } from "./IoButtons"
 import { useCheckPop } from "./nodeMotion"
 
 // Node-style tile face: the double-gradient border trick (padding-box cream fill under a border-box
@@ -51,7 +50,8 @@ const CHECK_DONE_STYLE: CSSProperties = { border: "1.5px solid #cdb373", backgro
 
 type TasksBoardProps = {
     items: Task[]
-    onAdd: (text: string) => void
+    // Add a default task (App selects it and opens its card in edit mode). Fired by the dashed + tile.
+    onAdd: () => void
     onToggle: (id: string) => void
     onReorder: (activeId: string, overId: string) => void
     // Open a task's detail card (name / reward / delete). Clicking anywhere on the tile fires this.
@@ -162,20 +162,11 @@ function SortableTaskTile({
 }
 
 export function TasksBoard({ items, onAdd, onToggle, onReorder, onSelect, selectedId }: TasksBoardProps) {
-    const [draft, setDraft] = useState("")
     const sensors = useSensors(
         // A 5px threshold lets a plain click on the grip pass through without starting a drag.
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     )
-
-    const submit = (event: FormEvent) => {
-        event.preventDefault()
-        const text = draft.trim()
-        if (!text) return
-        onAdd(text)
-        setDraft("")
-    }
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event
@@ -185,32 +176,28 @@ export function TasksBoard({ items, onAdd, onToggle, onReorder, onSelect, select
 
     return (
         <div className="mx-auto w-[95%] max-w-[820px] px-1 py-12">
-            <form onSubmit={submit} className="mb-4 flex items-center gap-1.5">
-                <input
-                    aria-label="New task"
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Post a task..."
-                    maxLength={120}
-                    className="min-w-0 flex-1 rounded-none border-0 border-b-2 border-[#d8c48f] bg-transparent px-1 py-2 font-serif text-[14.5px] text-[#5a4a2c] placeholder:text-[#b7a577] transition-colors duration-150 ease-out focus:border-[#b8892b] focus:outline-none"
-                />
-                <button type="submit" aria-label="Add task" title="Add task" className={ioButtonClass}>
-                    <svg
-                        width={15}
-                        height={15}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={1.8}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M12 5v14" />
-                        <path d="M5 12h14" />
-                    </svg>
-                </button>
-            </form>
+            <button
+                type="button"
+                data-add-task-trigger=""
+                aria-label="Add task"
+                title="Add task"
+                onClick={onAdd}
+                className="mb-[11px] flex w-full items-center justify-center gap-2 rounded-[13px] border-2 border-dashed border-[#cdb373] bg-transparent py-3.5 font-display text-[12.5px] font-semibold uppercase tracking-[1px] text-[#b79a52] opacity-70 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
+            >
+                <svg
+                    width={17}
+                    height={17}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.9}
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                >
+                    <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add task
+            </button>
 
             {items.length > 0 ? (
                 <DndContext
@@ -234,9 +221,7 @@ export function TasksBoard({ items, onAdd, onToggle, onReorder, onSelect, select
                     </SortableContext>
                 </DndContext>
             ) : (
-                <p className="mt-6 text-center text-[15px] italic text-[#a2916c]">
-                    No tasks posted. Add one above to begin.
-                </p>
+                <p className="mt-6 text-center text-[15px] italic text-[#a2916c]">No tasks yet.</p>
             )}
         </div>
     )

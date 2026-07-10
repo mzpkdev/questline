@@ -4,6 +4,7 @@ import { ConfirmDialog } from "./ConfirmDialog"
 import { STATE_LABEL } from "./graph"
 import type { Milestone, MilestoneState, Todo } from "./milestones"
 import { useCheckPop } from "./nodeMotion"
+import { PlusIcon } from "./PlusIcon"
 
 // A visual re-port of the mockup's detail sidebar (renderCard). Checklist ticks call `onToggle`
 // (only when the milestone is actionable); the pencil flips to the mockup's edit layout, whose
@@ -25,11 +26,11 @@ export type NodeDetailCardProps = {
     onAddTodo?: () => void
     onAddChild?: () => void
     onAddParent?: () => void
-    // When set, edit mode offers "+ Add sub-view" (a child view in the Root hub). Shown for view
+    // When set, edit mode offers "Add sub-view" (a child view in the Root hub). Shown for view
     // chips and the Root node.
     onAddSubView?: () => void
     // View-node mode: the action is a single "View" button, and edit mode is limited to name,
-    // description, and reward (plus + Add sub-view); no badge, checklist, sub-milestone, or parent
+    // description, and reward (plus Add sub-view); no badge, checklist, sub-milestone, or parent
     // buttons. A view chip's reward is its underlying goal's, editable here via onEditMilestone.
     isView?: boolean
     // Whether completing this node mints gold. True for every real milestone/goal and view chip; false
@@ -42,6 +43,9 @@ export type NodeDetailCardProps = {
     deleteKind?: "milestone" | "view"
     // Sub-milestone count under this node, so the milestone confirm can warn about the cascade.
     descendantCount?: number
+    // Open the card straight in edit mode (used for a just-added milestone, so its name is editable at
+    // once). Read on mount only; the card is remounted per node via a key, so it seeds each fresh node.
+    initialEditing?: boolean
     onExited?: () => void
 }
 
@@ -114,8 +118,8 @@ const TODO_EDIT_CLASS = `min-w-0 flex-1 rounded-[7px] border border-[#d8c48f] bg
 const EDIT_BTN_TRANSITION = "transition-colors duration-150 ease-out"
 const TODO_DEL_CLASS = `grid h-6 w-6 flex-none appearance-none place-items-center rounded-[7px] border border-transparent bg-transparent text-[17px] leading-none text-[#b3a074] opacity-[.42] transition-[opacity,color,background-color,transform] duration-150 ease-out hover:opacity-100 hover:bg-[#f4ead0]/70 hover:text-[#8a6b28] active:scale-95`
 const TODO_ADD_CLASS = `mt-2.5 self-start rounded-lg border-[1.5px] border-dashed border-[#cdb373] px-3 py-1.5 font-display text-[11px] uppercase tracking-wide text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
-const ADD_DESC_CLASS = `${ACTION_CLASS} border-[1.5px] border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
-const ADD_PARENT_CLASS = `${ACTION_CLASS} border-[1.5px] border-solid border-[#b8892b] bg-transparent text-[#7a5c1c] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
+const ADD_BTN_LAYOUT = "flex items-center justify-center gap-1.5"
+const ADD_DESC_CLASS = `${ACTION_CLASS} ${ADD_BTN_LAYOUT} border-[1.5px] border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
 // Destructive action (delete node / view): danger-red outline on parchment, colour-only hover, matching
 // the tab-remove affordance (#a5482a). Lives in edit mode only, so read mode can't fat-finger a delete.
 const DELETE_BTN_CLASS = `${ACTION_CLASS} mt-2.5 border-[1.5px] border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] ${EDIT_BTN_TRANSITION} hover:bg-[#a5482a]/10`
@@ -193,11 +197,22 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onDelete,
         deleteKind = "milestone",
         descendantCount = 0,
+        initialEditing = false,
         onExited
     } = props
-    const [editing, setEditing] = useState(false)
+    const [editing, setEditing] = useState(initialEditing)
     const [confirmOpen, setConfirmOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
+    const titleRef = useRef<HTMLInputElement>(null)
+
+    // A just-added milestone opens in edit mode: focus and select its name so a rename is one keystroke
+    // away. Mount-only (the card remounts per node), so it never steals focus on a later edit toggle.
+    useEffect(() => {
+        if (initialEditing) {
+            titleRef.current?.focus()
+            titleRef.current?.select()
+        }
+    }, [initialEditing])
 
     // Fire onExited once the dismissal animation ends. A native listener (attached only while closing)
     // sidesteps React's delegated onAnimationEnd, which needs the event to bubble to the root.
@@ -300,6 +315,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             {editing ? (
                 <>
                     <input
+                        ref={titleRef}
                         className={EDIT_TITLE_CLASS}
                         value={milestone.name}
                         maxLength={60}
@@ -377,17 +393,20 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         <div className="flex flex-col gap-2.5">
                             {!isView && isGoal && onAddParent && (
                                 <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
-                                    + Add parent milestone
+                                    <PlusIcon size={16} />
+                                    Add parent milestone
                                 </button>
                             )}
                             {!isView && (
                                 <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
-                                    + Add sub-milestone
+                                    <PlusIcon size={16} />
+                                    Add sub-milestone
                                 </button>
                             )}
                             {onAddSubView && (
-                                <button type="button" className={ADD_PARENT_CLASS} onClick={onAddSubView}>
-                                    + Add sub-view
+                                <button type="button" className={ADD_DESC_CLASS} onClick={onAddSubView}>
+                                    <PlusIcon size={16} />
+                                    Add sub-view
                                 </button>
                             )}
                         </div>

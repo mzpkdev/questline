@@ -9,6 +9,7 @@
 import { compressToUTF16, decompressFromUTF16 } from "lz-string"
 import type { Task } from "./tasks"
 import type { Banked, Reward } from "./rewards"
+import type { Note } from "./notes"
 import type { Project } from "./project"
 
 export const PERSIST_VERSION = 3
@@ -29,6 +30,8 @@ export type PersistedSlices = {
     // Gold earned / spent by tasks and rewards that have been pruned (aged past their 14-day window and
     // dropped from the lists). Carried so the balance survives that compaction. See rewards.compact.
     banked: Banked
+    // The Draw wall: standalone Excalidraw notes, one canvas each. See notes.ts.
+    notes: Note[]
 }
 
 // A Project with its Set flattened to an array, so it survives JSON.
@@ -42,6 +45,9 @@ type WireState = {
     tasks: Task[]
     rewards: Reward[]
     banked: Banked
+    // The Draw notes. Optional on the wire so a v3 save written before Draw notes existed still loads
+    // (it simply had none); deserialize defaults a missing/legacy list to empty.
+    notes?: Note[]
 }
 
 // Live slices -> the JSON string written to a file or to localStorage.
@@ -57,7 +63,8 @@ export function serialize(slices: PersistedSlices): string {
         mirrorPos: slices.mirrorPos,
         tasks: slices.tasks,
         rewards: slices.rewards,
-        banked: slices.banked
+        banked: slices.banked,
+        notes: slices.notes
     }
     return JSON.stringify(wire)
 }
@@ -78,7 +85,15 @@ export function deserialize(text: string): PersistedSlices | null {
     for (const [id, project] of Object.entries(raw.projects)) {
         projects[id] = { ...project, mastered: new Set(project.mastered) }
     }
-    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks: raw.tasks, rewards: raw.rewards, banked: raw.banked }
+    return {
+        projects,
+        order: raw.order,
+        mirrorPos: raw.mirrorPos,
+        tasks: raw.tasks,
+        rewards: raw.rewards,
+        banked: raw.banked,
+        notes: raw.notes ?? []
+    }
 }
 
 // Best-effort read of the autosaved state, or null when absent/corrupt. v3 saves are lz-string-packed
@@ -127,6 +142,8 @@ function isWireState(value: unknown): value is WireState {
     if (!Array.isArray(v.tasks) || !v.tasks.every(isTask)) return false
     if (!Array.isArray(v.rewards) || !v.rewards.every(isReward)) return false
     if (!isBanked(v.banked)) return false
+    // Notes are optional (a pre-notes v3 save has none), but any present list must be well-formed.
+    if (v.notes !== undefined && (!Array.isArray(v.notes) || !v.notes.every(isNote))) return false
     return Object.values(v.projects as Record<string, unknown>).every(isWireProject)
 }
 
@@ -157,6 +174,22 @@ function isReward(value: unknown): value is Reward {
         typeof r.price === "number" &&
         (r.redeemedAt === undefined || typeof r.redeemedAt === "number") &&
         (r.replenish === undefined || typeof r.replenish === "boolean")
+    )
+}
+
+function isNote(value: unknown): value is Note {
+    if (typeof value !== "object" || value === null) return false
+    const n = value as Record<string, unknown>
+    if (typeof n.id !== "string" || typeof n.title !== "string" || typeof n.updatedAt !== "number") return false
+    const scene = n.scene
+    if (typeof scene !== "object" || scene === null) return false
+    const s = scene as Record<string, unknown>
+    return (
+        Array.isArray(s.elements) &&
+        typeof s.appState === "object" &&
+        s.appState !== null &&
+        typeof s.files === "object" &&
+        s.files !== null
     )
 }
 

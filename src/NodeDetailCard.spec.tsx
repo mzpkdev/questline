@@ -299,7 +299,7 @@ describe("NodeDetailCard", () => {
                 />
             )
             await user.click(screen.getByRole("button", { name: "Edit" }))
-            await user.click(screen.getByRole("button", { name: "+ Add sub-milestone" }))
+            await user.click(screen.getByRole("button", { name: "Add sub-milestone" }))
 
             expect(onAddChild).toHaveBeenCalledTimes(1)
         })
@@ -318,18 +318,18 @@ describe("NodeDetailCard", () => {
                 />
             )
             await user.click(screen.getByRole("button", { name: "Edit" }))
-            await user.click(screen.getByRole("button", { name: "+ Add parent milestone" }))
+            await user.click(screen.getByRole("button", { name: "Add parent milestone" }))
 
             expect(onAddParent).toHaveBeenCalledTimes(1)
         })
 
-        it("omits + Add parent milestone when adding a parent isn't allowed", async () => {
+        it("omits Add parent milestone when adding a parent isn't allowed", async () => {
             const user = userEvent.setup()
 
             render(<NodeDetailCard milestone={milestone()} state="available" todos={[]} isGoal />)
             await user.click(screen.getByRole("button", { name: "Edit" }))
 
-            expect(screen.queryByRole("button", { name: "+ Add parent milestone" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Add parent milestone" })).not.toBeInTheDocument()
         })
     })
 
@@ -345,7 +345,7 @@ describe("NodeDetailCard", () => {
 
             expect(screen.getByDisplayValue("Feature Complete")).toBeInTheDocument()
             expect(screen.getByDisplayValue("Data model reviewed")).toBeInTheDocument()
-            expect(screen.getByRole("button", { name: "+ Add sub-milestone" })).toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Add sub-milestone" })).toBeInTheDocument()
             // the view-mode action button is gone in edit mode
             expect(screen.queryByRole("button", { name: /mark complete/i })).not.toBeInTheDocument()
         })

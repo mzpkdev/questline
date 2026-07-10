@@ -15,6 +15,9 @@ export type TaskDetailCardProps = {
     closing?: boolean
     onEdit: (patch: { text?: string; reward?: number }) => void
     onDelete: () => void
+    // Open the card straight in edit mode (used for a just-added task, so its name is editable at once).
+    // Read on mount only; App remounts the card per task via a key, so it seeds each fresh task.
+    initialEditing?: boolean
     onExited?: () => void
 }
 
@@ -57,10 +60,20 @@ function RewardRow({ children }: { children: React.ReactNode }) {
     )
 }
 
-export function TaskDetailCard({ task, closing, onEdit, onDelete, onExited }: TaskDetailCardProps) {
-    const [editing, setEditing] = useState(false)
+export function TaskDetailCard({ task, closing, onEdit, onDelete, initialEditing = false, onExited }: TaskDetailCardProps) {
+    const [editing, setEditing] = useState(initialEditing)
     const [confirmOpen, setConfirmOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
+    const nameRef = useRef<HTMLInputElement>(null)
+
+    // A just-added task opens in edit mode: focus and select its name so a rename is one keystroke away.
+    // Mount-only (the card remounts per task), so it never steals focus on a later edit toggle.
+    useEffect(() => {
+        if (initialEditing) {
+            nameRef.current?.focus()
+            nameRef.current?.select()
+        }
+    }, [initialEditing])
 
     // Fire onExited once the dismissal animation ends. A native listener (attached only while closing)
     // sidesteps React's delegated onAnimationEnd, matching NodeDetailCard.
@@ -116,6 +129,7 @@ export function TaskDetailCard({ task, closing, onEdit, onDelete, onExited }: Ta
             {editing ? (
                 <>
                     <input
+                        ref={nameRef}
                         aria-label="Task name"
                         className={NAME_INPUT_CLASS}
                         value={task.text}
