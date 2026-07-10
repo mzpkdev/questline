@@ -443,7 +443,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                 </>
             ) : (
                 <>
-                    <div className="flex items-center gap-[14px]">
+                    <div className="mb-[14px] flex items-center gap-[14px]">
                         <div>
                             <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">
                                 {milestone.name}
@@ -453,7 +453,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                     </div>
 
                     {milestone.description && (
-                        <p className="my-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.description}</p>
+                        <p className="mb-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.description}</p>
                     )}
 
                     {earnsGold && (
