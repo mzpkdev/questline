@@ -5,7 +5,7 @@
 // price) and bought once: redeeming stamps `redeemedAt`, which both spends the gold and starts a 14-day
 // window after which the redeemed tile drops off the shelf (mirroring a completed task's auto-hide).
 
-import type { Task } from "./tasks"
+import { DONE_TTL_MS, type Task } from "./tasks"
 import { type Project, ROOT_ID } from "./project"
 
 // A reward is a name and a price in gold. Ids are minted like node/view/task ids (`reward-N`) so a
@@ -117,4 +117,43 @@ export function spentGold(list: Reward[]): number {
 // redemptions drop off the shelf but stay in state (so their spent gold is kept).
 export function visible(list: Reward[], now: number, ttlMs = REDEEMED_TTL_MS): Reward[] {
     return list.filter((reward) => reward.redeemedAt === undefined || now - reward.redeemedAt <= ttlMs)
+}
+
+// Running totals of gold earned / spent by records that have since been pruned. Kept so the balance
+// survives compaction: gold = banked.earned + earnedGold(live tasks) - (banked.spent + spentGold(live)).
+export type Banked = { earned: number; spent: number }
+
+// Fold every task/reward already past its 14-day window into the banked totals, then drop those records.
+// The visible ops (tasks.visible / visible above) already hide them, and earnedGold/spentGold sum only
+// survivors, so the totals cover the rest and the balance is unchanged -- state just stops growing. Only
+// prunes what is already invisible (strictly past its TTL), and returns the same references when there is
+// nothing old enough to drop, so callers can skip a needless update.
+export function compact(
+    tasks: Task[],
+    rewards: Reward[],
+    banked: Banked,
+    now: number,
+    taskTtlMs = DONE_TTL_MS,
+    rewardTtlMs = REDEEMED_TTL_MS
+): { tasks: Task[]; rewards: Reward[]; banked: Banked } {
+    let earned = banked.earned
+    let spent = banked.spent
+    const keptTasks = tasks.filter((task) => {
+        if (task.done && task.completedAt !== undefined && now - task.completedAt > taskTtlMs) {
+            earned += task.reward
+            return false
+        }
+        return true
+    })
+    const keptRewards = rewards.filter((reward) => {
+        if (reward.redeemedAt !== undefined && now - reward.redeemedAt > rewardTtlMs) {
+            spent += reward.price
+            return false
+        }
+        return true
+    })
+    if (keptTasks.length === tasks.length && keptRewards.length === rewards.length) {
+        return { tasks, rewards, banked }
+    }
+    return { tasks: keptTasks, rewards: keptRewards, banked: { earned, spent } }
 }

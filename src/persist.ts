@@ -7,7 +7,7 @@
 // persisted, so a load opens the default tab.
 
 import type { Task } from "./tasks"
-import type { Reward } from "./rewards"
+import type { Banked, Reward } from "./rewards"
 import type { Project } from "./project"
 
 export const PERSIST_VERSION = 2
@@ -25,6 +25,9 @@ export type PersistedSlices = {
     // The Rewards shelf. Gold isn't stored -- it's derived from roadmap completion (earnedGold) minus
     // the price of each redeemed reward, so a reward's `redeemedAt` carries the spend across a reload.
     rewards: Reward[]
+    // Gold earned / spent by tasks and rewards that have been pruned (aged past their 14-day window and
+    // dropped from the lists). Carried so the balance survives that compaction. See rewards.compact.
+    banked: Banked
 }
 
 // A Project with its Set flattened to an array, so it survives JSON.
@@ -37,6 +40,8 @@ type WireState = {
     // The app-level Tasks checklist and the Rewards shelf. Both required in the v2 wire format.
     tasks: Task[]
     rewards: Reward[]
+    // Optional on the wire: saves/exports from before compaction simply omit it and load as zeros.
+    banked?: Banked
 }
 
 // Live slices -> the JSON string written to a file or to localStorage.
@@ -51,7 +56,8 @@ export function serialize(slices: PersistedSlices): string {
         order: slices.order,
         mirrorPos: slices.mirrorPos,
         tasks: slices.tasks,
-        rewards: slices.rewards
+        rewards: slices.rewards,
+        banked: slices.banked
     }
     return JSON.stringify(wire)
 }
@@ -72,7 +78,8 @@ export function deserialize(text: string): PersistedSlices | null {
     for (const [id, project] of Object.entries(raw.projects)) {
         projects[id] = { ...project, mastered: new Set(project.mastered) }
     }
-    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks: raw.tasks, rewards: raw.rewards }
+    const banked = isBanked(raw.banked) ? raw.banked : { earned: 0, spent: 0 }
+    return { projects, order: raw.order, mirrorPos: raw.mirrorPos, tasks: raw.tasks, rewards: raw.rewards, banked }
 }
 
 // Best-effort read of the autosaved state, or null when absent/corrupt.
@@ -115,7 +122,14 @@ function isWireState(value: unknown): value is WireState {
     if (typeof v.mirrorPos !== "object" || v.mirrorPos === null) return false
     if (!Array.isArray(v.tasks) || !v.tasks.every(isTask)) return false
     if (!Array.isArray(v.rewards) || !v.rewards.every(isReward)) return false
+    if (v.banked !== undefined && !isBanked(v.banked)) return false
     return Object.values(v.projects as Record<string, unknown>).every(isWireProject)
+}
+
+function isBanked(value: unknown): value is Banked {
+    if (typeof value !== "object" || value === null) return false
+    const b = value as Record<string, unknown>
+    return typeof b.earned === "number" && typeof b.spent === "number"
 }
 
 function isTask(value: unknown): value is Task {

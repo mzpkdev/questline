@@ -9,6 +9,8 @@ import { complete, descendantsOf, parentOf, stateOf, uncomplete } from "./graph"
 import { IoButtons } from "./IoButtons"
 import {
     addReward,
+    type Banked,
+    compact,
     earnedGold,
     editReward,
     redeem,
@@ -53,6 +55,7 @@ type Boot = {
     mirrorPos: Record<string, { x: number; y: number }>
     tasks: Task[]
     rewards: Reward[]
+    banked: Banked
     activeId: string
     selectedId: string | null
     nextNodeId: number
@@ -69,21 +72,30 @@ function computeBoot(): Boot {
     const mirrorPos = loaded?.mirrorPos ?? {}
     // Tasks and rewards seed only on a truly fresh start (no saved state at all); an existing save
     // from before these views simply had none, and loads empty rather than re-seeding.
-    const tasks = loaded?.tasks ?? SEED_TASKS
-    const rewards = loaded?.rewards ?? SEED_REWARDS
-    // Counters resume past whatever ids the loaded/seed data already uses.
+    const rawTasks = loaded?.tasks ?? SEED_TASKS
+    const rawRewards = loaded?.rewards ?? SEED_REWARDS
+    // Counters resume past whatever ids the loaded/seed data already uses. Computed before pruning so a
+    // banked-away id is never reissued.
     const nextNodeId = maxCounter(
         Object.values(projects).flatMap((project) => Object.keys(project.milestones)),
         "node"
     )
     const nextViewId = maxCounter(Object.keys(projects), "view")
     const nextTaskId = maxCounter(
-        tasks.map((task) => task.id),
+        rawTasks.map((task) => task.id),
         "task"
     )
     const nextRewardId = maxCounter(
-        rewards.map((reward) => reward.id),
+        rawRewards.map((reward) => reward.id),
         "reward"
+    )
+    // Fold any task/reward already past its 14-day window into the banked totals and drop it, so storage
+    // stays small across reloads while the balance (banked + live) is unchanged.
+    const { tasks, rewards, banked } = compact(
+        rawTasks,
+        rawRewards,
+        loaded?.banked ?? { earned: 0, spent: 0 },
+        Date.now()
     )
     const base = {
         projects,
@@ -91,6 +103,7 @@ function computeBoot(): Boot {
         mirrorPos,
         tasks,
         rewards,
+        banked,
         nextNodeId,
         nextViewId,
         nextTaskId,
@@ -135,6 +148,9 @@ export function App() {
     // The Rewards shelf. Gold isn't stored: it's earned from roadmap completion minus the price of
     // each redeemed reward (computed below).
     const [rewards, setRewards] = useState<Reward[]>(boot.rewards)
+    // Gold earned/spent by tasks and rewards pruned past their 14-day window (folded in at load by
+    // compact()). Added to the live sums so the balance is unchanged by that compaction.
+    const [banked, setBanked] = useState<Banked>(boot.banked)
     const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync">("roadmap")
     // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
     // id the card actually shows -- `displayTaskId` trails `selectedTaskId` on dismissal so the exit
@@ -174,7 +190,10 @@ export function App() {
     // Gold in the purse: earned from progress (checklist boxes, tasks, milestones, goals) minus what's
     // been spent. A redemption is a permanent spend, so un-completing work you'd already spent against
     // can push the balance negative -- a debt the purse shows honestly until fresh work out-earns it.
-    const gold = useMemo(() => earnedGold(projects, tasks) - spentGold(rewards), [projects, tasks, rewards])
+    const gold = useMemo(
+        () => banked.earned + earnedGold(projects, tasks) - (banked.spent + spentGold(rewards)),
+        [projects, tasks, rewards, banked]
+    )
 
     useEffect(() => {
         if (!active) return
@@ -377,9 +396,9 @@ export function App() {
     // Autosave the app's data (not the open tab) 400ms after the last change, so a drag — which
     // fires moveMilestone rapidly — coalesces into a single write.
     useEffect(() => {
-        const timer = setTimeout(() => saveState({ projects, order, mirrorPos, tasks, rewards }), 400)
+        const timer = setTimeout(() => saveState({ projects, order, mirrorPos, tasks, rewards, banked }), 400)
         return () => clearTimeout(timer)
-    }, [projects, order, mirrorPos, tasks, rewards])
+    }, [projects, order, mirrorPos, tasks, rewards, banked])
 
     // Select a node and pan the canvas onto it; the URL hash follows the selection.
     const focusNode = useCallback((id: string) => {
@@ -782,8 +801,8 @@ export function App() {
 
     // Serialize the app's data (not the open tab) for the Export button to download.
     const handleExport = useCallback(
-        () => serialize({ projects, order, mirrorPos, tasks, rewards }),
-        [projects, order, mirrorPos, tasks, rewards]
+        () => serialize({ projects, order, mirrorPos, tasks, rewards, banked }),
+        [projects, order, mirrorPos, tasks, rewards, banked]
     )
 
     // Replace the whole app from a loaded state -- an imported file or a roadmap synced down from another
@@ -795,6 +814,7 @@ export function App() {
         setMirrorPos(loaded.mirrorPos)
         setTasks(loaded.tasks)
         setRewards(loaded.rewards)
+        setBanked(loaded.banked)
         setSection("roadmap")
         nextNodeId.current = maxCounter(
             Object.values(loaded.projects).flatMap((project) => Object.keys(project.milestones)),
@@ -831,8 +851,8 @@ export function App() {
     // Cross-device sync: opt-in, end-to-end encrypted, and inert unless VITE_SYNC_URL is set at build.
     // It reads the same slices the autosave persists and applies an incoming roadmap through applyLoaded.
     const syncSlices = useMemo<PersistedSlices>(
-        () => ({ projects, order, mirrorPos, tasks, rewards }),
-        [projects, order, mirrorPos, tasks, rewards]
+        () => ({ projects, order, mirrorPos, tasks, rewards, banked }),
+        [projects, order, mirrorPos, tasks, rewards, banked]
     )
     const sync = useSync(syncSlices, applyLoaded)
 

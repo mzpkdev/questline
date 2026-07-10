@@ -999,6 +999,35 @@ describe("Rewards & gold (e2e)", () => {
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 5) // recomputed from the persisted mastered set + done task
         })
+
+        it("compacts an aged completed task on reload: banks it, drops the record, holds the balance", async () => {
+            const start = Date.UTC(2026, 0, 1, 12)
+            setNow(start)
+            const first = render(<App />)
+            await earnViaTask("Old chore", 2) // completedAt stamped at `start`
+            openShop()
+            await waitFor(() => expect(balance()).toBe(BASE_GOLD + 2))
+            await waitFor(() => expect(localStorage.getItem("questline:v2")).toContain("Old chore"), { timeout: 2000 })
+
+            // Age it past the 14-day window and reload: boot folds it into banked and drops the record.
+            setNow(start + DONE_TTL_MS + 1)
+            first.unmount()
+            render(<App />)
+            openShop()
+            await screen.findByRole("button", { name: "Open Fancy coffee" })
+            expect(balance()).toBe(BASE_GOLD + 2) // unchanged: banked covers the pruned task
+
+            await waitFor(
+                () => {
+                    const saved = localStorage.getItem("questline:v2")
+                    expect(saved).not.toContain("Old chore") // record gone
+                    expect(saved).toContain('"earned":2') // folded into banked
+                },
+                { timeout: 2000 }
+            )
+            openTasksView()
+            expect(screen.queryByRole("button", { name: "Open Old chore" })).toBeNull()
+        })
     })
 
     context("navigating between views", () => {

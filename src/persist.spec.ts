@@ -12,7 +12,8 @@ const slices = () => ({
     rewards: [
         { id: "reward-1", name: "Fancy coffee", price: 3 },
         { id: "reward-2", name: "Weekend trip", price: 40 }
-    ]
+    ],
+    banked: { earned: 0, spent: 0 }
 })
 
 describe("persist", () => {
@@ -46,6 +47,16 @@ describe("persist", () => {
 
     it("stamps the current version", () => {
         expect(JSON.parse(serialize(slices())).version).toBe(PERSIST_VERSION)
+    })
+
+    it("round-trips banked totals, defaulting them to zero for a file without them", () => {
+        const withBanked = { ...slices(), banked: { earned: 12, spent: 5 } }
+        expect(deserialize(serialize(withBanked))?.banked).toEqual({ earned: 12, spent: 5 })
+
+        // A pre-compaction file omits `banked` entirely: it loads as zeros, not null.
+        const legacy = JSON.parse(serialize(slices()))
+        delete legacy.banked
+        expect(deserialize(JSON.stringify(legacy))?.banked).toEqual({ earned: 0, spent: 0 })
     })
 
     it("rejects non-JSON, wrong version, and malformed shapes as null", () => {
