@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { type Boards, newBoard, UNLINKED_LABEL } from "./board"
-import { BoardTree } from "./BoardTree"
+import { type Boards, boardCompleter, newBoard, UNLINKED_LABEL } from "./board"
+import { BoardTree, buildEdges } from "./BoardTree"
 import { EDGES, MASTERED, type Edge, type Node, NODES } from "./nodes"
 
 const defaultNodes: Record<string, Node> = Object.fromEntries(NODES.map((n) => [n.id, n]))
@@ -112,6 +112,42 @@ describe("BoardTree", () => {
             const chip = container.querySelector('[data-id="lk"][data-linked-node]')
             fireEvent.click(chip as Element)
             expect(onSelect).toHaveBeenCalledWith("lk")
+        })
+    })
+
+    context("buildEdges (a link lights once the node below it is mastered)", () => {
+        const edgeNodes: Record<string, Node> = {
+            g: { id: "g", name: "Goal", x: 0, y: 0, tier: 0, description: "", reward: 5 },
+            n: { id: "n", name: "Node", x: 0, y: 0, tier: 1, description: "", reward: 3 },
+            lk: { id: "lk", name: "", x: 0, y: 0, tier: 1, targetBoardId: "target" }
+        }
+        // The lit flag of the single edge built from [g -> child].
+        const litOf = (edges: Edge[], mastered: Set<string>, nodes: Record<string, Node>, boards: Boards) =>
+            buildEdges(edges, mastered, nodes, boardCompleter(boards))[0]?.data?.lit
+
+        it("lights a regular child in the mastered set (unchanged bottom-up rule)", () => {
+            expect(litOf([["g", "n"]], new Set(["n"]), edgeNodes, {})).toBe(true)
+        })
+
+        it("leaves a regular child dark when not mastered", () => {
+            expect(litOf([["g", "n"]], new Set(), edgeNodes, {})).toBe(false)
+        })
+
+        it("lights a linked child once its target board is complete (derived mastery)", () => {
+            const boards: Boards = {
+                target: { ...newBoard("target", "target-root", "Other Quest"), mastered: new Set(["target-root"]) }
+            }
+            expect(litOf([["g", "lk"]], new Set(), edgeNodes, boards)).toBe(true)
+        })
+
+        it("leaves a linked child dark while its target board is incomplete", () => {
+            const boards: Boards = { target: newBoard("target", "target-root", "Other Quest") }
+            expect(litOf([["g", "lk"]], new Set(), edgeNodes, boards)).toBe(false)
+        })
+
+        it("leaves a linked child dark while unlinked", () => {
+            const unlinked: Record<string, Node> = { ...edgeNodes, lk: { id: "lk", name: "", x: 0, y: 0, tier: 1, targetBoardId: null } }
+            expect(litOf([["g", "lk"]], new Set(), unlinked, {})).toBe(false)
         })
     })
 

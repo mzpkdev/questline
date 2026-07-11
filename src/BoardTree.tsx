@@ -16,7 +16,7 @@ import { type Boards, boardCompleter, linkedNodeName } from "./board"
 import { Edge } from "./Edge"
 import type { FlowNode, LinkedFlowNode, NodeFlowEdge, NodeFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import { type BoardComplete, stateOf } from "./graph"
+import { type BoardComplete, isMastered, stateOf } from "./graph"
 import { LinkedNode } from "./LinkedNode"
 import { NodeCard } from "./NodeCard"
 // The tuple type `Edge` clashes with the `Edge` edge component above, so alias the tuple here.
@@ -121,6 +121,26 @@ function buildFlowNode(
     return isLinkedNode(node)
         ? makeLinkedNode(node, selectedId, mastered, edges, boards, nodes, boardComplete)
         : makeNode(node, rootId, selectedId, mastered, edges, nodes, boardComplete)
+}
+
+// One glow edge per link. It lights ("lit") when the child below is mastered, so the gold grows up the
+// thread toward the parent it unlocks. A linked child counts as mastered when its target board is
+// complete, so isMastered (not raw `mastered` membership) drives the light.
+export function buildEdges(
+    edges: EdgeTuple[],
+    mastered: ReadonlySet<string>,
+    nodes: Record<string, Node>,
+    boardComplete: BoardComplete
+): NodeFlowEdge[] {
+    return edges.map(
+        ([parent, child]): NodeFlowEdge => ({
+            id: `${parent}-${child}`,
+            source: parent,
+            target: child,
+            type: "glow",
+            data: { lit: isMastered(child, mastered, nodes, boardComplete) }
+        })
+    )
 }
 
 export function BoardTree(props: BoardTreeProps) {
@@ -240,20 +260,12 @@ export function BoardTree(props: BoardTreeProps) {
         })
     }, [props.selectedId, props.mastered, props.nodes, props.edges, props.rootId, props.boards, isBoardComplete, setNodes])
 
-    // Edges rebuild when the board's links or completed set change: a link lights once the node
-    // below it is complete.
+    // Edges rebuild when the board's links, completed set, or any board's completion change: a link
+    // lights once the node below it is mastered (a linked node counts as mastered when its target
+    // board is complete, so its incoming edge lights too). See buildEdges.
     const edges = useMemo<NodeFlowEdge[]>(
-        () =>
-            props.edges.map(
-                ([parent, child]): NodeFlowEdge => ({
-                    id: `${parent}-${child}`,
-                    source: parent,
-                    target: child,
-                    type: "glow",
-                    data: { lit: props.mastered.has(child) }
-                })
-            ),
-        [props.edges, props.mastered]
+        () => buildEdges(props.edges, props.mastered, props.nodes, isBoardComplete),
+        [props.edges, props.mastered, props.nodes, isBoardComplete]
     )
 
     // Newly added nodes spawn-in, but not the initial batch or a tab-switch remount: flip "ready" a
