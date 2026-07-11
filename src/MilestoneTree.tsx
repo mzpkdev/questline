@@ -146,12 +146,25 @@ export function MilestoneTree(props: MilestoneTreeProps) {
                 const state = stateOf(milestone.id, props.mastered, structuralEdges)
                 const existing = byId.get(milestone.id)
                 if (existing && existing.type === "milestone") {
-                    return existing.data.isSelected === isSelected &&
+                    // Keep the React-Flow-owned position while dragging; otherwise sync it to the stored
+                    // (x, y). At rest, a drag has already been persisted so the two match (no snap), but a
+                    // programmatic move (inserting a parent shifts the subtree down a tier) now lands.
+                    const size = isGoal ? NODE_SIZE.goal : NODE_SIZE.normal
+                    const position = existing.dragging
+                        ? existing.position
+                        : { x: milestone.x - size.width / 2, y: milestone.y - size.height / 2 }
+                    const posSame = position.x === existing.position.x && position.y === existing.position.y
+                    const dataSame =
+                        existing.data.isSelected === isSelected &&
                         existing.data.state === state &&
                         existing.data.milestone === milestone &&
                         existing.data.isGoal === isGoal
-                        ? existing
-                        : { ...existing, data: { ...existing.data, isSelected, state, milestone, isGoal } }
+                    if (posSame && dataSame) return existing
+                    return {
+                        ...existing,
+                        position,
+                        data: dataSame ? existing.data : { ...existing.data, isSelected, state, milestone, isGoal }
+                    }
                 }
                 return makeMilestoneNode(milestone, props.selectedId, props.mastered, structuralEdges)
             })

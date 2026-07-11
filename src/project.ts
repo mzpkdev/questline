@@ -2,9 +2,10 @@
 // The tab's label is simply the goal (tier-0 root) milestone's name, so renaming the tab and
 // renaming the goal are the same edit seen from two places.
 
-import { descendantsOf } from "./graph"
+import { descendantsOf, parentOf, uncomplete } from "./graph"
 import {
     DEFAULT_GOAL_REWARD,
+    DEFAULT_NODE_REWARD,
     EDGES,
     MASTERED,
     type Milestone,
@@ -13,6 +14,9 @@ import {
     TODOS,
     type Todo
 } from "./milestones"
+
+// Vertical gap between tiers when a node is pushed down a tier (matches App's auto-placement).
+const TIER_GAP = 160
 
 export type Project = {
     id: string
@@ -91,4 +95,56 @@ export function deleteMilestone(project: Project, id: string): Project {
     const edges = project.edges.filter(([parent, child]) => !doomed.has(parent) && !doomed.has(child))
     const mastered = new Set([...project.mastered].filter((mid) => !doomed.has(mid)))
     return { ...project, milestones, edges, todos, mastered }
+}
+
+// Insert a fresh, blank parent above `targetId`, opened later in edit mode. Above the goal (tier-0) the
+// new node becomes the goal and every node shifts down a tier (a new top). Above a regular milestone M
+// it splices in between M and its current parent P, so `P -> M` becomes `P -> N -> M`, and M with its
+// whole subtree drops a tier; P, now holding a fresh incomplete child, drops out of the completed set
+// (mirroring adding a sub-milestone). An unknown id is a no-op (same reference).
+export function insertParent(project: Project, targetId: string, newId: string): Project {
+    const target = project.milestones[targetId]
+    if (!target) return project
+
+    if (targetId === project.goalId) {
+        const milestones: Record<string, Milestone> = {}
+        for (const [id, milestone] of Object.entries(project.milestones)) {
+            milestones[id] = { ...milestone, tier: milestone.tier + 1 }
+        }
+        milestones[newId] = {
+            id: newId,
+            name: "New Milestone",
+            tag: "Goal",
+            x: target.x,
+            y: target.y - TIER_GAP,
+            tier: 0,
+            branch: "Goal",
+            description: "",
+            reward: DEFAULT_GOAL_REWARD
+        }
+        const edges: MilestoneEdge[] = [...project.edges, [newId, project.goalId]]
+        return { ...project, milestones, edges, goalId: newId }
+    }
+
+    const subtree = new Set<string>([targetId, ...descendantsOf(targetId, project.edges)])
+    const milestones: Record<string, Milestone> = {}
+    for (const [id, milestone] of Object.entries(project.milestones)) {
+        milestones[id] = subtree.has(id) ? { ...milestone, tier: milestone.tier + 1, y: milestone.y + TIER_GAP } : { ...milestone }
+    }
+    milestones[newId] = {
+        id: newId,
+        name: "New Milestone",
+        tag: target.tag,
+        x: target.x,
+        y: target.y,
+        tier: target.tier,
+        branch: target.branch,
+        description: "",
+        reward: DEFAULT_NODE_REWARD
+    }
+    const oldParent = parentOf(targetId, project.edges)
+    const edges: MilestoneEdge[] = project.edges.map((edge) => (edge[1] === targetId ? [edge[0], newId] : edge))
+    edges.push([newId, targetId])
+    const mastered = oldParent ? uncomplete(oldParent, project.mastered, edges) : project.mastered
+    return { ...project, milestones, edges, mastered }
 }

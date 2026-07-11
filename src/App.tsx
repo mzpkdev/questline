@@ -26,11 +26,11 @@ import {
 } from "./rewards"
 import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
 import { MilestoneTree } from "./MilestoneTree"
-import { DEFAULT_GOAL_REWARD, DEFAULT_NODE_REWARD, type Milestone, type MilestoneEdge } from "./milestones"
+import { DEFAULT_NODE_REWARD, type Milestone, type MilestoneEdge } from "./milestones"
 import { NavActions } from "./NavActions"
 import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
-import { deleteMilestone, newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
+import { deleteMilestone, insertParent, newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -748,33 +748,16 @@ export function App() {
     // normal node beneath it, and every existing node shifts down a tier. The tab label follows the
     // goal name, so it flips to the new node instantly. Disabled on Root (nothing sits above Root).
     const addParent = useCallback(() => {
-        if (activeId === ROOT_ID) return
+        if (selectedId === null) return
+        // The Root hub's own goal is pinned (nothing sits above it); every other node, including a
+        // regular milestone on the Root tab, can take a new parent.
+        if (activeId === ROOT_ID && selectedId === active?.goalId) return
         nextNodeId.current += 1
-        const goalId = `node-${nextNodeId.current}`
-        updateActive((project) => {
-            const oldGoal = project.milestones[project.goalId]
-            if (!oldGoal) return project
-            const milestones: Record<string, Milestone> = {}
-            for (const [id, milestone] of Object.entries(project.milestones)) {
-                milestones[id] = { ...milestone, tier: milestone.tier + 1 }
-            }
-            milestones[goalId] = {
-                id: goalId,
-                name: "New Milestone",
-                tag: "Goal",
-                x: oldGoal.x,
-                y: oldGoal.y - TIER_GAP,
-                tier: 0,
-                branch: "Goal",
-                description: "",
-                reward: DEFAULT_GOAL_REWARD
-            }
-            const edges: MilestoneEdge[] = [...project.edges, [goalId, project.goalId]]
-            return { ...project, milestones, edges, goalId }
-        })
-        setEditOnAddId(goalId)
-        focusNode(goalId)
-    }, [activeId, updateActive, focusNode])
+        const newId = `node-${nextNodeId.current}`
+        updateActive((project) => insertParent(project, selectedId, newId))
+        setEditOnAddId(newId)
+        focusNode(newId)
+    }, [activeId, active, selectedId, updateActive, focusNode])
 
     // Switch to another tab, selecting its goal so the card shows something valid immediately.
     const switchProject = useCallback(
@@ -1276,7 +1259,7 @@ export function App() {
                                     onDeleteTodo={deleteTodo}
                                     onAddTodo={addTodo}
                                     onAddChild={addChild}
-                                    onAddParent={activeId === ROOT_ID ? undefined : addParent}
+                                    onAddParent={shownIsRootGoal ? undefined : addParent}
                                     onAddSubView={
                                         shownIsView && displayId
                                             ? () => addView(displayId.slice(VIEW_MIRROR_PREFIX.length), false)

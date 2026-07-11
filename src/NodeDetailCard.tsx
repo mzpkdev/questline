@@ -9,7 +9,7 @@ import { PlusIcon } from "./PlusIcon"
 // A visual re-port of the mockup's detail sidebar (renderCard). Checklist ticks call `onToggle`
 // (only when the milestone is actionable); the pencil flips to the mockup's edit layout, whose
 // fields (name, description, checklist item text / delete / add) commit live through the on* edit
-// callbacks. Adding sub-/parent milestones is still visual-only. The App remounts this card via a
+// callbacks, as do the add sub-/parent-milestone and sub-view buttons. The App remounts this card via a
 // React key on selection change, so both the cardSwap animation and the edit toggle reset per node.
 export type NodeDetailCardProps = {
     milestone: Milestone
@@ -391,7 +391,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
 
                     {(!isView || onAddSubView) && (
                         <div className="flex flex-col gap-2.5">
-                            {!isView && isGoal && onAddParent && (
+                            {!isView && onAddParent && (
                                 <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
                                     <PlusIcon size={16} />
                                     Add parent milestone
