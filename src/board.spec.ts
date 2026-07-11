@@ -6,6 +6,7 @@ import {
     type Board,
     boardComplete,
     boardCompleter,
+    boardGold,
     boardsReducer,
     type BoardsState,
     completeNode,
@@ -132,7 +133,7 @@ describe("addChild", () => {
 
     it("un-completes the parent (and ancestors) when the fresh child is incomplete", () => {
         // plan-goal is unlocked (its child break-steps is complete); mark it complete, then add a child.
-        const board = completeNode(seedBoard(), "plan-goal", true)
+        const board = completeNode(seedBoard(), "plan-goal", true, () => false)
         expect(board.mastered.has("plan-goal")).toBe(true)
         const next = addChild(board, "plan-goal", "node-c")
         expect(next.mastered.has("plan-goal")).toBe(false)
@@ -160,7 +161,7 @@ describe("addLinkedNode", () => {
     })
 
     it("un-completes the parent (and ancestors) when the fresh linked child is incomplete", () => {
-        const board = completeNode(seedBoard(), "plan-goal", true)
+        const board = completeNode(seedBoard(), "plan-goal", true, () => false)
         expect(board.mastered.has("plan-goal")).toBe(true)
         const next = addLinkedNode(board, "plan-goal", "node-link")
         expect(next.mastered.has("plan-goal")).toBe(false)
@@ -235,17 +236,17 @@ describe("editNode / moveNode", () => {
 
 describe("completeNode / uncompleteNode", () => {
     it("marks an unlocked node with all boxes ticked complete", () => {
-        const next = completeNode(seedBoard(), "plan-goal", true)
+        const next = completeNode(seedBoard(), "plan-goal", true, () => false)
         expect(next.mastered.has("plan-goal")).toBe(true)
     })
 
     it("refuses to complete while a box is unchecked (same reference)", () => {
         const board = seedBoard()
-        expect(completeNode(board, "plan-goal", false)).toBe(board)
+        expect(completeNode(board, "plan-goal", false, () => false)).toBe(board)
     })
 
     it("un-completes, cascading up so no completed parent keeps an incomplete child", () => {
-        const board = completeNode(completeNode(seedBoard(), "plan-goal", true), "learn", false)
+        const board = completeNode(completeNode(seedBoard(), "plan-goal", true, () => false), "learn", false, () => false)
         // learn can't complete yet (track-progress incomplete), so just un-complete plan-goal.
         const next = uncompleteNode(board, "plan-goal")
         expect(next.mastered.has("plan-goal")).toBe(false)
@@ -257,7 +258,7 @@ describe("boardComplete / boardCompleter", () => {
         const open = newBoard("b", "b-root", "B") // fresh: root not yet mastered
         expect(boardComplete({ b: open }, "b")).toBe(false)
         // A fresh board's root is a lone leaf, so completing it masters the board.
-        const done = completeNode(open, "b-root", true)
+        const done = completeNode(open, "b-root", true, () => false)
         expect(boardComplete({ b: done }, "b")).toBe(true)
     })
 
@@ -266,10 +267,34 @@ describe("boardComplete / boardCompleter", () => {
     })
 
     it("boardCompleter binds a boards map into a reusable resolver", () => {
-        const done = completeNode(newBoard("b", "b-root", "B"), "b-root", true)
+        const done = completeNode(newBoard("b", "b-root", "B"), "b-root", true, () => false)
         const resolve = boardCompleter({ b: done })
         expect(resolve("b")).toBe(true)
         expect(resolve("nope")).toBe(false)
+    })
+})
+
+describe("boardGold", () => {
+    it("sums each mastered node's reward, counting linked / reward-less / missing ids as zero", () => {
+        const board: Board = {
+            id: "g",
+            rootId: "r",
+            nodes: {
+                r: { id: "r", name: "R", x: 0, y: 0, tier: 0, description: "", reward: 5 },
+                c: { id: "c", name: "C", x: 0, y: 160, tier: 1, description: "", reward: 3 }, // not mastered
+                link: { id: "link", name: "", x: 0, y: 160, tier: 1, targetBoardId: null } // linked: no reward
+            },
+            edges: [],
+            todos: {},
+            // r pays its 5; the reward-less linked node and a mastered id with no node record add nothing,
+            // and the unmastered child `c` is not counted at all.
+            mastered: new Set(["r", "link", "ghost"])
+        }
+        expect(boardGold(board)).toBe(5)
+    })
+
+    it("is zero for a board with nothing mastered", () => {
+        expect(boardGold(newBoard("b", "b-root", "B"))).toBe(0)
     })
 })
 

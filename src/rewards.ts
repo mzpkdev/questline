@@ -6,7 +6,7 @@
 // window after which the redeemed tile drops off the shelf (mirroring a completed task's auto-hide).
 
 import { DONE_TTL_MS, type Task } from "./tasks"
-import type { Board } from "./board"
+import { type Board, boardGold } from "./board"
 
 // A reward is a name and a price in gold. Ids are minted like node/board/task ids (`reward-N`) so a
 // React key and a removal track the item, not its position.
@@ -37,17 +37,12 @@ export const SEED_REWARDS: Reward[] = [
     { id: "reward-3", name: "Movie night", price: 12 }
 ]
 
-// Total gold earned: across every board, each mastered node (including a mastered tier-0 root node)
-// pays its own `reward`, and each done task in the app-level to-do list pays its own `reward`. A
-// mastered id with no surviving node record (or a reward-less linked node, from Phase 2) contributes
-// nothing. Boards are equal now -- there is no Root hub to skip.
+// Total gold earned: every board's own earned gold (board.boardGold -- each mastered node pays its
+// `reward`, including the tier-0 root; reward-less / missing nodes count as zero) plus each done task's
+// `reward` from the app-level to-do list. Boards are equal now -- there is no Root hub to skip.
 export function earnedGold(boards: Record<string, Board>, tasks: Task[]): number {
     let total = 0
-    for (const board of Object.values(boards)) {
-        for (const masteredId of board.mastered) {
-            total += board.nodes[masteredId]?.reward ?? 0
-        }
-    }
+    for (const board of Object.values(boards)) total += boardGold(board)
     for (const task of tasks) if (task.done) total += task.reward
     return total
 }

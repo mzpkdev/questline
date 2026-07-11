@@ -57,6 +57,28 @@ const FIT_VIEW_OPTIONS = { padding: 0.08, maxZoom: 1 }
 // Hide the React Flow attribution watermark in the canvas corner.
 const proOptions = { hideAttribution: true }
 
+type Size = { width: number; height: number }
+type Point = { x: number; y: number }
+
+// A board node's fixed draw size by kind/role: the root node card is the larger size; linked and
+// regular non-root cards use the normal size. Single source of truth for the centre<->top-left math
+// below, so every conversion agrees on how big the card it's shifting is.
+function sizeOf(node: Node, rootId: string): Size {
+    return isLinkedNode(node) ? NODE_SIZE.normal : node.id === rootId ? NODE_SIZE.root : NODE_SIZE.normal
+}
+
+// The stored (x, y) is a card's centre; React Flow anchors at the top-left, so shift by half the card
+// to land the centre back on (x, y).
+function toTopLeft(node: Node, size: Size): Point {
+    return { x: node.x - size.width / 2, y: node.y - size.height / 2 }
+}
+
+// Inverse of toTopLeft: convert React Flow's top-left position back to the stored centre (reported up
+// on drag-stop).
+function toCenter(pos: Point, size: Size): Point {
+    return { x: pos.x + size.width / 2, y: pos.y + size.height / 2 }
+}
+
 // Build a node card. The stored (x, y) is the card centre; React Flow anchors at the
 // top-left, so shift by half the card to land the centre back on (x, y).
 function makeNode(
@@ -69,11 +91,10 @@ function makeNode(
     boardComplete: BoardComplete
 ): NodeFlowNode {
     const isRoot = node.id === rootId
-    const size = isRoot ? NODE_SIZE.root : NODE_SIZE.normal
     return {
         id: node.id,
         type: "node",
-        position: { x: node.x - size.width / 2, y: node.y - size.height / 2 },
+        position: toTopLeft(node, sizeOf(node, rootId)),
         data: {
             node,
             state: stateOf(node.id, mastered, edges, nodes, boardComplete),
@@ -94,11 +115,10 @@ function makeLinkedNode(
     nodes: Record<string, Node>,
     boardComplete: BoardComplete
 ): LinkedFlowNode {
-    const size = NODE_SIZE.normal
     return {
         id: node.id,
         type: "linked",
-        position: { x: node.x - size.width / 2, y: node.y - size.height / 2 },
+        position: toTopLeft(node, NODE_SIZE.normal),
         data: {
             name: linkedNodeName(boards, node.targetBoardId),
             state: stateOf(node.id, mastered, edges, nodes, boardComplete),
@@ -202,13 +222,12 @@ export function BoardTree(props: BoardTreeProps) {
                 const isSelected = node.id === props.selectedId
                 const state = stateOf(node.id, props.mastered, props.edges, props.nodes, isBoardComplete)
                 const existing = byId.get(node.id)
+                const size = sizeOf(node, props.rootId)
 
                 if (isLinkedNode(node)) {
                     const name = linkedNodeName(props.boards, node.targetBoardId)
                     if (existing && existing.type === "linked") {
-                        const position = existing.dragging
-                            ? existing.position
-                            : { x: node.x - NODE_SIZE.normal.width / 2, y: node.y - NODE_SIZE.normal.height / 2 }
+                        const position = existing.dragging ? existing.position : toTopLeft(node, size)
                         const posSame = position.x === existing.position.x && position.y === existing.position.y
                         const dataSame =
                             existing.data.isSelected === isSelected &&
@@ -230,10 +249,7 @@ export function BoardTree(props: BoardTreeProps) {
 
                 const isRoot = node.id === props.rootId
                 if (existing && existing.type === "node") {
-                    const size = isRoot ? NODE_SIZE.root : NODE_SIZE.normal
-                    const position = existing.dragging
-                        ? existing.position
-                        : { x: node.x - size.width / 2, y: node.y - size.height / 2 }
+                    const position = existing.dragging ? existing.position : toTopLeft(node, size)
                     const posSame = position.x === existing.position.x && position.y === existing.position.y
                     const dataSame =
                         existing.data.isSelected === isSelected &&
@@ -291,7 +307,8 @@ export function BoardTree(props: BoardTreeProps) {
                         // Convert React Flow's top-left back to the stored centre. Only a root node card
                         // is the larger size; linked and regular non-root nodes use the normal size.
                         const size = node.type === "node" && node.data.isRoot ? NODE_SIZE.root : NODE_SIZE.normal
-                        props.onMove(node.id, node.position.x + size.width / 2, node.position.y + size.height / 2)
+                        const center = toCenter(node.position, size)
+                        props.onMove(node.id, center.x, center.y)
                     }}
                     nodesConnectable={false}
                     proOptions={proOptions}

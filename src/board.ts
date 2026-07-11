@@ -34,7 +34,7 @@ export type Board = {
     rootId: string
     nodes: Record<string, Node>
     edges: Edge[]
-    // Per-node checklists; root (and, from Phase 2, linked) nodes have none.
+    // Per-node checklists; root and linked nodes have none.
     todos: Record<string, Todo[]>
     // Ids of nodes the user ticked complete. Live as a Set (graph.ts relies on Set semantics); it
     // crosses the persist wire as an array and is rebuilt into a Set on load.
@@ -90,6 +90,16 @@ export function boardComplete(boards: Boards, boardId: string): boolean {
 // node resolves its mastery from its target board without graph.ts needing the map (keeping it pure).
 export function boardCompleter(boards: Boards): BoardComplete {
     return (boardId) => boardComplete(boards, boardId)
+}
+
+// Gold this board has earned: the sum of each mastered node's own `reward` (including a mastered tier-0
+// root). A mastered id with no surviving node record, or a reward-less linked node (a linked node never
+// enters `mastered` anyway), contributes nothing. Kept here so the no-double-count rule lives with the
+// boards data; rewards.earnedGold folds this over every board.
+export function boardGold(board: Board): number {
+    let total = 0
+    for (const id of board.mastered) total += board.nodes[id]?.reward ?? 0
+    return total
 }
 
 // A blank roadmap: a single gold root node named after the tab, no children and nothing complete.
@@ -240,15 +250,11 @@ export function moveNode(board: Board, id: string, x: number, y: number): Board 
 
 // Mark `id` complete via the pure graph rule (unlocked AND every box ticked), returning the board
 // unchanged when the move is disallowed or already done. `boardComplete` resolves any linked child's
-// mastery from its target board so a parent gated only by a completed link can unlock; it defaults to a
-// no-op for callers with no cross-board links. A linked node is guarded off inside graph.complete, so
-// it can never be added to `mastered` here.
-export function completeNode(
-    board: Board,
-    id: string,
-    allTodosDone: boolean,
-    boardComplete: BoardComplete = () => false
-): Board {
+// mastery from its target board so a parent gated only by a completed link can unlock; it is required
+// (single-board callers with no cross-board links pass `() => false`) so a linked child is never
+// silently treated as never-mastering. A linked node is guarded off inside graph.complete, so it can
+// never be added to `mastered` here.
+export function completeNode(board: Board, id: string, allTodosDone: boolean, boardComplete: BoardComplete): Board {
     const mastered = complete(id, board.mastered, allTodosDone, board.edges, board.nodes, boardComplete)
     return mastered === board.mastered ? board : { ...board, mastered }
 }

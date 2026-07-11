@@ -120,7 +120,7 @@ describe("STATE_LABEL", () => {
     })
 })
 
-// --- Linked-node completion (Phase 3) ---------------------------------------------------------------
+// --- Linked-node completion ---------------------------------------------------------------
 // Node kind is positional: a linked node carries the `targetBoardId` key; a regular node omits it. A
 // linked node's mastery is DERIVED from a `boardComplete(targetBoardId)` resolver (never a mastered-set
 // member), which is what unlocks its children and bubbles up to its parent.

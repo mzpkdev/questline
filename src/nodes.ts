@@ -13,7 +13,7 @@ export type Todo = {
 }
 
 // A tree node. Its kind is positional, never stored: the root node is the one whose id equals its
-// board's rootId; a linked node (Phase 2) is any node carrying the `targetBoardId` key. A regular
+// board's rootId; a linked node is any node carrying the `targetBoardId` key. A regular
 // or root node carries `description` + `reward`; a linked node carries neither.
 export type Node = {
     id: string

@@ -23,9 +23,10 @@ const INSET = 3.5
 // Invisible handle so an edge into / out of a linked node still has something to anchor to.
 const HANDLE_STYLE: CSSProperties = { opacity: 0, width: 6, height: 6, border: "none" }
 
-// The gilded card surface (same as a node) plus a stacked second card peeking behind, marking it as a
-// whole board. A locked linked node (children still incomplete) dims a touch, mirroring a node card.
-function chipStyle(state: NodeState): CSSProperties {
+// The linked node's gilded card surface (same as a node) plus a stacked second card peeking behind,
+// marking it as a whole board. A locked linked node (children still incomplete) dims a touch, mirroring
+// a node card.
+function linkedStyle(state: NodeState): CSSProperties {
     return {
         width: NODE_SIZE.normal.width,
         minHeight: NODE_SIZE.normal.height,
@@ -47,7 +48,7 @@ export function LinkedNode({ id, data }: NodeProps<LinkedFlowNode>) {
             data-id={id}
             data-linked-node=""
             className="relative flex cursor-pointer select-none items-center gap-2 px-4 transition-transform hover:scale-[1.04]"
-            style={chipStyle(state)}
+            style={linkedStyle(state)}
         >
             <svg
                 width={16}
