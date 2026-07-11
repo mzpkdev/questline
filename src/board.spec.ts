@@ -27,7 +27,7 @@ import {
 const node = (id: string, tier: number): Node => ({ id, name: id, x: 0, y: tier * 160, tier, description: "", reward: 1 })
 
 // deleteNode works over the bundled seed roadmap:
-//   learn (root) -> {plan-goal, track-progress} -> {break-steps, finish-milestone}
+//   learn (root) -> {plan-goal, track-progress} -> {break-steps, finish-node}
 // with break-steps pre-completed and every non-root node carrying a checklist.
 describe("deleteNode", () => {
     it("removes a leaf from every slice it touches", () => {
@@ -40,13 +40,13 @@ describe("deleteNode", () => {
     })
 
     it("cascades a subtree, leaving unrelated branches intact", () => {
-        // track-progress carries a child (finish-milestone); both go, while plan-goal's branch stays.
+        // track-progress carries a child (finish-node); both go, while plan-goal's branch stays.
         const next = deleteNode(seedBoard(), "track-progress")
         expect(next.nodes["track-progress"]).toBeUndefined()
-        expect(next.nodes["finish-milestone"]).toBeUndefined()
+        expect(next.nodes["finish-node"]).toBeUndefined()
         expect(next.edges).not.toContainEqual(["learn", "track-progress"])
-        expect(next.edges).not.toContainEqual(["track-progress", "finish-milestone"])
-        expect(next.todos["finish-milestone"]).toBeUndefined()
+        expect(next.edges).not.toContainEqual(["track-progress", "finish-node"])
+        expect(next.todos["finish-node"]).toBeUndefined()
         // The other branch (and the root node) is untouched.
         expect(next.nodes["plan-goal"]).toBeDefined()
         expect(next.nodes["break-steps"]).toBeDefined()
@@ -65,16 +65,16 @@ describe("deleteNode", () => {
 })
 
 // insertParent over the same seed tree (learn tier 0; plan-goal / track-progress tier 1; break-steps /
-// finish-milestone tier 2, under plan-goal / track-progress respectively).
+// finish-node tier 2, under plan-goal / track-progress respectively).
 describe("insertParent", () => {
     it("splices a new node between a regular node and its parent", () => {
-        const next = insertParent(seedBoard(), "finish-milestone", "node-x")
+        const next = insertParent(seedBoard(), "finish-node", "node-x")
         expect(next.edges).toContainEqual(["track-progress", "node-x"])
-        expect(next.edges).toContainEqual(["node-x", "finish-milestone"])
-        expect(next.edges).not.toContainEqual(["track-progress", "finish-milestone"])
+        expect(next.edges).toContainEqual(["node-x", "finish-node"])
+        expect(next.edges).not.toContainEqual(["track-progress", "finish-node"])
         // The new node takes the target's old tier; the target drops one.
         expect(next.nodes["node-x"]?.tier).toBe(2)
-        expect(next.nodes["finish-milestone"]?.tier).toBe(3)
+        expect(next.nodes["finish-node"]?.tier).toBe(3)
         expect(next.rootId).toBe("learn") // the root node is unchanged
     })
 
@@ -85,7 +85,7 @@ describe("insertParent", () => {
         expect(next.edges).not.toContainEqual(["learn", "track-progress"])
         expect(next.nodes["node-x"]?.tier).toBe(1)
         expect(next.nodes["track-progress"]?.tier).toBe(2)
-        expect(next.nodes["finish-milestone"]?.tier).toBe(3) // subtree shifted too
+        expect(next.nodes["finish-node"]?.tier).toBe(3) // subtree shifted too
     })
 
     it("promotes the new node to the root when inserting above the root node", () => {
@@ -125,9 +125,9 @@ describe("insertParent", () => {
 
 describe("addChild", () => {
     it("appends a leaf a tier below with an edge from the parent", () => {
-        const next = addChild(seedBoard(), "finish-milestone", "node-c")
+        const next = addChild(seedBoard(), "finish-node", "node-c")
         expect(next.nodes["node-c"]?.tier).toBe(3)
-        expect(next.edges).toContainEqual(["finish-milestone", "node-c"])
+        expect(next.edges).toContainEqual(["finish-node", "node-c"])
     })
 
     it("un-completes the parent (and ancestors) when the fresh child is incomplete", () => {
@@ -146,7 +146,7 @@ describe("addChild", () => {
 
 describe("addLinkedNode", () => {
     it("attaches an unlinked linked node child (targetBoardId null, no reward/checklist)", () => {
-        const next = addLinkedNode(seedBoard(), "finish-milestone", "node-link")
+        const next = addLinkedNode(seedBoard(), "finish-node", "node-link")
         const link = next.nodes["node-link"]
         expect(link).toBeDefined()
         // Kind is positional: the targetBoardId key is present, and starts null (unlinked).
@@ -156,7 +156,7 @@ describe("addLinkedNode", () => {
         expect(link?.reward).toBeUndefined()
         expect(link?.description).toBeUndefined()
         expect(link?.tier).toBe(3)
-        expect(next.edges).toContainEqual(["finish-milestone", "node-link"])
+        expect(next.edges).toContainEqual(["finish-node", "node-link"])
     })
 
     it("un-completes the parent (and ancestors) when the fresh linked child is incomplete", () => {
@@ -308,10 +308,10 @@ describe("completeNode / uncompleteNode across boards (linked children)", () => 
 
 describe("todo ops", () => {
     it("ticks and unticks a checklist item", () => {
-        const ticked = toggleTodo(seedBoard(), "finish-milestone", 0)
-        expect(ticked.todos["finish-milestone"]?.[0]?.done).toBe(true)
-        const back = toggleTodo(ticked, "finish-milestone", 0)
-        expect(back.todos["finish-milestone"]?.[0]?.done).toBe(false)
+        const ticked = toggleTodo(seedBoard(), "finish-node", 0)
+        expect(ticked.todos["finish-node"]?.[0]?.done).toBe(true)
+        const back = toggleTodo(ticked, "finish-node", 0)
+        expect(back.todos["finish-node"]?.[0]?.done).toBe(false)
     })
 
     it("is a no-op (same reference) toggling a node with no checklist", () => {

@@ -1,10 +1,10 @@
 // The Tasks list: a flat, app-level checklist reached from the Tasks chip in the tab bar. It's
-// the roadmap's sibling view (mockup: todo.html) -- unlike a milestone's per-node checklist, these
+// the roadmap's sibling view (mockup: todo.html) -- unlike a node's checklist, these
 // tasks stand alone, not tied to any node, and there is one list for the whole app. The pure list
 // ops live here (like graph.ts) so they unit-test without React; App holds the state and persist.ts
 // carries it across reloads.
 
-// Each task carries a stable id (`task-N`, minted like node/view ids) so drag-reordering and
+// Each task carries a stable id (`task-N`, minted like node/board ids) so drag-reordering and
 // React keys track the item, not its position. `completedAt` records when it was checked off, which drives
 // the 14-day auto-hide of completed tasks.
 export type Task = {

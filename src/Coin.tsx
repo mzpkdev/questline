@@ -1,5 +1,5 @@
 // The detailed gold coin, ported from the mockup's inline SVG symbol so the purse, reward prices, and
-// the milestone reward field all carry the same minted look. Decorative only (aria-hidden).
+// the node reward field all carry the same minted look. Decorative only (aria-hidden).
 export function Coin({ size, className }: { size: number; className?: string }) {
     return (
         <svg

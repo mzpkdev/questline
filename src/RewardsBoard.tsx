@@ -32,7 +32,7 @@ const PURSE_STYLE = {
         "linear-gradient(180deg,#faf2dc,#efe1bd) padding-box, linear-gradient(180deg,#fbeeb8,#b8892b) border-box"
 } as const
 
-// The "New reward" card panel: the milestone tree's detail-card shell (identical gold frame, radius,
+// The "New reward" card panel: the roadmap's detail-card shell (identical gold frame, radius,
 // shadow, and padding to NodeDetailCard's CARD_STYLE), so App can drop it into the same top-right aside.
 const ADD_CARD_STYLE = {
     border: "2px solid transparent",
@@ -260,11 +260,11 @@ function ReplenishCheckbox({ checked, onChange }: { checked: boolean; onChange: 
     )
 }
 
-// The reward detail card: the milestone NodeDetailCard's gold-framed shell in the top-right aside. It
+// The reward detail card: the NodeDetailCard's gold-framed shell in the top-right aside. It
 // opens in a read view whose pencil flips to an edit view (name / price / auto-replenish, patched live
 // like TaskDetailCard) plus a delete; `initialEditing` opens straight in edit mode (a just-created
 // reward), focusing its name. App drives open / close (outside-click + Escape) and passes
-// `closing` / `onExited` for the exit animation, mirroring the task and milestone cards.
+// `closing` / `onExited` for the exit animation, mirroring the task and node cards.
 export function RewardDetailCard({
     reward,
     onEdit,
@@ -452,7 +452,7 @@ export function RewardsBoard({
                 <div>
                     <h2 className="font-decorative text-[21px] font-bold tracking-[0.4px] text-[#4a3410]">Rewards</h2>
                     <p className="mt-0.5 text-[13.5px] italic text-[#a2916c]">
-                        Spend the gold you earn from tasks and finished milestones. Add your own rewards and set the
+                        Spend the gold you earn from tasks and finished nodes. Add your own rewards and set the
                         price.
                     </p>
                 </div>

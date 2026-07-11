@@ -2,7 +2,7 @@ import { childrenOf, complete, descendantsOf, isMastered, parentOf, STATE_LABEL,
 import { type Edge, EDGES, MASTERED, type Node } from "./nodes"
 
 describe("childrenOf", () => {
-    it("returns the sub-milestones drawn beneath a node", () => {
+    it("returns the child nodes drawn beneath a node", () => {
         expect(childrenOf("learn", EDGES)).toEqual(["plan-goal", "track-progress"])
     })
 
@@ -12,7 +12,7 @@ describe("childrenOf", () => {
 })
 
 describe("parentOf", () => {
-    it("returns the parent milestone", () => {
+    it("returns the parent node", () => {
         expect(parentOf("plan-goal", EDGES)).toBe("learn")
     })
 
@@ -23,9 +23,9 @@ describe("parentOf", () => {
 
 describe("descendantsOf", () => {
     it("returns every node in the subtree, excluding the node itself", () => {
-        // learn -> {plan-goal, track-progress} -> {break-steps, finish-milestone}, breadth-first.
+        // learn -> {plan-goal, track-progress} -> {break-steps, finish-node}, breadth-first.
         const kids = descendantsOf("learn", EDGES)
-        expect(kids).toEqual(["plan-goal", "track-progress", "break-steps", "finish-milestone"])
+        expect(kids).toEqual(["plan-goal", "track-progress", "break-steps", "finish-node"])
         expect(kids).not.toContain("learn")
     })
 
@@ -40,7 +40,7 @@ describe("stateOf", () => {
     })
 
     it("treats an unfinished leaf as available", () => {
-        expect(stateOf("finish-milestone", MASTERED, EDGES)).toBe("available")
+        expect(stateOf("finish-node", MASTERED, EDGES)).toBe("available")
     })
 
     context("when every child is mastered", () => {
@@ -52,7 +52,7 @@ describe("stateOf", () => {
 
     context("when a child is still incomplete", () => {
         it("keeps the parent locked", () => {
-            // track-progress's child (finish-milestone) is unfinished, so it stays locked.
+            // track-progress's child (finish-node) is unfinished, so it stays locked.
             expect(stateOf("track-progress", MASTERED, EDGES)).toBe("locked")
         })
     })
@@ -65,18 +65,18 @@ describe("stateOf", () => {
 
 describe("complete", () => {
     it("adds an available leaf once every box is checked", () => {
-        // finish-milestone is a leaf, absent from the seed set -> available.
-        const next = complete("finish-milestone", MASTERED, true, EDGES)
-        expect(next.has("finish-milestone")).toBe(true)
+        // finish-node is a leaf, absent from the seed set -> available.
+        const next = complete("finish-node", MASTERED, true, EDGES)
+        expect(next.has("finish-node")).toBe(true)
     })
 
     it("refuses when not every box is checked", () => {
-        const next = complete("finish-milestone", MASTERED, false, EDGES)
+        const next = complete("finish-node", MASTERED, false, EDGES)
         expect(next).toBe(MASTERED)
     })
 
     it("refuses a locked node whose children are unfinished", () => {
-        // track-progress still has an incomplete child (finish-milestone), so it is locked.
+        // track-progress still has an incomplete child (finish-node), so it is locked.
         const next = complete("track-progress", MASTERED, true, EDGES)
         expect(next).toBe(MASTERED)
     })
@@ -110,7 +110,7 @@ describe("uncomplete", () => {
     })
 
     it("returns the same set when the node was not complete", () => {
-        expect(uncomplete("finish-milestone", MASTERED, EDGES)).toBe(MASTERED)
+        expect(uncomplete("finish-node", MASTERED, EDGES)).toBe(MASTERED)
     })
 })
 
@@ -224,7 +224,7 @@ describe("stateOf regression (no linked nodes behaves exactly as before)", () =>
     // With a nodes map of only regular nodes and ANY boardComplete resolver, the boards-aware stateOf
     // must equal the classic bottom-up rule byte-for-byte -- the top-down gate can never fire, and the
     // resolver is irrelevant. Guards the "additive" contract.
-    const seedIds = ["learn", "plan-goal", "track-progress", "break-steps", "finish-milestone"]
+    const seedIds = ["learn", "plan-goal", "track-progress", "break-steps", "finish-node"]
     const regularNodes = nodeMap(...seedIds.map(reg))
 
     it("matches the classic 3-arg rule regardless of the resolver", () => {

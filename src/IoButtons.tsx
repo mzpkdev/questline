@@ -23,7 +23,7 @@ export function IoButtons({ onExport, onImport }: IoButtonsProps) {
         const url = URL.createObjectURL(blob)
         const anchor = document.createElement("a")
         anchor.href = url
-        anchor.download = "milestones.json"
+        anchor.download = "questline.json"
         anchor.click()
         URL.revokeObjectURL(url)
     }

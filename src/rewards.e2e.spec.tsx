@@ -5,7 +5,7 @@ import { SfxProvider } from "./SfxProvider"
 import { REDEEMED_TTL_MS } from "./rewards"
 import { DONE_TTL_MS } from "./tasks"
 
-// The seed roadmap ships one pre-completed milestone (break-steps, reward 3), so a fresh purse holds 3.
+// The seed roadmap ships one pre-completed node (break-steps, reward 3), so a fresh purse holds 3.
 const BASE_GOLD = 3
 
 // A structural stand-in for the slice of WebAudio the SFX kit touches (jsdom has none), recording each
@@ -76,16 +76,16 @@ const setNow = (ms: number) => {
     mockNow = ms
 }
 
-// Complete the seed's finish-milestone leaf through the roadmap UI (+3 gold). Leaves the sample tab open.
-async function completeFinishMilestone() {
+// Complete the seed's finish-node leaf through the roadmap UI (+3 gold). Leaves the sample tab open.
+async function completeFinishNode() {
     openSampleTab()
-    const leaf = await waitForNode("finish-milestone")
+    const leaf = await waitForNode("finish-node")
     fireEvent.click(leaf)
-    await screen.findByRole("heading", { name: /finish a milestone/i })
+    await screen.findByRole("heading", { name: /finish a node/i })
     fireEvent.click(screen.getByRole("button", { name: "Check Tick this box" }))
     fireEvent.click(screen.getByRole("button", { name: "Check Then tick this one" }))
     fireEvent.click(screen.getByRole("button", { name: "Mark Complete" }))
-    await waitFor(() => expect(nodeRoot("finish-milestone")?.getAttribute("data-state")).toBe("mastered"))
+    await waitFor(() => expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("mastered"))
 }
 
 // Post a task worth `reward` gold and check it off, minting `reward` into the purse. Leaves the Tasks view.
@@ -128,8 +128,8 @@ describe("Rewards & gold (e2e)", () => {
     })
 
     context("earning gold on the roadmap", () => {
-        // Open the roadmap, select track-progress (available once finish-milestone is done), tick its box
-        // and complete it. Assumes finish-milestone is already mastered.
+        // Open the roadmap, select track-progress (available once finish-node is done), tick its box
+        // and complete it. Assumes finish-node is already mastered.
         async function completeTrackProgress() {
             openSampleTab()
             const track = await waitForNode("track-progress")
@@ -140,9 +140,9 @@ describe("Rewards & gold (e2e)", () => {
             await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("mastered"))
         }
 
-        it("mints a milestone's reward into the purse when it is marked complete", async () => {
+        it("mints a node's reward into the purse when it is marked complete", async () => {
             render(<App />)
-            await completeFinishMilestone() // finish-milestone reward is 3
+            await completeFinishNode() // finish-node reward is 3
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 3)
@@ -162,9 +162,9 @@ describe("Rewards & gold (e2e)", () => {
             expect(balance()).toBe(BASE_GOLD + 5)
         })
 
-        it("adds each newly mastered milestone's reward, accumulating across the tree", async () => {
+        it("adds each newly mastered node's reward, accumulating across the tree", async () => {
             render(<App />)
-            await completeFinishMilestone() // +3
+            await completeFinishNode() // +3
             await completeTrackProgress() // +3, on top of the first
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
@@ -173,7 +173,7 @@ describe("Rewards & gold (e2e)", () => {
 
         it("sums gold across every board, not just the active tab", async () => {
             render(<App />)
-            await completeFinishMilestone() // earned in the seed board (+3)
+            await completeFinishNode() // earned in the seed board (+3)
 
             // Add a second board and complete its root node (a lone leaf, +5). The purse counts both.
             fireEvent.click(screen.getByRole("button", { name: "Add board" }))
@@ -193,9 +193,9 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(screen.getByRole("button", { name: "Add board" }))
             await screen.findByDisplayValue("New Quest")
             openSampleTab() // back to the seed board A
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
             const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
@@ -212,34 +212,34 @@ describe("Rewards & gold (e2e)", () => {
             expect(balance()).toBe(BASE_GOLD + 5)
         })
 
-        it("does not add gold while a milestone stays available or locked (only on complete)", async () => {
+        it("does not add gold while a node stays available or locked (only on complete)", async () => {
             render(<App />)
             openSampleTab()
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
 
-            // Tick both boxes but do NOT mark complete: the milestone is still merely available.
+            // Tick both boxes but do NOT mark complete: the node is still merely available.
             fireEvent.click(screen.getByRole("button", { name: "Check Tick this box" }))
             fireEvent.click(screen.getByRole("button", { name: "Check Then tick this one" }))
-            expect(nodeRoot("finish-milestone")?.getAttribute("data-state")).toBe("available")
+            expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("available")
 
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD)
         })
 
-        it("removes a milestone's reward from the purse when it is un-completed", async () => {
+        it("removes a node's reward from the purse when it is un-completed", async () => {
             render(<App />)
-            await completeFinishMilestone() // +3
+            await completeFinishNode() // +3
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 3)
 
-            // Re-select the milestone and mark it incomplete: its reward leaves the purse.
+            // Re-select the node and mark it incomplete: its reward leaves the purse.
             openSampleTab()
-            fireEvent.click(await waitForNode("finish-milestone"))
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(await waitForNode("finish-node"))
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Mark Incomplete" }))
 
             openShop()
@@ -248,8 +248,8 @@ describe("Rewards & gold (e2e)", () => {
 
         it("drops the whole cascade's gold when un-completing un-masters ancestors too", async () => {
             render(<App />)
-            await completeFinishMilestone() // +3
-            await completeTrackProgress() // +3 (track-progress is finish-milestone's parent)
+            await completeFinishNode() // +3
+            await completeTrackProgress() // +3 (track-progress is finish-node's parent)
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 6)
@@ -257,8 +257,8 @@ describe("Rewards & gold (e2e)", () => {
             // Un-completing the leaf cascades up: its mastered parent track-progress drops too, so BOTH
             // rewards leave the purse, not just the leaf's.
             openSampleTab()
-            fireEvent.click(await waitForNode("finish-milestone"))
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(await waitForNode("finish-node"))
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Mark Incomplete" }))
             await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).not.toBe("mastered"))
 
@@ -365,7 +365,7 @@ describe("Rewards & gold (e2e)", () => {
 
         it("combines task gold with roadmap gold in a single purse total", async () => {
             render(<App />)
-            await completeFinishMilestone() // +3 roadmap gold
+            await completeFinishNode() // +3 roadmap gold
             await earnViaTask("Chore", 2) // +2 task gold
 
             openShop()
@@ -375,7 +375,7 @@ describe("Rewards & gold (e2e)", () => {
     })
 
     context("the purse", () => {
-        it("seeds a fresh install's purse from the sample roadmap's one pre-completed milestone", async () => {
+        it("seeds a fresh install's purse from the sample roadmap's one pre-completed node", async () => {
             render(<App />)
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
@@ -1039,7 +1039,7 @@ describe("Rewards & gold (e2e)", () => {
 
         it("recomputes earned gold from persisted roadmap and task progress on load", async () => {
             const first = render(<App />)
-            await completeFinishMilestone() // +3 roadmap
+            await completeFinishNode() // +3 roadmap
             await earnViaTask("Chore", 2) // +2 task
             openShop()
             await waitFor(() => expect(balance()).toBe(BASE_GOLD + 5))
@@ -1085,7 +1085,7 @@ describe("Rewards & gold (e2e)", () => {
     context("navigating between views", () => {
         it("carries the same purse balance between the roadmap, Tasks, and Rewards views", async () => {
             render(<App />)
-            await completeFinishMilestone() // earned 6
+            await completeFinishNode() // earned 6
 
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
@@ -1105,7 +1105,7 @@ describe("Rewards & gold (e2e)", () => {
 
         it("shows gold earned on the roadmap immediately after switching to Rewards", async () => {
             render(<App />)
-            await completeFinishMilestone() // +3 on the roadmap
+            await completeFinishNode() // +3 on the roadmap
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 3)

@@ -1,6 +1,6 @@
 // The Tasks view: a flat checklist rendered on the same parchment board as the roadmap, a visual
 // re-port of the mockup's todo.html. Each task is a gold-framed, cream-faced tile with an accent
-// spine, echoing the milestone nodes. Ticking a box (useCheckPop) gives it the same soft gold pop the
+// spine, echoing the roadmap nodes. Ticking a box (useCheckPop) gives it the same soft gold pop the
 // roadmap's checklist boxes have; clicking the tile opens its detail card (name / reward / delete); the
 // add row appends one; and the grip handle drag-reorders the list (dnd-kit, with pointer + keyboard support).
 
@@ -62,7 +62,7 @@ type TasksBoardProps = {
 
 // One sortable task tile. Clicking the tile opens its detail card (delete lives there now); the check
 // and grip stop propagation so ticking or dragging never opens the card. The box bounces the moment
-// it's ticked (useCheckPop), so checking a task off feels like a stamp, as on a milestone card.
+// it's ticked (useCheckPop), so checking a task off feels like a stamp, as on a node card.
 function SortableTaskTile({
     task,
     selected,

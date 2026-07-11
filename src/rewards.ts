@@ -8,7 +8,7 @@
 import { DONE_TTL_MS, type Task } from "./tasks"
 import type { Board } from "./board"
 
-// A reward is a name and a price in gold. Ids are minted like node/view/task ids (`reward-N`) so a
+// A reward is a name and a price in gold. Ids are minted like node/board/task ids (`reward-N`) so a
 // React key and a removal track the item, not its position.
 export type Reward = {
     id: string

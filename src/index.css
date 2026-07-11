@@ -175,8 +175,8 @@ button:disabled {
     }
 }
 
-/* Goal-complete fanfare: a warm board flash, an expanding gold ring, and a burst of gold motes. */
-@keyframes goalFanfareFlash {
+/* Board-complete fanfare: a warm board flash, an expanding gold ring, and a burst of gold motes. */
+@keyframes boardFanfareFlash {
     0% {
         opacity: 0;
     }
@@ -187,7 +187,7 @@ button:disabled {
         opacity: 0;
     }
 }
-@keyframes goalFanfareRing {
+@keyframes boardFanfareRing {
     0% {
         transform: scale(0.3);
         opacity: 0.85;
@@ -197,7 +197,7 @@ button:disabled {
         opacity: 0;
     }
 }
-@keyframes goalFanfareSpark {
+@keyframes boardFanfareSpark {
     0% {
         transform: translate(0, 0) scale(1);
         opacity: 1;

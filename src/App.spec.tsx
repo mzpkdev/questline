@@ -9,7 +9,7 @@ const nodeRoot = (id: string) => document.querySelector(`[data-id="${id}"][data-
 // A linked node is a real node too, but its card carries data-linked-node (no data-state), so match on
 // that. Its id is minted at random, so tests read it from the URL hash after it's added.
 const linkedNode = (id: string) => document.querySelector(`[data-id="${id}"][data-linked-node]`)
-const selectedNodeId = () => window.location.hash.slice("#node-".length)
+const selectedNodeId = () => window.location.hash.slice(1)
 const waitForNode = (id: string) =>
     waitFor(() => {
         const el = nodeRoot(id)
@@ -53,33 +53,33 @@ describe("App", () => {
     context("completing a node", () => {
         it("unlocks the parent once a leaf's boxes are checked and it is marked complete", async () => {
             render(<App />)
-            // finish-milestone is a leaf; its parent track-progress starts locked (its only child is
+            // finish-node is a leaf; its parent track-progress starts locked (its only child is
             // still incomplete).
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
             expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("locked")
 
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
 
             fireEvent.click(screen.getByRole("button", { name: "Check Tick this box" }))
             fireEvent.click(screen.getByRole("button", { name: "Check Then tick this one" }))
             fireEvent.click(screen.getByRole("button", { name: "Mark Complete" }))
 
             await waitFor(() => {
-                expect(nodeRoot("finish-milestone")?.getAttribute("data-state")).toBe("mastered")
+                expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("mastered")
                 expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available")
             })
         })
 
         it("cannot complete a leaf while any box is unchecked", async () => {
             render(<App />)
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
 
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
 
             expect(screen.getByRole("button", { name: "Mark Complete" })).toBeDisabled()
-            expect(nodeRoot("finish-milestone")?.getAttribute("data-state")).toBe("available")
+            expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("available")
         })
     })
 
@@ -159,10 +159,10 @@ describe("App", () => {
     context("adding a sub-node", () => {
         it("drops a new child node under the selected node", async () => {
             render(<App />)
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
 
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
 
@@ -171,15 +171,15 @@ describe("App", () => {
 
         it("focuses a newly added sub-node, writing a random node id to the url", async () => {
             render(<App />)
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
 
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
 
-            // The new node becomes the selection, so the url follows it -- a random `#node-node-<uuid>`.
-            await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
+            // The new node becomes the selection, so the url follows it -- a random `#node-<uuid>`.
+            await waitFor(() => expect(window.location.hash).toMatch(/^#node-/))
         })
 
         it("un-completes a completed parent when a fresh child is added", async () => {
@@ -221,15 +221,15 @@ describe("App", () => {
 
     context("linked nodes", () => {
         // Create a second board "New Quest" (B), return to the seed board (A), add a linked node under
-        // finish-milestone, and point it at B. Returns the linked node's (random) id from the URL hash.
+        // finish-node, and point it at B. Returns the linked node's (random) id from the URL hash.
         async function linkSeedNodeToNewBoard(): Promise<string> {
             fireEvent.click(screen.getByRole("button", { name: "Add board" }))
             await screen.findByDisplayValue("New Quest") // B's root card, edit mode
             fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to seed board A
 
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
 
@@ -241,15 +241,15 @@ describe("App", () => {
 
         it("attaches a linked node, selects it, and opens its card in edit mode", async () => {
             render(<App />)
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
 
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
 
-            // The new linked node becomes the selection (a random #node-node-<uuid> in the url)...
-            await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
+            // The new linked node becomes the selection (a random #node-<uuid> in the url)...
+            await waitFor(() => expect(window.location.hash).toMatch(/^#node-/))
             const id = selectedNodeId()
             // ...it's a real linked node on the tree (data-linked-node, not a node card)...
             await waitFor(() => expect(linkedNode(id)).not.toBeNull())
@@ -260,10 +260,10 @@ describe("App", () => {
 
         it("has an empty dropdown and a disabled Go to Board when there is no other board", async () => {
             render(<App />)
-            const leaf = await waitForNode("finish-milestone")
+            const leaf = await waitForNode("finish-node")
 
             fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a milestone/i })
+            await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
 
@@ -324,11 +324,11 @@ describe("App", () => {
             render(<App />)
             await waitForNode("learn")
 
-            // Aim finish-milestone's new linked node L at board B (still incomplete); L's card stays in
+            // Aim finish-node's new linked node L at board B (still incomplete); L's card stays in
             // edit mode, so add a regular child C under it.
             await linkSeedNodeToNewBoard()
             fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
-            await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
+            await waitFor(() => expect(window.location.hash).toMatch(/^#node-/))
             const childId = selectedNodeId()
 
             // C sits under an incomplete link -> the top-down gate locks it.
@@ -402,23 +402,23 @@ describe("App", () => {
     })
 
     context("url routing", () => {
-        it("writes the selected node id to the url hash as #node-<id>", async () => {
+        it("writes the selected node id to the url hash", async () => {
             render(<App />)
             const node = await waitForNode("plan-goal")
 
             fireEvent.click(node)
-            await waitFor(() => expect(window.location.hash).toBe("#node-plan-goal"))
+            await waitFor(() => expect(window.location.hash).toBe("#plan-goal"))
         })
 
-        it("opens the node named in a #node-<id> hash on load", async () => {
-            window.history.replaceState(null, "", "#node-plan-goal")
+        it("opens the node named in a #<id> hash on load", async () => {
+            window.history.replaceState(null, "", "#plan-goal")
             render(<App />)
 
             expect(await screen.findByRole("heading", { name: /plan your goal/i })).toBeInTheDocument()
         })
 
-        it("opens the board named in a #board-<id> hash on load, selecting its root", async () => {
-            window.history.replaceState(null, "", "#board-seed")
+        it("opens the board named in a #<id> hash on load, selecting its root", async () => {
+            window.history.replaceState(null, "", "#seed")
             render(<App />)
 
             // The seed board opens with its root node selected (its card shown).

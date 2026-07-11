@@ -3,8 +3,8 @@ import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
 import type { Task } from "./tasks"
 
-// The Tasks detail card: the milestone detail card's gold-framed shell, trimmed to a task's three
-// affordances -- edit the name, set the reward, delete. Like the milestone card, the pencil flips
+// The Tasks detail card: the node detail card's gold-framed shell, trimmed to a task's three
+// affordances -- edit the name, set the reward, delete. Like the node card, the pencil flips
 // between a read view (name + reward) and an edit view (inputs + delete); App shows it in the same
 // top-right aside and remounts it per selected task (a React key on the task id), so the entrance
 // animation replays on each open.

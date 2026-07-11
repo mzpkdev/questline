@@ -42,11 +42,11 @@ export function BoardCelebration({ burst }: { burst: Burst | null }) {
             className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         >
             <div
-                className="absolute inset-0 animate-[goalFanfareFlash_1300ms_ease-out_forwards]"
+                className="absolute inset-0 animate-[boardFanfareFlash_1300ms_ease-out_forwards]"
                 style={{ background: `radial-gradient(520px 420px at ${x}px ${y}px, rgba(245,214,110,0.5), transparent 70%)` }}
             />
             <div
-                className="absolute h-40 w-40 animate-[goalFanfareRing_1200ms_cubic-bezier(.22,1,.36,1)_forwards]"
+                className="absolute h-40 w-40 animate-[boardFanfareRing_1200ms_cubic-bezier(.22,1,.36,1)_forwards]"
                 style={{
                     left: x,
                     top: y,
@@ -60,7 +60,7 @@ export function BoardCelebration({ burst }: { burst: Burst | null }) {
             {MOTES.map((mote) => (
                 <span
                     key={mote.key}
-                    className="absolute block h-2.5 w-2.5 animate-[goalFanfareSpark_1100ms_cubic-bezier(.22,1,.36,1)_forwards]"
+                    className="absolute block h-2.5 w-2.5 animate-[boardFanfareSpark_1100ms_cubic-bezier(.22,1,.36,1)_forwards]"
                     style={
                         {
                             left: x,

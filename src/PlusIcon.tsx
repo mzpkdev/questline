@@ -1,4 +1,4 @@
-// The shared + glyph for every "add" affordance (task / reward tiles, milestone + view add buttons), so
+// The shared + glyph for every "add" affordance (task / reward tiles, node + linked-node add buttons), so
 // they all read as the one action. Sized by `size`; inherits colour via currentColor and is decorative
 // (the button's text carries the accessible name).
 export function PlusIcon({ size = 17 }: { size?: number }) {

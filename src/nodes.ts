@@ -65,7 +65,7 @@ export const NODES: Node[] = [
         y: 250,
         tier: 1,
         description:
-            "Sub-milestones split a goal into tracks. The step beneath this one is already done, so this track has unlocked and shows In Progress. Its own checklist decides when you can mark it complete.",
+            "Child nodes split a goal into tracks. The step beneath this one is already done, so this track has unlocked and shows In Progress. Its own checklist decides when you can mark it complete.",
         reward: DEFAULT_NODE_REWARD
     },
     {
@@ -75,7 +75,7 @@ export const NODES: Node[] = [
         y: 250,
         tier: 1,
         description:
-            "This track is Locked: it waits until the milestone beneath it is complete. Finish the step below and watch this light up.",
+            "This track is Locked: it waits until the node beneath it is complete. Finish the step below and watch this light up.",
         reward: DEFAULT_NODE_REWARD
     },
 
@@ -86,12 +86,12 @@ export const NODES: Node[] = [
         y: 410,
         tier: 2,
         description:
-            "Every milestone carries a checklist, its definition of done. Every box here is ticked and the milestone is marked complete, which is why the track above unlocked.",
+            "Every node carries a checklist, its definition of done. Every box here is ticked and the node is marked complete, which is why the track above unlocked.",
         reward: DEFAULT_NODE_REWARD
     },
     {
-        id: "finish-milestone",
-        name: "Finish a milestone",
+        id: "finish-node",
+        name: "Finish a node",
         x: 960,
         y: 410,
         tier: 2,
@@ -105,7 +105,7 @@ export const EDGES: Edge[] = [
     ["learn", "plan-goal"],
     ["learn", "track-progress"],
     ["plan-goal", "break-steps"],
-    ["track-progress", "finish-milestone"]
+    ["track-progress", "finish-node"]
 ]
 
 // Seed set of completed nodes: the left leaf is done, so its parent (plan-goal) has unlocked.
@@ -116,7 +116,7 @@ export const MASTERED: ReadonlySet<string> = new Set(["break-steps"])
 export const TODOS: Record<string, Todo[]> = {
     "plan-goal": [
         { text: "Name your goal", done: true },
-        { text: "Add a sub-milestone or two", done: false }
+        { text: "Add a child node or two", done: false }
     ],
     "track-progress": [{ text: "Complete the step below first", done: false }],
     "break-steps": [
@@ -124,7 +124,7 @@ export const TODOS: Record<string, Todo[]> = {
         { text: "Tick every box", done: true },
         { text: "Press Mark Complete", done: true }
     ],
-    "finish-milestone": [
+    "finish-node": [
         { text: "Tick this box", done: false },
         { text: "Then tick this one", done: false }
     ]

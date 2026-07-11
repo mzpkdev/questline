@@ -1,7 +1,7 @@
 // Zero-asset WebAudio SFX kit -- synthesized one-shot sound effects, no audio files to host or ship.
 // Questline is a medieval quest board (parchment, gold, Cinzel type), so the cues are warm struck
 // bells and a harp-like pluck rather than chiptune bleeps: a soft pluck when a to-do is ticked, rising
-// hand-bells when a milestone lands, a bright coin clink at the rewards, and a regal bell fanfare when
+// hand-bells when a node lands, a bright coin clink at the rewards, and a regal bell fanfare when
 // a whole quest is done. This is the audio counterpart to the app's visual juice (node seal, purse
 // bump, board-celebration burst).
 //
@@ -32,7 +32,7 @@
 //   const sfx = createSfx()
 //   window.addEventListener("pointerdown", () => sfx.unlock(), { once: true })
 //   sfx.pop()      // a to-do ticked off
-//   sfx.success()  // a milestone completed
+//   sfx.success()  // a node completed
 //   sfx.fanfare()  // the whole quest done
 
 /**
@@ -48,16 +48,16 @@ export type SoundEffect = () => void
  * @property blip    - A soft single bell tap -- a light confirm (used for the unmute cue). ~160ms.
  * @property pop     - A warm harp-like pluck (fundamental + a quiet octave). A spare cue; the app
  *                     currently uses tick for crossing a to-do off. Triangle, ~200ms.
- * @property success - Two rising struck hand-bells with inharmonic overtones -- a milestone completed.
+ * @property success - Two rising struck hand-bells with inharmonic overtones -- a node completed.
  *                     Sine, ~550ms.
  * @property error   - A soft low two-note fall -- a muted "denied", not a buzzer. Triangle, ~280ms.
  * @property tick    - A very short, very quiet click -- selecting a node or chip, and ticking a
- *                     milestone's checklist box. Sine, ~50ms.
+ *                     node's checklist box. Sine, ~50ms.
  * @property coin    - A bright metallic clink -- gold into the purse when a reward is redeemed, or a
  *                     standalone task crossed off. Sine bells, higher/tighter than success. ~280ms.
  * @property fanfare - The finale: a regal rising bell arpeggio over a low root with a shimmer on top --
  *                     a whole quest's goal completed. The loudest/longest cue; pairs with the on-screen
- *                     goal celebration. ~950ms.
+ *                     board celebration. ~950ms.
  * @property unlock  - Resume the (lazily created) AudioContext. Call from the first user gesture.
  *                     Idempotent and safe to call eagerly.
  * @property setMuted - Toggle the global mute flag. While muted every effect is a no-op; the context is

@@ -85,9 +85,9 @@ describe("persist", () => {
 
     it("rejects non-JSON, a prior version, and malformed shapes as null (no migration, no salvage)", () => {
         expect(deserialize("not json")).toBeNull()
-        // A v3-shaped file (wrong version, old `projects`/`order` keys) is ignored wholesale.
+        // A prior-version file (v3) is ignored wholesale, even when otherwise well-shaped.
         expect(
-            deserialize(JSON.stringify({ version: 3, projects: {}, order: [], mirrorPos: {}, tasks: [], rewards: [] }))
+            deserialize(JSON.stringify({ version: 3, boards: {}, boardOrder: [], tasks: [], rewards: [], banked: { earned: 0, spent: 0 } }))
         ).toBeNull()
         // A malformed board rejects the whole file.
         expect(

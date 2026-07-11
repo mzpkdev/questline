@@ -48,21 +48,17 @@ const ExcalidrawBoard = lazy(() => import("./ExcalidrawBoard").then((m) => ({ de
 // counters: nothing needs to resume past loaded data, so a random id can never collide.
 const mintId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
 
-// Resolve a URL hash to the board to open and the node to select. `#board-<id>` opens a board (at its
-// root node); `#node-<id>` opens the node's board and selects it. The board-/node- prefix disambiguates
-// the two namespaces; the owning board is found by scanning boards for the id (trivial N).
+// Resolve a URL hash to the board to open and the node to select. The hash is a node or board id: a
+// minted id carries its own `board-` / `node-` prefix, a hand-authored seed id (e.g. `learn`) carries
+// none, so the id is placed by scanning both namespaces (trivial N) rather than by parsing a prefix. A
+// board id opens that board at its root node; otherwise the board owning a node with that id opens and
+// selects it.
 function resolveHash(hash: string, boards: Record<string, Board>): { boardId: string; nodeId: string } | null {
-    if (hash.startsWith("board-")) {
-        const boardId = hash.slice("board-".length)
-        const board = boards[boardId]
-        return board ? { boardId, nodeId: board.rootId } : null
-    }
-    if (hash.startsWith("node-")) {
-        const nodeId = hash.slice("node-".length)
-        const boardId = Object.keys(boards).find((id) => boards[id]?.nodes[nodeId])
-        return boardId ? { boardId, nodeId } : null
-    }
-    return null
+    if (!hash) return null
+    const board = boards[hash]
+    if (board) return { boardId: hash, nodeId: board.rootId }
+    const boardId = Object.keys(boards).find((id) => boards[id]?.nodes[hash])
+    return boardId ? { boardId, nodeId: hash } : null
 }
 
 // The tab + node to open on first render, seeded from the URL hash if it points at a known board/node,
@@ -343,10 +339,11 @@ export function App() {
         return () => document.removeEventListener("pointerdown", onPointerDown)
     }, [selectedId])
 
-    // Mirror the selected node into the URL hash (shareable) as `#node-<id>`, without adding history.
+    // Mirror the selected node into the URL hash (shareable), keyed by the node's own id: a minted id is
+    // already `node-<uuid>`, so the hash is `#node-<uuid>` (no doubled prefix). Replaces, never pushes.
     useEffect(() => {
         const current = window.location.hash.slice(1)
-        const next = selectedId ? `node-${selectedId}` : ""
+        const next = selectedId ?? ""
         if (current === next) return
         const url = next ? `#${next}` : `${window.location.pathname}${window.location.search}`
         window.history.replaceState(null, "", url)
