@@ -3,7 +3,7 @@
 // (event handler -> useSfx -> kit -> WebAudio) fires the expected cue, not just that the kit works in
 // isolation. jsdom has no WebAudio, so the fake is what makes the kit audible here.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { App } from "./App"
 import { SfxProvider } from "./SfxProvider"
 
@@ -105,6 +105,51 @@ describe("sfx wiring", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
         fireEvent.click(screen.getByRole("button", { name: /^Check Tick a task/ }))
+        expect(voices).toHaveLength(0)
+    })
+
+    it("fires the finale on a root completion but stays silent when a linked node masters from afar", async () => {
+        // sfxWiring's beforeEach doesn't touch the hash; clear it so routing doesn't leak between tests.
+        window.history.replaceState(null, "", window.location.pathname)
+        render(
+            <SfxProvider>
+                <App />
+            </SfxProvider>
+        )
+        const dataState = (id: string) => document.querySelector(`[data-id="${id}"][data-state]`)?.getAttribute("data-state")
+        await waitFor(() => expect(document.querySelector('[data-id="learn"][data-state]')).not.toBeNull())
+
+        // Add board B, then on the seed board aim a linked node L at B and hang a regular child C under it.
+        fireEvent.click(screen.getByRole("button", { name: "Add board" }))
+        await screen.findByDisplayValue("New Quest")
+        fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to A
+        const leaf = await waitFor(() => {
+            const el = document.querySelector('[data-id="finish-milestone"][data-state]')
+            if (!el) throw new Error("finish-milestone not mounted")
+            return el as HTMLElement
+        })
+        fireEvent.click(leaf)
+        await screen.findByRole("heading", { name: /finish a milestone/i })
+        fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+        const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
+        const option = within(dropdown).getByRole("option", { name: "New Quest" }) as HTMLOptionElement
+        fireEvent.change(dropdown, { target: { value: option.value } })
+        fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
+        await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
+        const childId = window.location.hash.slice("#node-".length)
+        await waitFor(() => expect(dataState(childId)).toBe("locked")) // gated under the incomplete link
+
+        // Completing board B's ROOT node fires the finale fanfare (a root completion is audible).
+        fireEvent.click(screen.getByRole("button", { name: "New Quest" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
+        await waitFor(() => expect(voices.length).toBeGreaterThan(0))
+
+        // Switch back to A: L masters because B finished elsewhere, so C unlocks -- but that derived flip
+        // is SILENT (no fanfare, no success cue).
+        voices = []
+        fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
+        await waitFor(() => expect(dataState(childId)).toBe("available"))
         expect(voices).toHaveLength(0)
     })
 })

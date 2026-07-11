@@ -15,9 +15,9 @@ export type NodeFlowNode = RFNode<NodeData, "node">
 
 // A linked node points at another board (its action is "Go to Board"); clicking it opens the shared
 // detail card. `name` is derived live from the target board's root node (board.linkedNodeName), so a
-// rename of that board flows through here. `state` is the ordinary tri-state from its own subtree: a
-// linked node never enters a `mastered` set (its completion is deferred to Phase 3), so it only ever
-// reads locked or available here.
+// rename of that board flows through here. `state` is the tri-state from graph.stateOf: a linked node
+// reads "mastered" exactly when its target board is complete (derived, never a `mastered`-set member),
+// and otherwise locked / available from its own subtree.
 export type LinkedNodeData = {
     name: string
     state: NodeState

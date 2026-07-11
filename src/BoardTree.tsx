@@ -12,11 +12,11 @@
 
 import { Background, Controls, ReactFlow, type ReactFlowInstance, useNodesState } from "@xyflow/react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { type Boards, linkedNodeName } from "./board"
+import { type Boards, boardCompleter, linkedNodeName } from "./board"
 import { Edge } from "./Edge"
 import type { FlowNode, LinkedFlowNode, NodeFlowEdge, NodeFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import { stateOf } from "./graph"
+import { type BoardComplete, stateOf } from "./graph"
 import { LinkedNode } from "./LinkedNode"
 import { NodeCard } from "./NodeCard"
 // The tuple type `Edge` clashes with the `Edge` edge component above, so alias the tuple here.
@@ -64,7 +64,9 @@ function makeNode(
     rootId: string,
     selectedId: string | null,
     mastered: ReadonlySet<string>,
-    edges: EdgeTuple[]
+    edges: EdgeTuple[],
+    nodes: Record<string, Node>,
+    boardComplete: BoardComplete
 ): NodeFlowNode {
     const isRoot = node.id === rootId
     const size = isRoot ? NODE_SIZE.root : NODE_SIZE.normal
@@ -74,7 +76,7 @@ function makeNode(
         position: { x: node.x - size.width / 2, y: node.y - size.height / 2 },
         data: {
             node,
-            state: stateOf(node.id, mastered, edges),
+            state: stateOf(node.id, mastered, edges, nodes, boardComplete),
             isRoot,
             isSelected: node.id === selectedId
         }
@@ -88,7 +90,9 @@ function makeLinkedNode(
     selectedId: string | null,
     mastered: ReadonlySet<string>,
     edges: EdgeTuple[],
-    boards: Boards
+    boards: Boards,
+    nodes: Record<string, Node>,
+    boardComplete: BoardComplete
 ): LinkedFlowNode {
     const size = NODE_SIZE.normal
     return {
@@ -97,7 +101,7 @@ function makeLinkedNode(
         position: { x: node.x - size.width / 2, y: node.y - size.height / 2 },
         data: {
             name: linkedNodeName(boards, node.targetBoardId),
-            state: stateOf(node.id, mastered, edges),
+            state: stateOf(node.id, mastered, edges, nodes, boardComplete),
             isSelected: node.id === selectedId
         }
     }
@@ -110,17 +114,32 @@ function buildFlowNode(
     selectedId: string | null,
     mastered: ReadonlySet<string>,
     edges: EdgeTuple[],
-    boards: Boards
+    boards: Boards,
+    nodes: Record<string, Node>,
+    boardComplete: BoardComplete
 ): FlowNode {
     return isLinkedNode(node)
-        ? makeLinkedNode(node, selectedId, mastered, edges, boards)
-        : makeNode(node, rootId, selectedId, mastered, edges)
+        ? makeLinkedNode(node, selectedId, mastered, edges, boards, nodes, boardComplete)
+        : makeNode(node, rootId, selectedId, mastered, edges, nodes, boardComplete)
 }
 
 export function BoardTree(props: BoardTreeProps) {
+    // A completion resolver over every board, so a linked node's tri-state (and the top-down lock of its
+    // subtree) derives from its target board. Recomputed only when the boards map changes.
+    const isBoardComplete = useMemo(() => boardCompleter(props.boards), [props.boards])
+
     const buildNodes = (): FlowNode[] =>
         Object.values(props.nodes).map((node) =>
-            buildFlowNode(node, props.rootId, props.selectedId, props.mastered, props.edges, props.boards)
+            buildFlowNode(
+                node,
+                props.rootId,
+                props.selectedId,
+                props.mastered,
+                props.edges,
+                props.boards,
+                props.nodes,
+                isBoardComplete
+            )
         )
 
     // React Flow owns node positions so drags stay smooth. useNodesState gives us the applyNodeChanges
@@ -161,7 +180,7 @@ export function BoardTree(props: BoardTreeProps) {
             const byId = new Map(prev.map((node) => [node.id, node]))
             return Object.values(props.nodes).map((node): FlowNode => {
                 const isSelected = node.id === props.selectedId
-                const state = stateOf(node.id, props.mastered, props.edges)
+                const state = stateOf(node.id, props.mastered, props.edges, props.nodes, isBoardComplete)
                 const existing = byId.get(node.id)
 
                 if (isLinkedNode(node)) {
@@ -178,7 +197,15 @@ export function BoardTree(props: BoardTreeProps) {
                         if (posSame && dataSame) return existing
                         return { ...existing, position, data: dataSame ? existing.data : { name, state, isSelected } }
                     }
-                    return makeLinkedNode(node, props.selectedId, props.mastered, props.edges, props.boards)
+                    return makeLinkedNode(
+                        node,
+                        props.selectedId,
+                        props.mastered,
+                        props.edges,
+                        props.boards,
+                        props.nodes,
+                        isBoardComplete
+                    )
                 }
 
                 const isRoot = node.id === props.rootId
@@ -200,10 +227,18 @@ export function BoardTree(props: BoardTreeProps) {
                         data: dataSame ? existing.data : { ...existing.data, isSelected, state, node, isRoot }
                     }
                 }
-                return makeNode(node, props.rootId, props.selectedId, props.mastered, props.edges)
+                return makeNode(
+                    node,
+                    props.rootId,
+                    props.selectedId,
+                    props.mastered,
+                    props.edges,
+                    props.nodes,
+                    isBoardComplete
+                )
             })
         })
-    }, [props.selectedId, props.mastered, props.nodes, props.edges, props.rootId, props.boards, setNodes])
+    }, [props.selectedId, props.mastered, props.nodes, props.edges, props.rootId, props.boards, isBoardComplete, setNodes])
 
     // Edges rebuild when the board's links or completed set change: a link lights once the node
     // below it is complete.

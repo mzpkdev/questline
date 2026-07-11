@@ -319,6 +319,29 @@ describe("App", () => {
             // Back on the seed board, the linked node survives but has reverted to unlinked.
             await waitFor(() => expect(linkedNode(id)?.textContent).toContain("Unlinked"))
         })
+
+        it("locks a subtree under an incomplete linked node, and unlocks it once the target board completes", async () => {
+            render(<App />)
+            await waitForNode("learn")
+
+            // Aim finish-milestone's new linked node L at board B (still incomplete); L's card stays in
+            // edit mode, so add a regular child C under it.
+            await linkSeedNodeToNewBoard()
+            fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
+            await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
+            const childId = selectedNodeId()
+
+            // C sits under an incomplete link -> the top-down gate locks it.
+            await waitFor(() => expect(nodeRoot(childId)?.getAttribute("data-state")).toBe("locked"))
+
+            // Complete board B (its lone root leaf) via its tab.
+            fireEvent.click(screen.getByRole("button", { name: "New Quest" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
+
+            // Back on the seed board, L masters (derived from B), so C unlocks by the normal rule.
+            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
+            await waitFor(() => expect(nodeRoot(childId)?.getAttribute("data-state")).toBe("available"))
+        })
     })
 
     context("deleting", () => {

@@ -4,6 +4,8 @@ import {
     addChild,
     addLinkedNode,
     type Board,
+    boardComplete,
+    boardCompleter,
     boardsReducer,
     type BoardsState,
     completeNode,
@@ -247,6 +249,60 @@ describe("completeNode / uncompleteNode", () => {
         // learn can't complete yet (track-progress incomplete), so just un-complete plan-goal.
         const next = uncompleteNode(board, "plan-goal")
         expect(next.mastered.has("plan-goal")).toBe(false)
+    })
+})
+
+describe("boardComplete / boardCompleter", () => {
+    it("is true only when the board's root node is mastered", () => {
+        const open = newBoard("b", "b-root", "B") // fresh: root not yet mastered
+        expect(boardComplete({ b: open }, "b")).toBe(false)
+        // A fresh board's root is a lone leaf, so completing it masters the board.
+        const done = completeNode(open, "b-root", true)
+        expect(boardComplete({ b: done }, "b")).toBe(true)
+    })
+
+    it("is false for an unknown board", () => {
+        expect(boardComplete({}, "nope")).toBe(false)
+    })
+
+    it("boardCompleter binds a boards map into a reusable resolver", () => {
+        const done = completeNode(newBoard("b", "b-root", "B"), "b-root", true)
+        const resolve = boardCompleter({ b: done })
+        expect(resolve("b")).toBe(true)
+        expect(resolve("nope")).toBe(false)
+    })
+})
+
+describe("completeNode / uncompleteNode across boards (linked children)", () => {
+    // A board whose root's only child is a linked node pointing at "target": the root is gated by that
+    // link, which masters exactly when boardComplete("target") is true.
+    const withLinkedChild = (): Board => setLinkedTarget(addLinkedNode(newBoard("x", "x-root", "X"), "x-root", "x-link"), "x-link", "target")
+
+    it("keeps the root locked while its linked child's target board is incomplete", () => {
+        const b = withLinkedChild()
+        expect(completeNode(b, "x-root", true, () => false)).toBe(b) // refused -> same reference
+    })
+
+    it("unlocks and completes the root once the linked child's target board is complete", () => {
+        const b = withLinkedChild()
+        const next = completeNode(b, "x-root", true, (id) => id === "target")
+        expect(next.mastered.has("x-root")).toBe(true)
+    })
+
+    it("never masters a linked node itself (guarded in graph.complete)", () => {
+        const b = withLinkedChild()
+        expect(completeNode(b, "x-link", true, () => true)).toBe(b) // same reference
+    })
+
+    it("un-completing under a linked ancestor never drops an ancestor above the link", () => {
+        // P (root) -> L (linked) -> C. Mark P and C complete by hand; a linked node is never in the set,
+        // so the up-cascade from C breaks at L and P survives.
+        let b = addChild(addLinkedNode(newBoard("x", "P", "P"), "P", "L"), "L", "C")
+        b = setLinkedTarget(b, "L", "target")
+        b = { ...b, mastered: new Set(["P", "C"]) }
+        const next = uncompleteNode(b, "C")
+        expect(next.mastered.has("C")).toBe(false)
+        expect(next.mastered.has("P")).toBe(true)
     })
 })
 

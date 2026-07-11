@@ -30,7 +30,7 @@ import { isLinkedNode, type Node } from "./nodes"
 import { NavActions } from "./NavActions"
 import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, type PersistedSlices, saveState, serialize } from "./persist"
-import { type Board, boardsReducer, linkedNodeName, seedBoard } from "./board"
+import { type Board, boardCompleter, boardsReducer, linkedNodeName, seedBoard } from "./board"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -169,6 +169,11 @@ export function App() {
     const [burst, setBurst] = useState<{ x: number; y: number; nonce: number } | null>(null)
 
     const active = boards[activeId]
+
+    // A boards-aware completion resolver: tells whether any board is complete (its root mastered), so a
+    // linked node derives its mastery from its target board. Threaded into every stateOf / complete call
+    // (the tri-state and the Complete gate) so an unlocked-by-link subtree computes correctly.
+    const isBoardComplete = useMemo(() => boardCompleter(boards), [boards])
 
     // Gold in the purse: earned from progress (checklist boxes, tasks, nodes, root nodes) minus what's
     // been spent. A redemption is a permanent spend, so un-completing work you'd already spent against
@@ -520,10 +525,10 @@ export function App() {
         // completing the root node fires the finale fanfare from the board-celebration effect, so it
         // isn't doubled.
         const allDone = (active.todos[selectedId] ?? []).every((todo) => todo.done)
-        const next = complete(selectedId, active.mastered, allDone, active.edges)
+        const next = complete(selectedId, active.mastered, allDone, active.edges, active.nodes, isBoardComplete)
         if (next !== active.mastered && selectedId !== active.rootId) sfx.success()
         dispatch({ type: "complete", boardId: activeId, id: selectedId, allTodosDone: allDone })
-    }, [selectedId, active, activeId, sfx])
+    }, [selectedId, active, activeId, sfx, isBoardComplete])
 
     // Mark it incomplete, cascading up so no completed parent is left with an incomplete child.
     const uncompleteSelected = useCallback(() => {
@@ -941,7 +946,7 @@ export function App() {
                                 <NodeDetailCard
                                     key={shown.id}
                                     node={shown}
-                                    state={stateOf(shown.id, active.mastered, active.edges)}
+                                    state={stateOf(shown.id, active.mastered, active.edges, active.nodes, isBoardComplete)}
                                     todos={isRoot || isLinked ? [] : (active.todos[shown.id] ?? [])}
                                     isRoot={isRoot}
                                     isLinked={isLinked}

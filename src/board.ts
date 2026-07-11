@@ -9,7 +9,7 @@
 // single dispatch over `{ boards, order }` through those ops, keeping references stable on a no-op so
 // autosave and the gold memo don't churn.
 
-import { complete, descendantsOf, parentOf, uncomplete } from "./graph"
+import { type BoardComplete, complete, descendantsOf, parentOf, uncomplete } from "./graph"
 import {
     DEFAULT_NODE_REWARD,
     DEFAULT_ROOT_REWARD,
@@ -75,6 +75,21 @@ export function linkedNodeName(boards: Boards, targetBoardId: string | null | un
     const target = boards[targetBoardId]
     const root = target && target.nodes[target.rootId]
     return root?.name ?? UNLINKED_LABEL
+}
+
+// Whether a board is complete: it exists and its root (tier-0) node sits in its own `mastered` set.
+// This is the boolean a linked node reads to derive its mastery from its target board (a linked node is
+// mastered exactly when its target board is complete). Completion is read here, never cascaded across
+// boards, so cyclic / mutual links are harmless.
+export function boardComplete(boards: Boards, boardId: string): boolean {
+    const board = boards[boardId]
+    return board !== undefined && board.mastered.has(board.rootId)
+}
+
+// A BoardComplete resolver bound to a boards map, handed to graph.stateOf / graph.complete so a linked
+// node resolves its mastery from its target board without graph.ts needing the map (keeping it pure).
+export function boardCompleter(boards: Boards): BoardComplete {
+    return (boardId) => boardComplete(boards, boardId)
 }
 
 // A blank roadmap: a single gold root node named after the tab, no children and nothing complete.
@@ -224,9 +239,17 @@ export function moveNode(board: Board, id: string, x: number, y: number): Board 
 }
 
 // Mark `id` complete via the pure graph rule (unlocked AND every box ticked), returning the board
-// unchanged when the move is disallowed or already done.
-export function completeNode(board: Board, id: string, allTodosDone: boolean): Board {
-    const mastered = complete(id, board.mastered, allTodosDone, board.edges)
+// unchanged when the move is disallowed or already done. `boardComplete` resolves any linked child's
+// mastery from its target board so a parent gated only by a completed link can unlock; it defaults to a
+// no-op for callers with no cross-board links. A linked node is guarded off inside graph.complete, so
+// it can never be added to `mastered` here.
+export function completeNode(
+    board: Board,
+    id: string,
+    allTodosDone: boolean,
+    boardComplete: BoardComplete = () => false
+): Board {
+    const mastered = complete(id, board.mastered, allTodosDone, board.edges, board.nodes, boardComplete)
     return mastered === board.mastered ? board : { ...board, mastered }
 }
 
@@ -340,7 +363,11 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
         case "addTodo":
             return updateBoard(state, action.boardId, (b) => addTodo(b, action.id))
         case "complete":
-            return updateBoard(state, action.boardId, (b) => completeNode(b, action.id, action.allTodosDone))
+            // Resolve linked children against the whole map (unaffected by this board's own change), so
+            // a node gated only by a completed link unlocks and can be ticked complete.
+            return updateBoard(state, action.boardId, (b) =>
+                completeNode(b, action.id, action.allTodosDone, boardCompleter(state.boards))
+            )
         case "uncomplete":
             return updateBoard(state, action.boardId, (b) => uncompleteNode(b, action.id))
         case "editNode":

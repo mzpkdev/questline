@@ -185,6 +185,33 @@ describe("Rewards & gold (e2e)", () => {
             expect(balance()).toBe(BASE_GOLD + 3 + 5)
         })
 
+        it("mints a target board's gold once, never double-counting through a linked node", async () => {
+            render(<App />)
+            await waitForNode("learn")
+
+            // Add board B (root reward 5), then on the seed board aim a linked node at it.
+            fireEvent.click(screen.getByRole("button", { name: "Add board" }))
+            await screen.findByDisplayValue("New Quest")
+            openSampleTab() // back to the seed board A
+            const leaf = await waitForNode("finish-milestone")
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+            const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
+            const option = within(dropdown).getByRole("option", { name: "New Quest" }) as HTMLOptionElement
+            fireEvent.change(dropdown, { target: { value: option.value } })
+
+            // Complete board B's lone root leaf (worth 5). The linked node in A carries no reward.
+            fireEvent.click(screen.getByRole("button", { name: "New Quest" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
+
+            openShop()
+            await screen.findByRole("button", { name: "Open Fancy coffee" })
+            // BASE (break-steps, 3) + B's root (5). NOT + 5 again via the link: no double-count.
+            expect(balance()).toBe(BASE_GOLD + 5)
+        })
+
         it("does not add gold while a milestone stays available or locked (only on complete)", async () => {
             render(<App />)
             openSampleTab()

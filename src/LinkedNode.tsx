@@ -5,8 +5,9 @@
 // reconciled through BoardTree like any node.
 //
 // Its `name` is derived live from the target board's root node (board.linkedNodeName), so a rename of
-// that board flows through; an unlinked node shows the placeholder. Completion is deferred (Phase 3):
-// a linked node never enters a `mastered` set, so `state` here only ever reads locked or available.
+// that board flows through; an unlinked node shows the placeholder. Its `state` is derived: a linked
+// node reads "mastered" exactly when its target board is complete (it never enters a `mastered` set),
+// and otherwise locked / available from its own subtree.
 
 import { Handle, type NodeProps, Position } from "@xyflow/react"
 import type { CSSProperties } from "react"
