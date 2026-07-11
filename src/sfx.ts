@@ -3,7 +3,7 @@
 // bells and a harp-like pluck rather than chiptune bleeps: a soft pluck when a to-do is ticked, rising
 // hand-bells when a milestone lands, a bright coin clink at the rewards, and a regal bell fanfare when
 // a whole quest is done. This is the audio counterpart to the app's visual juice (node seal, purse
-// bump, goal-celebration burst).
+// bump, board-celebration burst).
 //
 // House style: a callable factory of free functions over closure-private state (no data class, no
 // destroy() -- a single lazy AudioContext is the only resource and it is fine to share for the page's

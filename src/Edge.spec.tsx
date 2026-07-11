@@ -1,7 +1,8 @@
 import { render } from "@testing-library/react"
-import { type Edge, type Node, Position, ReactFlow } from "@xyflow/react"
+// The `Edge` edge component (below) shares a name with xyflow's `Edge` type, so alias the xyflow imports.
+import { type Edge as RFEdge, type Node as RFNode, Position, ReactFlow } from "@xyflow/react"
 import { afterEach, beforeEach, expect, vi } from "vitest"
-import { MilestoneEdge } from "./MilestoneEdge"
+import { Edge } from "./Edge"
 import { NODE_REACHED } from "./nodeMotion"
 
 // React Flow only mounts an edge once getEdgePosition() resolves, and that needs each node to be
@@ -9,7 +10,7 @@ import { NODE_REACHED } from "./nodeMotion"
 // out and our ResizeObserver stub is a no-op, so nothing gets measured on its own. We therefore
 // hand the nodes explicit width/height and handles — the parent's bottom source, the child's top
 // target — which React Flow adopts verbatim, letting the glow edge render deterministically.
-function buildNodes(): Node[] {
+function buildNodes(): RFNode[] {
     return [
         {
             id: "a",
@@ -31,10 +32,10 @@ function buildNodes(): Node[] {
 }
 
 function tree(lit: boolean) {
-    const edge: Edge = { id: "a-b", source: "a", target: "b", type: "glow", data: { lit } }
+    const edge: RFEdge = { id: "a-b", source: "a", target: "b", type: "glow", data: { lit } }
     return (
         <div style={{ width: 800, height: 600 }}>
-            <ReactFlow nodes={buildNodes()} edges={[edge]} edgeTypes={{ glow: MilestoneEdge }} fitView />
+            <ReactFlow nodes={buildNodes()} edges={[edge]} edgeTypes={{ glow: Edge }} fitView />
         </div>
     )
 }
@@ -43,7 +44,7 @@ function renderEdge(lit: boolean) {
     return render(tree(lit))
 }
 
-describe("MilestoneEdge", () => {
+describe("Edge", () => {
     context("when the child below is complete", () => {
         it("lights the over-path solid gold with no dashes", () => {
             const { container } = renderEdge(true)

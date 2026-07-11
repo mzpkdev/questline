@@ -1,32 +1,32 @@
-// Gilded milestone card for React Flow, ported from the mockup's SVG nodes
+// Gilded node card for React Flow, ported from the mockup's SVG nodes
 // (experiments/skill-tree/index.html, renderNodes ~415-468). This is VISUAL +
-// SELECTION only: appearance is driven entirely by `data` (state / isGoal /
+// SELECTION only: appearance is driven entirely by `data` (state / isRoot /
 // isSelected), which the Tree precomputes. Selection is handled by the Tree via
 // React Flow's onNodeClick, so there is no click handler here.
 
 import type { NodeProps } from "@xyflow/react"
 import { Handle, Position } from "@xyflow/react"
 import type { CSSProperties } from "react"
-import type { MilestoneFlowNode } from "./flow"
+import type { NodeFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import type { MilestoneState } from "./milestones"
+import type { NodeState } from "./nodes"
 import { useNodeMotion } from "./nodeMotion"
 
-// Inner fill (padding-box) gradient per state. Goal always uses GOAL_INNER. Exported so the view
-// chip can reuse the same gilded surface.
-export const INNER_BY_STATE: Record<MilestoneState, string> = {
+// Inner fill (padding-box) gradient per state. The root node always uses ROOT_INNER. Exported so the
+// linked node can reuse the same gilded surface.
+export const INNER_BY_STATE: Record<NodeState, string> = {
     mastered: "linear-gradient(180deg,#fdf4d2,#eeddab)",
     available: "linear-gradient(180deg,#fefaee,#f4e8c8)",
     locked: "linear-gradient(180deg,#efe9d8,#e0d6bd)"
 }
-const GOAL_INNER = "linear-gradient(180deg,#fcefb8,#f0d992)"
+const ROOT_INNER = "linear-gradient(180deg,#fcefb8,#f0d992)"
 
-// Gilded frame (border-box) gradient. Locked non-goal cards use the dim ring.
+// Gilded frame (border-box) gradient. Locked non-root cards use the dim ring.
 export const RING_GOLD = "linear-gradient(180deg,#fdf1b6,#dab24c,#8a641d)"
 const RING_DIM = "linear-gradient(180deg,#e0d3ad,#a99a72)"
 
 // The marching-ants selection outline, a few pixels clear of the card on every side. Shared so the
-// view chip highlights the same way when selected.
+// linked node highlights the same way when selected.
 export function SelectionBox({ outset }: { outset: number }) {
     return (
         <svg
@@ -59,7 +59,7 @@ export function SelectionBox({ outset }: { outset: number }) {
 }
 
 // Left accent bar colour per state.
-const BAR_BY_STATE: Record<MilestoneState, string> = {
+const BAR_BY_STATE: Record<NodeState, string> = {
     mastered: "#c69a34",
     available: "#e6c458",
     locked: "#bcad86"
@@ -68,27 +68,27 @@ const BAR_BY_STATE: Record<MilestoneState, string> = {
 // Handles exist only to anchor edges; keep them invisible.
 const HANDLE_STYLE: CSSProperties = { opacity: 0, width: 6, height: 6, border: "none" }
 
-export function MilestoneNode({ data }: NodeProps<MilestoneFlowNode>) {
-    const { milestone, state, isGoal, isSelected } = data
+export function NodeCard({ data }: NodeProps<NodeFlowNode>) {
+    const { milestone, state, isRoot, isSelected } = data
     // Drives this card's motion: spawn-in when added, ignite on unlock, seal when completed, pop when
     // an edge reaches it.
     const cardRef = useNodeMotion<HTMLDivElement>(milestone.id, state)
 
-    const size = isGoal ? NODE_SIZE.goal : NODE_SIZE.normal
-    const inset = isGoal ? 5 : 3.5
-    const inner = isGoal ? GOAL_INNER : INNER_BY_STATE[state]
-    const ring = state === "locked" && !isGoal ? RING_DIM : RING_GOLD
+    const size = isRoot ? NODE_SIZE.root : NODE_SIZE.normal
+    const inset = isRoot ? 5 : 3.5
+    const inner = isRoot ? ROOT_INNER : INNER_BY_STATE[state]
+    const ring = state === "locked" && !isRoot ? RING_DIM : RING_GOLD
     const cardOpacity = state === "mastered" ? 0.55 : state === "locked" ? 0.92 : 1
-    const titleColor = isGoal ? "#5a4012" : state === "locked" ? "#93815a" : "#6f5316"
+    const titleColor = isRoot ? "#5a4012" : state === "locked" ? "#93815a" : "#6f5316"
 
-    // Glow shows for available (pulsing) or goal (static faint, pulsing when the
-    // goal is also available). The selection outset keeps the marching ants a few
+    // Glow shows for available (pulsing) or root (static faint, pulsing when the
+    // root is also available). The selection outset keeps the marching ants a few
     // pixels clear of the card on every side.
-    const showGlow = state === "available" || isGoal
+    const showGlow = state === "available" || isRoot
     const glowPulses = state === "available"
     const selOutset = inset + 3
 
-    const titleClass = isGoal
+    const titleClass = isRoot
         ? "flex-1 min-w-0 px-3 text-center font-display text-[20px] font-bold leading-tight tracking-[.2px]"
         : "flex-1 min-w-0 pl-5 pr-3 text-left font-display text-[16px] font-bold leading-tight tracking-[.2px]"
 
@@ -123,7 +123,7 @@ export function MilestoneNode({ data }: NodeProps<MilestoneFlowNode>) {
                 />
             ) : null}
 
-            {isGoal ? null : (
+            {isRoot ? null : (
                 <div
                     data-testid="node-bar"
                     style={{

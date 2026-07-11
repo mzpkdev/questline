@@ -6,7 +6,7 @@
 // window after which the redeemed tile drops off the shelf (mirroring a completed task's auto-hide).
 
 import { DONE_TTL_MS, type Task } from "./tasks"
-import { type Project, ROOT_ID } from "./project"
+import { type Board, ROOT_ID } from "./board"
 
 // A reward is a name and a price in gold. Ids are minted like node/view/task ids (`reward-N`) so a
 // React key and a removal track the item, not its position.
@@ -37,11 +37,11 @@ export const SEED_REWARDS: Reward[] = [
     { id: "reward-3", name: "Movie night", price: 12 }
 ]
 
-// Total gold earned: across every roadmap, each completed milestone (and mastered tier-0 goal) pays
+// Total gold earned: across every roadmap, each completed node (and mastered tier-0 root node) pays
 // its own `reward`, and each done task in the app-level to-do list pays its own `reward`. A mastered
-// id with no surviving milestone record contributes nothing. The Root hub is skipped -- it's the home
+// id with no surviving node record contributes nothing. The Root hub is skipped -- it's the home
 // for views, not real work, so its lone node never mints gold.
-export function earnedGold(projects: Record<string, Project>, tasks: Task[]): number {
+export function earnedGold(projects: Record<string, Board>, tasks: Task[]): number {
     let total = 0
     for (const [id, project] of Object.entries(projects)) {
         if (id === ROOT_ID) continue

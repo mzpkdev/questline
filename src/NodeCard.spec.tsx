@@ -1,16 +1,16 @@
 import { render, screen } from "@testing-library/react"
 import { ReactFlow } from "@xyflow/react"
-import type { MilestoneFlowNode } from "./flow"
+import type { NodeFlowNode } from "./flow"
 import { byId } from "./graph"
-import { MilestoneNode } from "./MilestoneNode"
-import type { MilestoneState } from "./milestones"
+import { NodeCard } from "./NodeCard"
+import type { NodeState } from "./nodes"
 
-const nodeTypes = { milestone: MilestoneNode }
+const nodeTypes = { milestone: NodeCard }
 
 type NodeOverrides = {
     id?: string
-    state?: MilestoneState
-    isGoal?: boolean
+    state?: NodeState
+    isRoot?: boolean
     isSelected?: boolean
 }
 
@@ -18,14 +18,14 @@ function renderNode(overrides: NodeOverrides = {}) {
     const milestone = byId(overrides.id ?? "plan-goal")
     if (!milestone) throw new Error(`missing milestone fixture: ${overrides.id}`)
 
-    const node: MilestoneFlowNode = {
+    const node: NodeFlowNode = {
         id: milestone.id,
         type: "milestone",
         position: { x: 0, y: 0 },
         data: {
             milestone,
             state: overrides.state ?? "available",
-            isGoal: overrides.isGoal ?? false,
+            isRoot: overrides.isRoot ?? false,
             isSelected: overrides.isSelected ?? false
         }
     }
@@ -37,7 +37,7 @@ function renderNode(overrides: NodeOverrides = {}) {
     )
 }
 
-describe("MilestoneNode", () => {
+describe("NodeCard", () => {
     it("renders the milestone title", () => {
         renderNode({ id: "plan-goal" })
         expect(screen.getByText("Plan your goal")).toBeInTheDocument()
@@ -65,16 +65,16 @@ describe("MilestoneNode", () => {
         })
     })
 
-    context("for a normal milestone", () => {
+    context("for a normal node", () => {
         it("renders the left accent bar", () => {
-            renderNode({ id: "plan-goal", isGoal: false })
+            renderNode({ id: "plan-goal", isRoot: false })
             expect(screen.getByTestId("node-bar")).toBeInTheDocument()
         })
     })
 
-    context("for the goal milestone", () => {
+    context("for the root node", () => {
         it("omits the left accent bar", () => {
-            renderNode({ id: "learn", isGoal: true })
+            renderNode({ id: "learn", isRoot: true })
             expect(screen.queryByTestId("node-bar")).not.toBeInTheDocument()
         })
     })

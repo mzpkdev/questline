@@ -1,9 +1,9 @@
 import { render } from "@testing-library/react"
 import { afterEach, beforeEach, expect, vi } from "vitest"
-import type { MilestoneState } from "./milestones"
+import type { NodeState } from "./nodes"
 import { NODE_REACHED, SpawnReadyContext, useCheckPop, useNodeMotion } from "./nodeMotion"
 
-function Probe({ id, state = "available" }: { id: string; state?: MilestoneState }) {
+function Probe({ id, state = "available" }: { id: string; state?: NodeState }) {
     const ref = useNodeMotion<HTMLDivElement>(id, state)
     return <div data-testid="probe" ref={ref} />
 }

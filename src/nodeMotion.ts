@@ -5,7 +5,7 @@
 // `prefersReducedMotion` + the arrival dispatch.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef } from "react"
-import type { MilestoneState } from "./milestones"
+import type { NodeState } from "./nodes"
 
 export const NODE_REACHED = "questline:node-reached"
 
@@ -74,7 +74,7 @@ const canAnimate = (el: HTMLElement | null): el is HTMLElement =>
 
 // Attach the returned ref to a node card's root element. `state` is the node's tri-state; a seal
 // fires on the step into "mastered", an unlock ignite on "locked" -> "available".
-export function useNodeMotion<T extends HTMLElement>(id: string, state: MilestoneState) {
+export function useNodeMotion<T extends HTMLElement>(id: string, state: NodeState) {
     const ref = useRef<T>(null)
     const spawnReady = useContext(SpawnReadyContext)
 

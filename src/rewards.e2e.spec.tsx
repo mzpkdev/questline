@@ -45,8 +45,8 @@ class FakeAudioContext {
 // The coin clink is a sine at 1046.5Hz (see sfx.ts / sfxWiring.spec).
 const playedCoin = () => voices.some((voice) => voice.type === "sine" && voice.frequency === 1046.5)
 
-// React Flow wraps each node in a div carrying data-id; our node root also has data-state (view chips
-// carry data-view-node instead), so [data-id][data-state] targets a milestone node specifically.
+// React Flow wraps each node in a div carrying data-id; our node root also has data-state (linked-node
+// chips carry data-linked-node instead), so [data-id][data-state] targets a node card specifically.
 const nodeRoot = (id: string) => document.querySelector(`[data-id="${id}"][data-state]`) as HTMLElement | null
 const waitForNode = (id: string) =>
     waitFor(() => {
@@ -150,7 +150,7 @@ describe("Rewards & gold (e2e)", () => {
 
         it("mints the larger goal reward when a tab's tier-0 goal is completed", async () => {
             render(<App />)
-            await waitForNode("root-goal")
+            await waitForNode("root-root")
 
             // Spin up a fresh view (its goal is a lone leaf worth the larger goal reward, 5) and complete it.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
@@ -182,7 +182,7 @@ describe("Rewards & gold (e2e)", () => {
 
             // Switch the active tab away to Root (which earns nothing); the purse still counts the seed view.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
-            await waitForNode("root-goal")
+            await waitForNode("root-root")
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
             expect(balance()).toBe(BASE_GOLD + 3)
@@ -190,13 +190,13 @@ describe("Rewards & gold (e2e)", () => {
 
         it("never mints gold for the Root hub node", async () => {
             render(<App />)
-            await waitForNode("root-goal")
+            await waitForNode("root-root")
 
             // Complete the Root node itself; it is the home for views, not real work, so it pays nothing.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
             fireEvent.click(screen.getByRole("button", { name: "Complete Quest" }))
-            await waitFor(() => expect(nodeRoot("root-goal")?.getAttribute("data-state")).toBe("mastered"))
+            await waitFor(() => expect(nodeRoot("root-root")?.getAttribute("data-state")).toBe("mastered"))
 
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })

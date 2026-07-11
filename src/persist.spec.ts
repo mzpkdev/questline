@@ -1,9 +1,9 @@
 import { decompressFromUTF16 } from "lz-string"
 import { deserialize, loadState, maxCounter, PERSIST_VERSION, STORAGE_KEY, saveState, serialize } from "./persist"
-import { ROOT_ID, rootProject, seedProject } from "./project"
+import { ROOT_ID, rootProject, seedBoard } from "./board"
 
 const slices = () => ({
-    projects: { [ROOT_ID]: rootProject(), seed: seedProject() },
+    projects: { [ROOT_ID]: rootProject(), seed: seedBoard() },
     order: [ROOT_ID, "seed"],
     mirrorPos: { "view-mirror-seed": { x: 10, y: 20 } },
     tasks: [
@@ -123,7 +123,7 @@ describe("persist", () => {
 
     it("finds the highest counter and ignores suffixed ids", () => {
         expect(maxCounter(["node-1", "node-7", "node-3", "other"], "node")).toBe(7)
-        expect(maxCounter(["view-2", "view-2-goal"], "view")).toBe(2)
+        expect(maxCounter(["board-2", "board-2-root"], "board")).toBe(2)
         expect(maxCounter([], "node")).toBe(0)
     })
 })

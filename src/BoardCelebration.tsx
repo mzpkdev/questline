@@ -1,5 +1,5 @@
-// The finale: a one-shot fanfare when a tab's goal is completed (the whole quest done). It bursts
-// from the goal node itself: App measures that node's board-relative centre and hands it in as
+// The finale: a one-shot fanfare when a tab's root node is completed (the whole quest done). It bursts
+// from the root node itself: App measures that node's board-relative centre and hands it in as
 // `burst` (a new object, with a bumped nonce, each time). A warm gold flash, an expanding ring, and
 // a ring of gold motes fly out from that point. Decorative only (pointer-events-none, aria-hidden)
 // and skipped under reduced motion.
@@ -19,7 +19,7 @@ const MOTES = Array.from({ length: SPARKS }, (_, i) => {
     return { key: i, tx: Math.round(Math.cos(angle) * distance), ty: Math.round(Math.sin(angle) * distance) }
 })
 
-export function GoalCelebration({ burst }: { burst: Burst | null }) {
+export function BoardCelebration({ burst }: { burst: Burst | null }) {
     // The origin currently playing (null when idle); latched so it survives burst going back to null.
     const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null)
 
@@ -35,9 +35,9 @@ export function GoalCelebration({ burst }: { burst: Burst | null }) {
 
     return (
         <div
-            data-testid="goal-celebration"
+            data-testid="board-celebration"
             aria-hidden="true"
-            // z-0 sits below the canvas layer (z-10), so the gold radiates from behind the goal node
+            // z-0 sits below the canvas layer (z-10), so the gold radiates from behind the root node
             // rather than washing over it.
             className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         >

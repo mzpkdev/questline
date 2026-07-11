@@ -6,8 +6,8 @@ import { App } from "./App"
 // root is the one that also has data-state, so we target [data-id][data-state]. Clicks use
 // fireEvent (not userEvent) to avoid React Flow's d3-zoom mousedown path crashing under jsdom.
 const nodeRoot = (id: string) => document.querySelector(`[data-id="${id}"][data-state]`)
-// View chips (Root's mirror nodes) carry data-view-node instead of data-state.
-const viewNode = (id: string) => document.querySelector(`[data-view-node][data-id="${id}"]`)
+// View chips (Root's mirror nodes) carry data-linked-node instead of data-state.
+const viewNode = (id: string) => document.querySelector(`[data-linked-node][data-id="${id}"]`)
 
 // With no url hash the app boots to the Root hub with nothing selected, so the sample roadmap's
 // nodes aren't on screen. Clicking the sample tab (labelled after its goal) switches to it and
@@ -96,7 +96,7 @@ describe("App", () => {
     context("completing a tab's goal", () => {
         it("fires the finale fanfare over the board", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             // Create a view (its goal is a lone leaf), open it, and complete that goal.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
@@ -106,11 +106,11 @@ describe("App", () => {
             // The new view's card opens in edit mode; finish editing to reveal the View action.
             fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
-            expect(screen.queryByTestId("goal-celebration")).toBeNull()
+            expect(screen.queryByTestId("board-celebration")).toBeNull()
 
             fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
 
-            expect(await screen.findByTestId("goal-celebration")).toBeInTheDocument()
+            expect(await screen.findByTestId("board-celebration")).toBeInTheDocument()
         })
     })
 
@@ -147,14 +147,14 @@ describe("App", () => {
 
             // Switching to it shows only the lone Root node.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
-            expect(nodeRoot("root-goal")?.textContent).toContain("Quest Board")
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
+            expect(nodeRoot("root-root")?.textContent).toContain("Quest Board")
             expect(nodeRoot("learn")).toBeNull()
         })
 
         it("opens a blank goal-only canvas for a new view", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             // Create a view from the Root node, then open it via its chip's View button.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
@@ -166,8 +166,8 @@ describe("App", () => {
             fireEvent.click(await screen.findByRole("button", { name: "View" }))
 
             // A lone goal node named "New Quest"; the seed roadmap is gone.
-            await waitFor(() => expect(nodeRoot("view-1-goal")).not.toBeNull())
-            expect(nodeRoot("view-1-goal")?.textContent).toContain("New Quest")
+            await waitFor(() => expect(nodeRoot("board-1-root")).not.toBeNull())
+            expect(nodeRoot("board-1-root")?.textContent).toContain("New Quest")
             expect(nodeRoot("learn")).toBeNull()
         })
 
@@ -275,7 +275,7 @@ describe("App", () => {
 
         it("offers no Add parent milestone on the Root tab", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
@@ -344,7 +344,7 @@ describe("App", () => {
 
         it("offers no delete on the Root goal", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
             await screen.findByTestId("detail-card")
@@ -398,12 +398,12 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
 
             // A new sub-view chip appears in the hub (we stay on Root).
-            await waitFor(() => expect(viewNode("view-mirror-view-1")).not.toBeNull())
+            await waitFor(() => expect(viewNode("view-mirror-board-1")).not.toBeNull())
         })
 
         it("adds a top-level view chip via Add sub-view on the Root node", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             // Open the Root node's card, then add a top-level sub-view.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
@@ -411,12 +411,12 @@ describe("App", () => {
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
 
-            await waitFor(() => expect(viewNode("view-mirror-view-1")).not.toBeNull())
+            await waitFor(() => expect(viewNode("view-mirror-board-1")).not.toBeNull())
         })
 
         it("marks a view chip complete once that view's goal is completed", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             // Create a view from Root, open it, and complete its (leaf) goal.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
@@ -430,7 +430,7 @@ describe("App", () => {
 
             // Back on Root, the chip reads complete.
             fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
-            await waitFor(() => expect(viewNode("view-mirror-view-1")?.hasAttribute("data-complete")).toBe(true))
+            await waitFor(() => expect(viewNode("view-mirror-board-1")?.hasAttribute("data-complete")).toBe(true))
         })
 
         it("renaming a view chip renames its tab and the chip", async () => {
@@ -507,18 +507,18 @@ describe("App", () => {
 
         it("replaces the roadmaps with the imported ones", async () => {
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
-            // A minimal valid export: Root plus one view whose goal is `solo-goal`.
+            // A minimal valid export: Root plus one view whose goal is `solo-root`.
             const imported = {
                 version: 3,
                 projects: {
                     root: {
                         id: "root",
-                        goalId: "root-goal",
+                        rootId: "root-root",
                         milestones: {
-                            "root-goal": {
-                                id: "root-goal",
+                            "root-root": {
+                                id: "root-root",
                                 name: "Quest Board",
                                 tag: "Goal",
                                 x: 0,
@@ -534,11 +534,11 @@ describe("App", () => {
                     },
                     solo: {
                         id: "solo",
-                        goalId: "solo-goal",
+                        rootId: "solo-root",
                         parentId: "root",
                         milestones: {
-                            "solo-goal": {
-                                id: "solo-goal",
+                            "solo-root": {
+                                id: "solo-root",
                                 name: "Imported Goal",
                                 tag: "Goal",
                                 x: 0,
@@ -564,19 +564,19 @@ describe("App", () => {
             })
 
             // The imported view's goal is on screen; the seed roadmap is gone.
-            await waitFor(() => expect(nodeRoot("solo-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("solo-root")).not.toBeNull())
             expect(nodeRoot("learn")).toBeNull()
         })
 
         it("alerts and changes nothing on an invalid file", async () => {
             const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {})
             render(<App />)
-            await waitFor(() => expect(nodeRoot("root-goal")).not.toBeNull())
+            await waitFor(() => expect(nodeRoot("root-root")).not.toBeNull())
 
             fireEvent.change(screen.getByTestId("import-input"), { target: { files: [exportFile("not json")] } })
 
             await waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1))
-            expect(nodeRoot("root-goal")).not.toBeNull()
+            expect(nodeRoot("root-root")).not.toBeNull()
             alertSpy.mockRestore()
         })
     })
@@ -616,7 +616,7 @@ describe("App", () => {
             openTasks()
             expect(await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")).toBeInTheDocument()
             // The roadmap board is gone while Tasks shows.
-            expect(nodeRoot("root-goal")).toBeNull()
+            expect(nodeRoot("root-root")).toBeNull()
         })
 
         it("adds and toggles a task", async () => {

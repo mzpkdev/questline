@@ -1,5 +1,5 @@
 import { childrenOf, complete, descendantsOf, parentOf, STATE_LABEL, stateOf, uncomplete } from "./graph"
-import { EDGES, MASTERED } from "./milestones"
+import { EDGES, MASTERED } from "./nodes"
 
 describe("childrenOf", () => {
     it("returns the sub-milestones drawn beneath a node", () => {
@@ -16,7 +16,7 @@ describe("parentOf", () => {
         expect(parentOf("plan-goal", EDGES)).toBe("learn")
     })
 
-    it("returns null for the root goal", () => {
+    it("returns null for the root node", () => {
         expect(parentOf("learn", EDGES)).toBeNull()
     })
 })

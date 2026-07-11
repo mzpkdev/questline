@@ -5,7 +5,7 @@ import { TaskDetailCard } from "./TaskDetailCard"
 import { Corners } from "./Corners"
 import { NodeDetailCard } from "./NodeDetailCard"
 import { ConfirmDialog } from "./ConfirmDialog"
-import { GoalCelebration } from "./GoalCelebration"
+import { BoardCelebration } from "./BoardCelebration"
 import { complete, descendantsOf, parentOf, stateOf, uncomplete } from "./graph"
 import { IoButtons } from "./IoButtons"
 import {
@@ -25,12 +25,12 @@ import {
     visible as visibleRewards
 } from "./rewards"
 import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
-import { MilestoneTree } from "./MilestoneTree"
-import { DEFAULT_NODE_REWARD, type Milestone, type MilestoneEdge } from "./milestones"
+import { BoardTree } from "./BoardTree"
+import { DEFAULT_NODE_REWARD, type Edge, type Node } from "./nodes"
 import { NavActions } from "./NavActions"
 import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, maxCounter, type PersistedSlices, saveState, serialize } from "./persist"
-import { deleteMilestone, insertParent, newProject, type Project, ROOT_ID, rootProject, seedProject } from "./project"
+import { type Board, deleteNode, insertParent, newBoard, ROOT_ID, rootProject, seedBoard } from "./board"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -60,7 +60,7 @@ const EMPTY_IDS: ReadonlySet<string> = new Set()
 // The tab + node to open on first render, seeded from the URL hash (#<nodeId>) if it points at a
 // known node, else the Root hub with nothing selected (the canvas fits the whole tree).
 type Boot = {
-    projects: Record<string, Project>
+    projects: Record<string, Board>
     order: string[]
     mirrorPos: Record<string, { x: number; y: number }>
     tasks: Task[]
@@ -79,7 +79,7 @@ type Boot = {
 function computeBoot(): Boot {
     // Restore the autosaved data if present; otherwise start from Root + the bundled sample.
     const loaded = loadState()
-    const projects = loaded?.projects ?? { [ROOT_ID]: rootProject(), seed: seedProject() }
+    const projects = loaded?.projects ?? { [ROOT_ID]: rootProject(), seed: seedBoard() }
     const order = loaded?.order ?? [ROOT_ID, "seed"]
     const mirrorPos = loaded?.mirrorPos ?? {}
     // Tasks and rewards seed only on a truly fresh start (no saved state at all); an existing save
@@ -94,7 +94,7 @@ function computeBoot(): Boot {
         Object.values(projects).flatMap((project) => Object.keys(project.milestones)),
         "node"
     )
-    const nextViewId = maxCounter(Object.keys(projects), "view")
+    const nextViewId = maxCounter(Object.keys(projects), "board")
     const nextTaskId = maxCounter(
         rawTasks.map((task) => task.id),
         "task"
@@ -144,15 +144,15 @@ function computeBoot(): Boot {
 }
 
 export function App() {
-    // Each tab is a Project (its own roadmap). `order` fixes tab order; `activeId` picks the visible
+    // Each tab is a Board (its own roadmap). `order` fixes tab order; `activeId` picks the visible
     // one. Root is the pinned first tab; the sample roadmap follows. Initial tab/selection come from
     // the URL hash when it names a known node.
     const bootRef = useRef<Boot | null>(null)
     const boot = (bootRef.current ??= computeBoot())
     // The synthesized SFX kit, stable for the app's lifetime. Effects fire from the handlers below and
-    // from the goal-celebration effect -- never from render or from inside a state updater.
+    // from the board-celebration effect -- never from render or from inside a state updater.
     const sfx = useSfx()
-    const [projects, setProjects] = useState<Record<string, Project>>(boot.projects)
+    const [projects, setProjects] = useState<Record<string, Board>>(boot.projects)
     const [order, setOrder] = useState<string[]>(boot.order)
     const [activeId, setActiveId] = useState(boot.activeId)
     // `selectedId` is the intent (null once dismissed); `displayId` is what the card shows and trails
@@ -209,16 +209,16 @@ export function App() {
     const nextTaskId = useRef(boot.nextTaskId)
     const nextRewardId = useRef(boot.nextRewardId)
     const nextNoteId = useRef(boot.nextNoteId)
-    // Fires the finale fanfare when the active tab's goal crosses into complete, anchored on that
-    // goal node. Tracked per tab (seeded on first sight) so switching onto an already-done goal
-    // doesn't fire; the burst carries the goal's board-relative centre + a nonce to (re)play.
+    // Fires the finale fanfare when the active tab's root node crosses into complete, anchored on that
+    // root node. Tracked per tab (seeded on first sight) so switching onto an already-done root node
+    // doesn't fire; the burst carries the root node's board-relative centre + a nonce to (re)play.
     const boardRef = useRef<HTMLDivElement>(null)
-    const goalDoneRef = useRef<Record<string, boolean>>({})
+    const boardDoneRef = useRef<Record<string, boolean>>({})
     const [burst, setBurst] = useState<{ x: number; y: number; nonce: number } | null>(null)
 
     const active = projects[activeId]
 
-    // Gold in the purse: earned from progress (checklist boxes, tasks, milestones, goals) minus what's
+    // Gold in the purse: earned from progress (checklist boxes, tasks, nodes, root nodes) minus what's
     // been spent. A redemption is a permanent spend, so un-completing work you'd already spent against
     // can push the balance negative -- a debt the purse shows honestly until fresh work out-earns it.
     const gold = useMemo(
@@ -228,15 +228,15 @@ export function App() {
 
     useEffect(() => {
         if (!active) return
-        const done = active.mastered.has(active.goalId)
-        const seen = goalDoneRef.current[activeId]
-        goalDoneRef.current[activeId] = done
+        const done = active.mastered.has(active.rootId)
+        const seen = boardDoneRef.current[activeId]
+        boardDoneRef.current[activeId] = done
         if (seen !== false || !done) return
-        // Anchor on the goal node's on-screen centre (its card carries data-id + data-state), falling
+        // Anchor on the root node's on-screen centre (its card carries data-id + data-state), falling
         // back to the upper-centre of the board if it can't be found.
         const board = boardRef.current
         const rect = board?.getBoundingClientRect()
-        const node = board?.querySelector(`[data-id="${active.goalId}"][data-state]`)?.getBoundingClientRect()
+        const node = board?.querySelector(`[data-id="${active.rootId}"][data-state]`)?.getBoundingClientRect()
         const x = rect && node ? node.left + node.width / 2 - rect.left : (rect?.width ?? 0) / 2
         const y = rect && node ? node.top + node.height / 2 - rect.top : (rect?.height ?? 0) * 0.42
         setBurst((prev) => ({ x, y, nonce: (prev?.nonce ?? 0) + 1 }))
@@ -376,7 +376,6 @@ export function App() {
                 target?.closest(".react-flow__node") ||
                 target?.closest(".react-flow__controls") ||
                 target?.closest("[data-tabbar]") ||
-                target?.closest("[data-view-popover]") ||
                 target?.closest('[role="alertdialog"]')
             ) {
                 return
@@ -419,14 +418,14 @@ export function App() {
         return () => window.removeEventListener("hashchange", applyHash)
     }, [applyHash])
 
-    // Apply a change to the active project only, keeping the reference stable on a no-op edit.
+    // Apply a change to the active board only, keeping the reference stable on a no-op edit.
     const updateActive = useCallback(
-        (fn: (project: Project) => Project) => {
+        (fn: (board: Board) => Board) => {
             setProjects((prev) => {
-                const project = prev[activeId]
-                if (!project) return prev
-                const next = fn(project)
-                return next === project ? prev : { ...prev, [activeId]: next }
+                const board = prev[activeId]
+                if (!board) return prev
+                const next = fn(board)
+                return next === board ? prev : { ...prev, [activeId]: next }
             })
         },
         [activeId]
@@ -596,13 +595,13 @@ export function App() {
         [selectedId, active, updateActive, sfx]
     )
 
-    // Mark the selected milestone complete — the pure rule guards that it is unlocked and every box
+    // Mark the selected node complete — the pure rule guards that it is unlocked and every box
     // is ticked, so a no-op leaves the set (and reference) untouched.
     const completeSelected = useCallback(() => {
         if (selectedId === null) return
-        // Decide the cue from current state (outside the StrictMode-double-invoked updater): a non-goal
-        // milestone chimes here, while completing the goal fires the finale fanfare from the
-        // goal-celebration effect, so it isn't doubled.
+        // Decide the cue from current state (outside the StrictMode-double-invoked updater): a non-root
+        // node chimes here, while completing the root node fires the finale fanfare from the
+        // board-celebration effect, so it isn't doubled.
         if (active) {
             const allDone = (active.todos[selectedId] ?? []).every((todo) => todo.done)
             const next = complete(selectedId, active.mastered, allDone, active.edges)
@@ -624,25 +623,25 @@ export function App() {
         })
     }, [selectedId, updateActive])
 
-    // Delete the selected milestone and its subtree (cascade), then move selection to its parent so the
-    // card shows something valid (every non-goal node has a parent; fall back to clearing). The goal is
-    // never deleted here -- that path removes the whole view via removeProject.
+    // Delete the selected node and its subtree (cascade), then move selection to its parent so the
+    // card shows something valid (every non-root node has a parent; fall back to clearing). The root
+    // node is never deleted here -- that path removes the whole view via removeBoard.
     const deleteSelected = useCallback(() => {
         if (selectedId === null || !active) return
         const parent = parentOf(selectedId, active.edges)
-        updateActive((project) => deleteMilestone(project, selectedId))
+        updateActive((board) => deleteNode(board, selectedId))
         if (parent) focusNode(parent)
         else setSelectedId(null)
     }, [selectedId, active, updateActive, focusNode])
 
-    // Edit the selected milestone's name/description/reward in place.
+    // Edit the selected node's name/description/reward in place.
     const editMilestone = useCallback(
-        (patch: Partial<Pick<Milestone, "name" | "description" | "reward">>) => {
+        (patch: Partial<Pick<Node, "name" | "description" | "reward">>) => {
             if (selectedId === null) return
-            updateActive((project) => {
-                const current = project.milestones[selectedId]
-                if (!current) return project
-                return { ...project, milestones: { ...project.milestones, [selectedId]: { ...current, ...patch } } }
+            updateActive((board) => {
+                const current = board.milestones[selectedId]
+                if (!current) return board
+                return { ...board, milestones: { ...board.milestones, [selectedId]: { ...current, ...patch } } }
             })
         },
         [selectedId, updateActive]
@@ -709,7 +708,7 @@ export function App() {
         }))
     }, [selectedId, updateActive])
 
-    // Add a sub-milestone under the selected node: a new leaf, an edge from parent to it, placed a
+    // Add a sub-node under the selected node: a new leaf, an edge from parent to it, placed a
     // tier below and fanned past existing siblings. A fresh child is incomplete, so the parent (and
     // any now-inconsistent ancestor) drops out of the completed set.
     const addChild = useCallback(() => {
@@ -721,7 +720,7 @@ export function App() {
             const parent = project.milestones[parentId]
             if (!parent) return project
             const siblings = project.edges.filter((edge) => edge[0] === parentId).length
-            const child: Milestone = {
+            const child: Node = {
                 id: childId,
                 name: "New Milestone",
                 tag: parent.tag,
@@ -732,7 +731,7 @@ export function App() {
                 description: "",
                 reward: DEFAULT_NODE_REWARD
             }
-            const edges: MilestoneEdge[] = [...project.edges, [parentId, childId]]
+            const edges: Edge[] = [...project.edges, [parentId, childId]]
             return {
                 ...project,
                 milestones: { ...project.milestones, [childId]: child },
@@ -744,14 +743,14 @@ export function App() {
         focusNode(childId)
     }, [selectedId, updateActive, focusNode])
 
-    // Add a parent above the goal: the new node becomes the tier-0 gold goal, the old goal drops to a
-    // normal node beneath it, and every existing node shifts down a tier. The tab label follows the
-    // goal name, so it flips to the new node instantly. Disabled on Root (nothing sits above Root).
+    // Add a parent above the root node: the new node becomes the tier-0 gold root, the old root drops
+    // to a normal node beneath it, and every existing node shifts down a tier. The tab label follows the
+    // root name, so it flips to the new node instantly. Disabled on Root (nothing sits above Root).
     const addParent = useCallback(() => {
         if (selectedId === null) return
-        // The Root hub's own goal is pinned (nothing sits above it); every other node, including a
-        // regular milestone on the Root tab, can take a new parent.
-        if (activeId === ROOT_ID && selectedId === active?.goalId) return
+        // The Root hub's own root node is pinned (nothing sits above it); every other node, including a
+        // regular node on the Root tab, can take a new parent.
+        if (activeId === ROOT_ID && selectedId === active?.rootId) return
         nextNodeId.current += 1
         const newId = `node-${nextNodeId.current}`
         updateActive((project) => insertParent(project, selectedId, newId))
@@ -759,12 +758,12 @@ export function App() {
         focusNode(newId)
     }, [activeId, active, selectedId, updateActive, focusNode])
 
-    // Switch to another tab, selecting its goal so the card shows something valid immediately.
-    const switchProject = useCallback(
+    // Switch to another tab, selecting its root node so the card shows something valid immediately.
+    const switchBoard = useCallback(
         (id: string) => {
             setSection("roadmap")
             setActiveId(id)
-            setSelectedId(projects[id]?.goalId ?? null)
+            setSelectedId(projects[id]?.rootId ?? null)
         },
         [projects]
     )
@@ -772,24 +771,24 @@ export function App() {
     // A mirror node's popover "View" button opens the view it stands for.
     const openView = useCallback(
         (mirrorId: string) => {
-            if (mirrorId.startsWith(VIEW_MIRROR_PREFIX)) switchProject(mirrorId.slice(VIEW_MIRROR_PREFIX.length))
+            if (mirrorId.startsWith(VIEW_MIRROR_PREFIX)) switchBoard(mirrorId.slice(VIEW_MIRROR_PREFIX.length))
         },
-        [switchProject]
+        [switchBoard]
     )
 
-    // Editing a mirror edits the view it stands for: patch that view's goal name/description/reward. A
-    // name change flows back to the tab and the chip (both read the goal name); a reward change sets
-    // what completing that view's goal pays out.
-    const editMirror = useCallback((mirrorId: string, patch: Partial<Pick<Milestone, "name" | "description" | "reward">>) => {
+    // Editing a mirror edits the view it stands for: patch that view's root node name/description/reward.
+    // A name change flows back to the tab and the chip (both read the root node name); a reward change
+    // sets what completing that view's root node pays out.
+    const editMirror = useCallback((mirrorId: string, patch: Partial<Pick<Node, "name" | "description" | "reward">>) => {
         const pid = mirrorId.slice(VIEW_MIRROR_PREFIX.length)
         setProjects((prev) => {
             const project = prev[pid]
             if (!project) return prev
-            const goal = project.milestones[project.goalId]
-            if (!goal) return prev
+            const root = project.milestones[project.rootId]
+            if (!root) return prev
             return {
                 ...prev,
-                [pid]: { ...project, milestones: { ...project.milestones, [project.goalId]: { ...goal, ...patch } } }
+                [pid]: { ...project, milestones: { ...project.milestones, [project.rootId]: { ...root, ...patch } } }
             }
         })
     }, [])
@@ -800,15 +799,15 @@ export function App() {
         (parentId: string, activate: boolean) => {
             setSection("roadmap")
             nextViewId.current += 1
-            const id = `view-${nextViewId.current}`
-            const project = newProject(id, "New Quest", parentId)
+            const id = `board-${nextViewId.current}`
+            const project = newBoard(id, "New Quest", parentId)
             setProjects((prev) => ({ ...prev, [id]: project }))
             setOrder((prev) => [...prev, id])
             if (activate) {
-                // Open the new view and focus its goal, card in edit mode so its name is editable at once.
+                // Open the new view and focus its root node, card in edit mode so its name is editable at once.
                 setActiveId(id)
-                setEditOnAddId(project.goalId)
-                focusNode(project.goalId)
+                setEditOnAddId(project.rootId)
+                focusNode(project.rootId)
             } else {
                 // Stay in the Root hub and focus the new view's chip, its card open in edit mode.
                 const mirrorId = `${VIEW_MIRROR_PREFIX}${id}`
@@ -819,23 +818,23 @@ export function App() {
         [focusNode]
     )
 
-    // Rename a tab == rename its goal node (both read the same name).
-    const renameProject = useCallback((id: string, name: string) => {
+    // Rename a tab == rename its root node (both read the same name).
+    const renameBoard = useCallback((id: string, name: string) => {
         setProjects((prev) => {
             const project = prev[id]
             if (!project) return prev
-            const goal = project.milestones[project.goalId]
-            if (!goal) return prev
+            const root = project.milestones[project.rootId]
+            if (!root) return prev
             return {
                 ...prev,
-                [id]: { ...project, milestones: { ...project.milestones, [project.goalId]: { ...goal, name } } }
+                [id]: { ...project, milestones: { ...project.milestones, [project.rootId]: { ...root, name } } }
             }
         })
     }, [])
 
     // Remove a tab, activating a neighbour if the active one went away. Root is pinned, and the last
     // tab can't be removed.
-    const removeProject = useCallback(
+    const removeBoard = useCallback(
         (id: string) => {
             if (id === ROOT_ID || order.length <= 1) return
             const index = order.indexOf(id)
@@ -844,7 +843,7 @@ export function App() {
             setProjects((prev) => {
                 // Reparent the removed view's children to its parent (or Root) so the hub tree stays whole.
                 const newParent = prev[id]?.parentId ?? ROOT_ID
-                const rest: Record<string, Project> = {}
+                const rest: Record<string, Board> = {}
                 for (const [pid, project] of Object.entries(prev)) {
                     if (pid === id) continue
                     rest[pid] = project.parentId === id ? { ...project, parentId: newParent } : project
@@ -855,7 +854,7 @@ export function App() {
                 const neighbour = nextOrder[Math.min(index, nextOrder.length - 1)]
                 if (neighbour) {
                     setActiveId(neighbour)
-                    setSelectedId(projects[neighbour]?.goalId ?? null)
+                    setSelectedId(projects[neighbour]?.rootId ?? null)
                 }
             }
         },
@@ -870,7 +869,7 @@ export function App() {
 
     // Replace the whole app from a loaded state -- an imported file or a roadmap synced down from another
     // device. Swaps every slice, resumes the id counters past it, and opens the default tab (first
-    // non-Root view, else Root) selected on its goal.
+    // non-Root view, else Root) selected on its root node.
     const applyLoaded = useCallback((loaded: PersistedSlices) => {
         setProjects(loaded.projects)
         setOrder(loaded.order)
@@ -885,7 +884,7 @@ export function App() {
             Object.values(loaded.projects).flatMap((project) => Object.keys(project.milestones)),
             "node"
         )
-        nextViewId.current = maxCounter(Object.keys(loaded.projects), "view")
+        nextViewId.current = maxCounter(Object.keys(loaded.projects), "board")
         nextTaskId.current = maxCounter(
             loaded.tasks.map((task) => task.id),
             "task"
@@ -900,7 +899,7 @@ export function App() {
         )
         const nextActive = loaded.order.find((id) => id !== ROOT_ID && loaded.projects[id]) ?? ROOT_ID
         setActiveId(nextActive)
-        setSelectedId(loaded.projects[nextActive]?.goalId ?? null)
+        setSelectedId(loaded.projects[nextActive]?.rootId ?? null)
     }, [])
 
     // Replace the whole app from an imported file. Invalid input is rejected with an alert and changes
@@ -939,21 +938,21 @@ export function App() {
 
     const tabs = order.flatMap((id) => {
         const project = projects[id]
-        const goal = project?.milestones[project.goalId]
-        return goal ? [{ id, name: goal.name, pinned: id === ROOT_ID }] : []
+        const root = project?.milestones[project.rootId]
+        return root ? [{ id, name: root.name, pinned: id === ROOT_ID }] : []
     })
 
     // What the canvas renders for the active tab. On Root, mirror every other view as a read-only
-    // node beneath the Root node (a hub); elsewhere it's just the project's own graph.
+    // node beneath the Root node (a hub); elsewhere it's just the board's own graph.
     const view = useMemo<{
-        milestones: Record<string, Milestone>
-        edges: MilestoneEdge[]
+        milestones: Record<string, Node>
+        edges: Edge[]
         staticIds: ReadonlySet<string>
         completeIds: ReadonlySet<string>
     }>(() => {
-        const rootGoal = active?.milestones[active.goalId]
+        const rootNode = active?.milestones[active.rootId]
         const others = order.filter((id) => id !== ROOT_ID)
-        if (!active || activeId !== ROOT_ID || !rootGoal || others.length === 0) {
+        if (!active || activeId !== ROOT_ID || !rootNode || others.length === 0) {
             return {
                 milestones: active?.milestones ?? {},
                 edges: active?.edges ?? [],
@@ -961,12 +960,12 @@ export function App() {
                 completeIds: EMPTY_IDS
             }
         }
-        const milestones: Record<string, Milestone> = { ...active.milestones }
-        const edges: MilestoneEdge[] = [...active.edges]
+        const milestones: Record<string, Node> = { ...active.milestones }
+        const edges: Edge[] = [...active.edges]
         const staticIds = new Set<string>()
         const completeIds = new Set<string>()
 
-        // Depth in the hub tree (top-level view = 1); Root goal sits at depth 0.
+        // Depth in the hub tree (top-level view = 1); the Root's own root node sits at depth 0.
         const depthOf = (pid: string) => {
             let depth = 1
             let cursor = projects[pid]?.parentId
@@ -989,8 +988,8 @@ export function App() {
         const usedPerDepth: Record<number, number> = {}
         for (const pid of others) {
             const project = projects[pid]
-            const goal = project?.milestones[project.goalId]
-            if (!goal) continue
+            const root = project?.milestones[project.rootId]
+            if (!root) continue
             const d = depthByPid[pid] ?? 1
             const slot = usedPerDepth[d] ?? 0
             usedPerDepth[d] = slot + 1
@@ -999,25 +998,25 @@ export function App() {
             const dragged = mirrorPos[id]
             milestones[id] = {
                 id,
-                name: goal.name,
-                tag: "View",
-                x: dragged ? dragged.x : rootGoal.x + (slot - (count - 1) / 2) * MIRROR_SPACING,
-                y: dragged ? dragged.y : rootGoal.y + d * TIER_GAP,
+                name: root.name,
+                tag: "Linked",
+                x: dragged ? dragged.x : rootNode.x + (slot - (count - 1) / 2) * MIRROR_SPACING,
+                y: dragged ? dragged.y : rootNode.y + d * TIER_GAP,
                 tier: 1,
-                branch: "View",
-                description: goal.description,
-                reward: goal.reward
+                branch: "Linked",
+                description: root.description,
+                reward: root.reward
             }
             // Hang under the parent view's chip, or under the Root node for a top-level view.
             const parentId = project?.parentId
             const source =
                 parentId && parentId !== ROOT_ID && projects[parentId]
                     ? `${VIEW_MIRROR_PREFIX}${parentId}`
-                    : active.goalId
+                    : active.rootId
             edges.push([source, id])
             staticIds.add(id)
-            // The view is complete when its own goal is in its completed set.
-            if (project?.mastered.has(project.goalId)) completeIds.add(id)
+            // The view is complete when its own root node is in its completed set.
+            if (project?.mastered.has(project.rootId)) completeIds.add(id)
         }
         return { milestones, edges, staticIds, completeIds }
     }, [active, activeId, order, projects, mirrorPos])
@@ -1051,38 +1050,38 @@ export function App() {
     const rewardClosing = selectedRewardId === null && displayRewardId !== null
 
     const closing = selectedId === null && displayId !== null
-    // A selected mirror shows the shared card in view mode; synthesize a milestone for its name.
+    // A selected mirror shows the shared card in view mode; synthesize a node for its name.
     const shownIsView = displayId !== null && displayId.startsWith(VIEW_MIRROR_PREFIX)
-    const shown: Milestone | undefined = (() => {
+    const shown: Node | undefined = (() => {
         if (displayId === null) return undefined
         if (!shownIsView) return active?.milestones[displayId]
         const project = projects[displayId.slice(VIEW_MIRROR_PREFIX.length)]
-        const goal = project?.milestones[project.goalId]
-        return goal
+        const root = project?.milestones[project.rootId]
+        return root
             ? {
                   id: displayId,
-                  name: goal.name,
-                  tag: "View",
+                  name: root.name,
+                  tag: "Linked",
                   x: 0,
                   y: 0,
                   tier: 1,
-                  branch: "View",
-                  description: goal.description,
-                  reward: goal.reward
+                  branch: "Linked",
+                  description: root.description,
+                  reward: root.reward
               }
             : undefined
     })()
-    const isGoal = shown ? shown.tier === 0 : false
+    const isRoot = shown ? shown.tier === 0 : false
     // The Root node itself (not a mirror), which also offers "+ Add sub-view".
-    const shownIsRootGoal = activeId === ROOT_ID && !shownIsView && !!shown && shown.id === active?.goalId
-    // Delete wiring for the shown card. Root goal: never. View chip or a tab's goal: removes the whole
-    // view (removeProject). A normal milestone: deletes its own subtree.
-    const deleteKind: "milestone" | "view" = shownIsView || (isGoal && !shownIsRootGoal) ? "view" : "milestone"
-    const canDelete = !!shown && !shownIsRootGoal
+    const shownIsRootNode = activeId === ROOT_ID && !shownIsView && !!shown && shown.id === active?.rootId
+    // Delete wiring for the shown card. The Root's root node: never. View chip or a tab's root node:
+    // removes the whole view (removeBoard). A normal node: deletes its own subtree.
+    const deleteKind: "milestone" | "view" = shownIsView || (isRoot && !shownIsRootNode) ? "view" : "milestone"
+    const canDelete = !!shown && !shownIsRootNode
     const onDeleteShown = !canDelete
         ? undefined
         : deleteKind === "view"
-          ? () => removeProject(shownIsView && displayId ? displayId.slice(VIEW_MIRROR_PREFIX.length) : activeId)
+          ? () => removeBoard(shownIsView && displayId ? displayId.slice(VIEW_MIRROR_PREFIX.length) : activeId)
           : deleteSelected
     const deleteDescendantCount =
         canDelete && deleteKind === "milestone" && active && shown ? descendantsOf(shown.id, active.edges).length : 0
@@ -1096,8 +1095,8 @@ export function App() {
             <TabBar
                 tabs={tabs}
                 activeId={section === "roadmap" ? activeId : ""}
-                onSelect={switchProject}
-                onRename={renameProject}
+                onSelect={switchBoard}
+                onRename={renameBoard}
                 leading={
                     <NavActions
                         onOpenTasks={openTasks}
@@ -1220,7 +1219,7 @@ export function App() {
                     <>
                         <div className="absolute inset-0 z-10">
                             {active && (
-                                <MilestoneTree
+                                <BoardTree
                                     key={activeId}
                                     selectedId={selectedId}
                                     onSelect={selectFromCanvas}
@@ -1244,8 +1243,8 @@ export function App() {
                                     key={shown.id}
                                     milestone={shown}
                                     state={stateOf(shown.id, active.mastered, active.edges)}
-                                    todos={isGoal ? [] : (active.todos[shown.id] ?? [])}
-                                    isGoal={isGoal}
+                                    todos={isRoot ? [] : (active.todos[shown.id] ?? [])}
+                                    isRoot={isRoot}
                                     closing={closing}
                                     onToggle={toggleTodo}
                                     onComplete={completeSelected}
@@ -1259,16 +1258,16 @@ export function App() {
                                     onDeleteTodo={deleteTodo}
                                     onAddTodo={addTodo}
                                     onAddChild={addChild}
-                                    onAddParent={shownIsRootGoal ? undefined : addParent}
+                                    onAddParent={shownIsRootNode ? undefined : addParent}
                                     onAddSubView={
                                         shownIsView && displayId
                                             ? () => addView(displayId.slice(VIEW_MIRROR_PREFIX.length), false)
-                                            : shownIsRootGoal
+                                            : shownIsRootNode
                                               ? () => addView(ROOT_ID, false)
                                               : undefined
                                     }
                                     isView={shownIsView}
-                                    earnsGold={!shownIsRootGoal}
+                                    earnsGold={!shownIsRootNode}
                                     onView={shownIsView && displayId ? () => openView(displayId) : undefined}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}
@@ -1278,7 +1277,7 @@ export function App() {
                                 />
                             </aside>
                         )}
-                        <GoalCelebration burst={burst} />
+                        <BoardCelebration burst={burst} />
                     </>
                 )}
                 </SectionTransition>

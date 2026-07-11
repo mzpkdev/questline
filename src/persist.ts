@@ -1,7 +1,7 @@
 // One wire format for the whole app's roadmap data, shared by export/import (IoButtons) and
 // autosave (localStorage). Kept free of React so it unit-tests directly, like graph.ts.
 //
-// The only field that is not already JSON-safe is Project.mastered: it is a Set in the live app
+// The only field that is not already JSON-safe is Board.mastered: it is a Set in the live app
 // (graph.ts relies on Set semantics) but JSON has no Set, so it crosses the wire as string[] and
 // is rebuilt into a Set on the way back in. Scope is data-only: the open tab/selection is not
 // persisted, so a load opens the default tab.
@@ -10,7 +10,7 @@ import { compressToUTF16, decompressFromUTF16 } from "lz-string"
 import type { Task } from "./tasks"
 import type { Banked, Reward } from "./rewards"
 import type { Note } from "./notes"
-import type { Project } from "./project"
+import type { Board } from "./board"
 
 export const PERSIST_VERSION = 3
 export const STORAGE_KEY = "questline:v3"
@@ -19,7 +19,7 @@ export type MirrorPos = Record<string, { x: number; y: number }>
 
 // The live slices the app persists (data only — not activeId/selectedId).
 export type PersistedSlices = {
-    projects: Record<string, Project>
+    projects: Record<string, Board>
     order: string[]
     mirrorPos: MirrorPos
     // The app-level Tasks checklist (one flat list, not tied to any project).
@@ -34,11 +34,11 @@ export type PersistedSlices = {
     notes: Note[]
 }
 
-// A Project with its Set flattened to an array, so it survives JSON.
-type WireProject = Omit<Project, "mastered"> & { mastered: string[] }
+// A Board with its Set flattened to an array, so it survives JSON.
+type WireBoard = Omit<Board, "mastered"> & { mastered: string[] }
 type WireState = {
     version: number
-    projects: Record<string, WireProject>
+    projects: Record<string, WireBoard>
     order: string[]
     mirrorPos: MirrorPos
     // The app-level Tasks checklist and the Rewards shelf. Both required in the v3 wire format.
@@ -52,9 +52,9 @@ type WireState = {
 
 // Live slices -> the JSON string written to a file or to localStorage.
 export function serialize(slices: PersistedSlices): string {
-    const projects: Record<string, WireProject> = {}
-    for (const [id, project] of Object.entries(slices.projects)) {
-        projects[id] = { ...project, mastered: [...project.mastered] }
+    const projects: Record<string, WireBoard> = {}
+    for (const [id, board] of Object.entries(slices.projects)) {
+        projects[id] = { ...board, mastered: [...board.mastered] }
     }
     const wire: WireState = {
         version: PERSIST_VERSION,
@@ -71,7 +71,7 @@ export function serialize(slices: PersistedSlices): string {
 
 // JSON string -> live slices, or null if the text is not a v3 roadmap file we fully understand (bad
 // JSON, wrong version, or any missing/mistyped field). No salvage: a malformed file is rejected
-// wholesale, so callers treat null as "reject, change nothing". Only Project.mastered is transformed
+// wholesale, so callers treat null as "reject, change nothing". Only Board.mastered is transformed
 // (array back to a Set); every other field is trusted exactly as written.
 export function deserialize(text: string): PersistedSlices | null {
     let raw: unknown
@@ -81,9 +81,9 @@ export function deserialize(text: string): PersistedSlices | null {
         return null
     }
     if (!isWireState(raw)) return null
-    const projects: Record<string, Project> = {}
-    for (const [id, project] of Object.entries(raw.projects)) {
-        projects[id] = { ...project, mastered: new Set(project.mastered) }
+    const projects: Record<string, Board> = {}
+    for (const [id, board] of Object.entries(raw.projects)) {
+        projects[id] = { ...board, mastered: new Set(board.mastered) }
     }
     return {
         projects,
@@ -121,7 +121,7 @@ export function saveState(slices: PersistedSlices): void {
 }
 
 // Highest N across all `${prefix}-N` ids, so freshly minted ids resume past loaded/imported data
-// instead of colliding with it. Ids like `view-2-goal` do not match `view-<N>` and are skipped.
+// instead of colliding with it. Ids like `board-2-root` do not match `board-<N>` and are skipped.
 export function maxCounter(ids: Iterable<string>, prefix: string): number {
     const re = new RegExp(`^${prefix}-(\\d+)$`)
     let max = 0
@@ -144,7 +144,7 @@ function isWireState(value: unknown): value is WireState {
     if (!isBanked(v.banked)) return false
     // Notes are optional (a pre-notes v3 save has none), but any present list must be well-formed.
     if (v.notes !== undefined && (!Array.isArray(v.notes) || !v.notes.every(isNote))) return false
-    return Object.values(v.projects as Record<string, unknown>).every(isWireProject)
+    return Object.values(v.projects as Record<string, unknown>).every(isWireBoard)
 }
 
 function isBanked(value: unknown): value is Banked {
@@ -193,12 +193,12 @@ function isNote(value: unknown): value is Note {
     )
 }
 
-function isWireProject(value: unknown): value is WireProject {
+function isWireBoard(value: unknown): value is WireBoard {
     if (typeof value !== "object" || value === null) return false
     const p = value as Record<string, unknown>
     return (
         typeof p.id === "string" &&
-        typeof p.goalId === "string" &&
+        typeof p.rootId === "string" &&
         typeof p.milestones === "object" &&
         p.milestones !== null &&
         Array.isArray(p.edges) &&

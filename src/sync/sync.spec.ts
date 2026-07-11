@@ -2,12 +2,12 @@
 // Node env: real WebCrypto (no polyfill) + a mocked global fetch. sync.ts touches no DOM/localStorage,
 // so the round-trip below runs the genuine encrypt→store→decrypt path end to end.
 
-import { ROOT_ID, rootProject, seedProject } from "../project"
+import { ROOT_ID, rootProject, seedBoard } from "../board"
 import { generateCode } from "./crypto"
 import { pull, push, syncEnabled } from "./sync"
 
 const slices = () => ({
-    projects: { [ROOT_ID]: rootProject(), seed: seedProject() },
+    projects: { [ROOT_ID]: rootProject(), seed: seedBoard() },
     order: [ROOT_ID, "seed"],
     mirrorPos: {},
     tasks: [],

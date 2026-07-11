@@ -1,18 +1,18 @@
 // Tutorial seed for the sample roadmap: a small self-teaching tree whose node names and
-// descriptions explain the app itself. A single-rooted tree: the GOAL is the root at the TOP
-// (tier 0); its sub-milestones branch DOWNWARD. A node unlocks once every child beneath it is
+// descriptions explain the app itself. A single-rooted tree: the ROOT node is at the TOP
+// (tier 0); its child nodes branch DOWNWARD. A node unlocks once every child beneath it is
 // complete, so progress climbs leaves -> root. The seed is pre-set to show all three states at
 // once: one branch is complete (so its parent is unlocked / In Progress), the other is Locked
 // until the user finishes the actionable leaf.
 
-export type MilestoneState = "mastered" | "available" | "locked"
+export type NodeState = "mastered" | "available" | "locked"
 
 export type Todo = {
     text: string
     done: boolean
 }
 
-export type Milestone = {
+export type Node = {
     id: string
     name: string
     tag: string
@@ -21,33 +21,33 @@ export type Milestone = {
     tier: number
     branch: string
     description: string
-    // Gold minted when this milestone is completed. Seeded from DEFAULT_GOAL_REWARD (the tier-0 goal)
-    // or DEFAULT_NODE_REWARD (every milestone below it) when the node is created, then editable per
+    // Gold minted when this node is completed. Seeded from DEFAULT_ROOT_REWARD (the tier-0 root)
+    // or DEFAULT_NODE_REWARD (every node below it) when the node is created, then editable per
     // node in the detail card. Required: reward-less data from before this field is upgraded on load
-    // (see persist.deserialize), so every live milestone carries one.
+    // (see persist.deserialize), so every live node carries one.
     reward: number
 }
 
-// Default gold a milestone pays on completion, used to seed a new node's `reward` and to upgrade older
-// data with none set (in persist.deserialize). The goal (tier 0) is the big payoff; every milestone
+// Default gold a node pays on completion, used to seed a new node's `reward` and to upgrade older
+// data with none set (in persist.deserialize). The root node (tier 0) is the big payoff; every node
 // below it pays the smaller node reward.
 export const DEFAULT_NODE_REWARD = 3
-export const DEFAULT_GOAL_REWARD = 5
+export const DEFAULT_ROOT_REWARD = 5
 
-// [parent (drawn above), child (drawn below)] -- child is a sub-milestone of parent.
-export type MilestoneEdge = [parent: string, child: string]
+// [parent (drawn above), child (drawn below)] -- child is a sub-node of parent.
+export type Edge = [parent: string, child: string]
 
-export const NODES: Milestone[] = [
+export const NODES: Node[] = [
     {
         id: "learn",
         name: "Learn Questline",
-        tag: "Goal",
+        tag: "Root",
         x: 700,
         y: 90,
         tier: 0,
-        branch: "Goal",
+        branch: "Root",
         description: "This is your goal, the thing everything below builds toward. Click any node to open its card; the pencil (top-right) edits its name, description, checklist, and reward. Progress climbs from the bottom up: a node lights up once every step beneath it is done.",
-        reward: DEFAULT_GOAL_REWARD
+        reward: DEFAULT_ROOT_REWARD
     },
 
     {
@@ -97,17 +97,17 @@ export const NODES: Milestone[] = [
     }
 ]
 
-export const EDGES: MilestoneEdge[] = [
+export const EDGES: Edge[] = [
     ["learn", "plan-goal"],
     ["learn", "track-progress"],
     ["plan-goal", "break-steps"],
     ["track-progress", "finish-milestone"]
 ]
 
-// Seed set of completed milestones: the left leaf is done, so its parent (plan-goal) has unlocked.
+// Seed set of completed nodes: the left leaf is done, so its parent (plan-goal) has unlocked.
 export const MASTERED: ReadonlySet<string> = new Set(["break-steps"])
 
-// Each milestone (every node except the root goal) carries a checklist -- its definition of done.
+// Each node (every node except the root) carries a checklist -- its definition of done.
 // A node can only be marked complete once every item is ticked.
 export const TODOS: Record<string, Todo[]> = {
     "plan-goal": [

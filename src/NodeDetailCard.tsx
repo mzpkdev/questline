@@ -2,7 +2,7 @@ import { type CSSProperties, type ReactElement, useEffect, useRef, useState } fr
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { STATE_LABEL } from "./graph"
-import type { Milestone, MilestoneState, Todo } from "./milestones"
+import type { Node, NodeState, Todo } from "./nodes"
 import { useCheckPop } from "./nodeMotion"
 import { PlusIcon } from "./PlusIcon"
 
@@ -12,10 +12,10 @@ import { PlusIcon } from "./PlusIcon"
 // callbacks, as do the add sub-/parent-milestone and sub-view buttons. The App remounts this card via a
 // React key on selection change, so both the cardSwap animation and the edit toggle reset per node.
 export type NodeDetailCardProps = {
-    milestone: Milestone
-    state: MilestoneState
+    milestone: Node
+    state: NodeState
     todos: Todo[]
-    isGoal: boolean
+    isRoot: boolean
     closing?: boolean
     onToggle?: (index: number) => void
     onComplete?: () => void
@@ -31,10 +31,10 @@ export type NodeDetailCardProps = {
     onAddSubView?: () => void
     // View-node mode: the action is a single "View" button, and edit mode is limited to name,
     // description, and reward (plus Add sub-view); no badge, checklist, sub-milestone, or parent
-    // buttons. A view chip's reward is its underlying goal's, editable here via onEditMilestone.
+    // buttons. A view chip's reward is its underlying root node's, editable here via onEditMilestone.
     isView?: boolean
-    // Whether completing this node mints gold. True for every real milestone/goal and view chip; false
-    // only for the Root hub goal (which never pays out), which hides the reward editor.
+    // Whether completing this node mints gold. True for every real node/root node and view chip; false
+    // only for the Root hub's root node (which never pays out), which hides the reward editor.
     earnsGold?: boolean
     onView?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
@@ -66,7 +66,7 @@ const PENCIL_STYLE: CSSProperties = {
 }
 
 // State badge palette, mirroring the mockup's .sb-* rules.
-const BADGE_STYLE: Record<MilestoneState, CSSProperties> = {
+const BADGE_STYLE: Record<NodeState, CSSProperties> = {
     mastered: { background: "#d9be74", color: "#4a3410", border: "1px solid #b8892b" },
     available: { background: "#f3e6bf", color: "#8a6b28", border: "1px solid #cdb373" },
     locked: { background: "#e4dcc4", color: "#8a7c5a", border: "1px solid #b9a986" }
@@ -179,7 +179,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         milestone,
         state,
         todos,
-        isGoal,
+        isRoot,
         closing,
         onToggle,
         onComplete,
@@ -225,9 +225,9 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         return () => el.removeEventListener("animationend", handleEnd)
     }, [closing, onExited])
 
-    const showChecklist = !isGoal && todos.length > 0
+    const showChecklist = !isRoot && todos.length > 0
     const doneCount = todos.filter((todo) => todo.done).length
-    const allDone = todos.every((todo) => todo.done) // vacuously true for the goal's empty list
+    const allDone = todos.every((todo) => todo.done) // vacuously true for the root node's empty list
 
     const badge = (
         <span
@@ -249,13 +249,13 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     } else if (state === "mastered") {
         action = (
             <button type="button" onClick={onUncomplete} className={ACTION_BTN_CLASS} style={UNDO_STYLE}>
-                {isGoal ? "Reset Quest" : "Mark Incomplete"}
+                {isRoot ? "Reset Quest" : "Mark Incomplete"}
             </button>
         )
     } else if (state === "available" && allDone) {
         action = (
             <button type="button" onClick={onComplete} className={ACTION_BTN_CLASS} style={UNLOCK_STYLE}>
-                {isGoal ? "Complete Quest" : "Mark Complete"}
+                {isRoot ? "Complete Quest" : "Mark Complete"}
             </button>
         )
     } else if (state === "available") {
@@ -352,7 +352,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         </div>
                     )}
 
-                    {!isView && !isGoal && (
+                    {!isView && !isRoot && (
                         <div className="mb-[15px]">
                             <div className="mb-[9px] flex items-baseline justify-between">
                                 <span className={CHECKLIST_HEAD_CLASS}>Checklist</span>

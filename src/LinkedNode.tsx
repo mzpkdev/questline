@@ -1,23 +1,23 @@
-// A "view chip" node: the Root view's read-only mirror of another tab. It reuses the milestone card's
+// A linked node: the Root view's read-only mirror of another tab. It reuses the node card's
 // gilded container and font so it reads as a node, with a stacked-cards shadow and a layers icon to
-// mark it as a whole view rather than a single milestone. Clicking it selects it; App then opens the
+// mark it as a whole board rather than a single node. Clicking it selects it; App then opens the
 // shared detail card in view mode (no editing, a "View" button). It's draggable like any node.
 
 import { Handle, type NodeProps, Position } from "@xyflow/react"
 import type { CSSProperties } from "react"
-import type { ViewFlowNode } from "./flow"
+import type { LinkedFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import { INNER_BY_STATE, RING_GOLD, SelectionBox } from "./MilestoneNode"
+import { INNER_BY_STATE, RING_GOLD, SelectionBox } from "./NodeCard"
 import { useNodeMotion } from "./nodeMotion"
 
-// Border width of the gilded frame (matches a non-goal milestone card).
+// Border width of the gilded frame (matches a non-root node card).
 const INSET = 3.5
 
 // Invisible handle so the link down from the Root node still has something to anchor to.
 const HANDLE_STYLE: CSSProperties = { opacity: 0, width: 6, height: 6, border: "none" }
 
-// The gilded card surface (same as a milestone) plus a stacked second card peeking behind. A complete
-// view uses the mastered fill and fades, mirroring how a completed milestone card reads.
+// The gilded card surface (same as a node) plus a stacked second card peeking behind. A complete
+// board uses the mastered fill and fades, mirroring how a completed node card reads.
 function chipStyle(complete: boolean): CSSProperties {
     return {
         width: NODE_SIZE.normal.width,
@@ -30,16 +30,16 @@ function chipStyle(complete: boolean): CSSProperties {
     }
 }
 
-export function ViewNode({ id, data }: NodeProps<ViewFlowNode>) {
+export function LinkedNode({ id, data }: NodeProps<LinkedFlowNode>) {
     const { name, isSelected, complete } = data
-    // View chips are never locked; they seal when their view's goal is complete.
+    // Linked nodes are never locked; they seal when their board's root node is complete.
     const cardRef = useNodeMotion<HTMLDivElement>(id, complete ? "mastered" : "available")
 
     return (
         <div
             ref={cardRef}
             data-id={id}
-            data-view-node=""
+            data-linked-node=""
             data-complete={complete ? "" : undefined}
             className="relative flex cursor-pointer select-none items-center gap-2 px-4 transition-transform hover:scale-[1.04]"
             style={chipStyle(complete)}

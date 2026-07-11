@@ -1,6 +1,6 @@
 import { type EdgeProps, getBezierPath } from "@xyflow/react"
 import { useLayoutEffect, useRef } from "react"
-import type { MilestoneEdgeData } from "./flow"
+import type { EdgeData } from "./flow"
 import { dispatchNodeReached, prefersReducedMotion } from "./nodeMotion"
 
 // A downward link: the parent (source) sits above with its bottom handle, the child (target)
@@ -50,10 +50,10 @@ function drawIn(el: SVGPathElement | null): Animation | null {
     return anim
 }
 
-export function MilestoneEdge(props: EdgeProps) {
+export function Edge(props: EdgeProps) {
     const { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, source, target, data } = props
     const [path] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
-    const lit = (data as MilestoneEdgeData | undefined)?.lit === true
+    const lit = (data as EdgeData | undefined)?.lit === true
 
     const underRef = useRef<SVGPathElement>(null)
     const overRef = useRef<SVGPathElement>(null)

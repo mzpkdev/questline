@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { MilestoneTree } from "./MilestoneTree"
-import { EDGES, MASTERED, type Milestone, type MilestoneEdge, NODES } from "./milestones"
+import { BoardTree } from "./BoardTree"
+import { EDGES, MASTERED, type Edge, type Node, NODES } from "./nodes"
 
-const defaultMilestones: Record<string, Milestone> = Object.fromEntries(NODES.map((n) => [n.id, n]))
+const defaultMilestones: Record<string, Node> = Object.fromEntries(NODES.map((n) => [n.id, n]))
 
 // React Flow needs a sized parent to lay the flow out, and jsdom won't give it one, so every render
 // is wrapped in a fixed-size box.
@@ -10,12 +10,12 @@ function renderTree(
     selectedId: string | null,
     onSelect: (id: string) => void,
     mastered: ReadonlySet<string> = MASTERED,
-    milestones: Record<string, Milestone> = defaultMilestones,
-    edges: MilestoneEdge[] = EDGES
+    milestones: Record<string, Node> = defaultMilestones,
+    edges: Edge[] = EDGES
 ) {
     return render(
         <div style={{ width: 1200, height: 800 }}>
-            <MilestoneTree
+            <BoardTree
                 selectedId={selectedId}
                 onSelect={onSelect}
                 mastered={mastered}
@@ -27,11 +27,11 @@ function renderTree(
     )
 }
 
-describe("MilestoneTree", () => {
+describe("BoardTree", () => {
     it("renders the roadmap from the domain graph", async () => {
         renderTree(null, vi.fn())
 
-        // The goal at the top plus at least one sub-milestone prove the domain mapped through.
+        // The root node at the top plus at least one child node prove the domain mapped through.
         expect(await screen.findByText("Learn Questline")).toBeInTheDocument()
         expect(screen.getByText("Plan your goal")).toBeInTheDocument()
     })
@@ -92,16 +92,16 @@ describe("MilestoneTree", () => {
         })
 
         it("spawns the new card, proving the spawn context reaches React Flow's nodes", async () => {
-            const goal: Milestone = { id: "g", name: "Goal", tag: "Goal", x: 200, y: 80, tier: 0, branch: "Goal", description: "", reward: 5 }
+            const goal: Node = { id: "g", name: "Goal", tag: "Root", x: 200, y: 80, tier: 0, branch: "Root", description: "", reward: 5 }
             const onSelect = vi.fn()
             const { rerender } = renderTree(null, onSelect, new Set(), { g: goal }, [])
             await screen.findByText("Goal")
             animate.mockClear() // ignore anything from the initial settle; only the later add should animate
 
-            const child: Milestone = { id: "c", name: "Fresh Node", tag: "Step", x: 200, y: 240, tier: 1, branch: "Goal", description: "", reward: 3 }
+            const child: Node = { id: "c", name: "Fresh Node", tag: "Step", x: 200, y: 240, tier: 1, branch: "Root", description: "", reward: 3 }
             rerender(
                 <div style={{ width: 1200, height: 800 }}>
-                    <MilestoneTree
+                    <BoardTree
                         selectedId={null}
                         onSelect={onSelect}
                         mastered={new Set()}

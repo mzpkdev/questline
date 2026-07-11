@@ -1,8 +1,8 @@
 import { render } from "@testing-library/react"
 import { afterEach, beforeEach, expect } from "vitest"
-import { GoalCelebration } from "./GoalCelebration"
+import { BoardCelebration } from "./BoardCelebration"
 
-describe("GoalCelebration", () => {
+describe("BoardCelebration", () => {
     const origMatchMedia = window.matchMedia
 
     beforeEach(() => {
@@ -12,9 +12,9 @@ describe("GoalCelebration", () => {
         window.matchMedia = origMatchMedia
     })
 
-    it("bursts a ring and a full ring of gold motes from the goal's position", () => {
-        const { container } = render(<GoalCelebration burst={{ x: 300, y: 120, nonce: 1 }} />)
-        const fanfare = container.querySelector('[data-testid="goal-celebration"]')
+    it("bursts a ring and a full ring of gold motes from the root node's position", () => {
+        const { container } = render(<BoardCelebration burst={{ x: 300, y: 120, nonce: 1 }} />)
+        const fanfare = container.querySelector('[data-testid="board-celebration"]')
 
         expect(fanfare).toBeInTheDocument()
         expect(fanfare?.querySelectorAll("span")).toHaveLength(16)
@@ -22,14 +22,14 @@ describe("GoalCelebration", () => {
         expect((fanfare?.querySelector("span") as HTMLElement).style.left).toBe("300px")
     })
 
-    it("shows nothing until a goal has completed", () => {
-        const { container } = render(<GoalCelebration burst={null} />)
-        expect(container.querySelector('[data-testid="goal-celebration"]')).not.toBeInTheDocument()
+    it("shows nothing until the root node has completed", () => {
+        const { container } = render(<BoardCelebration burst={null} />)
+        expect(container.querySelector('[data-testid="board-celebration"]')).not.toBeInTheDocument()
     })
 
     it("stays silent under reduced motion", () => {
         window.matchMedia = ((query: string) => ({ matches: true, media: query })) as typeof window.matchMedia
-        const { container } = render(<GoalCelebration burst={{ x: 300, y: 120, nonce: 1 }} />)
-        expect(container.querySelector('[data-testid="goal-celebration"]')).not.toBeInTheDocument()
+        const { container } = render(<BoardCelebration burst={{ x: 300, y: 120, nonce: 1 }} />)
+        expect(container.querySelector('[data-testid="board-celebration"]')).not.toBeInTheDocument()
     })
 })

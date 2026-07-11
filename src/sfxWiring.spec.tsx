@@ -84,21 +84,21 @@ describe("sfx wiring", () => {
             </SfxProvider>
         )
 
-        // The Root hub's own goal is a milestone node (carries data-id + data-state); wait for React
+        // The Root hub's own root node is a node card (carries data-id + data-state); wait for React
         // Flow to mount it, then click it -> selectFromCanvas() -> tick (sine @ 880).
         const node = await waitFor(() => {
-            const el = document.querySelector('[data-id="root-goal"][data-state]')
-            if (!el) throw new Error("root milestone node not mounted")
+            const el = document.querySelector('[data-id="root-root"][data-state]')
+            if (!el) throw new Error("root node not mounted")
             return el
         })
         fireEvent.click(node)
         expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 880)).toBe(true)
 
-        // A Root-hub view chip (the mirrored sample roadmap) selects with the same tick.
+        // A Root-hub linked-node chip (the mirrored sample roadmap) selects with the same tick.
         voices = []
         const chip = await waitFor(() => {
-            const el = document.querySelector("[data-view-node]")
-            if (!el) throw new Error("view chip not mounted")
+            const el = document.querySelector("[data-linked-node]")
+            if (!el) throw new Error("linked-node chip not mounted")
             return el
         })
         fireEvent.click(chip)
