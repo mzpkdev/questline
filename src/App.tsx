@@ -26,11 +26,11 @@ import {
 } from "./rewards"
 import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
 import { BoardTree } from "./BoardTree"
-import type { Node } from "./nodes"
+import { isLinkedNode, type Node } from "./nodes"
 import { NavActions } from "./NavActions"
 import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, type PersistedSlices, saveState, serialize } from "./persist"
-import { type Board, boardsReducer, seedBoard } from "./board"
+import { type Board, boardsReducer, linkedNodeName, seedBoard } from "./board"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -605,6 +605,25 @@ export function App() {
         focusNode(newId)
     }, [selectedId, activeId, focusNode])
 
+    // Add an (unlinked) linked node under the selected node, then select it and open its card in edit
+    // mode with the board dropdown -- the same open-in-edit-on-create flow as adding a child node.
+    const addLinkedNode = useCallback(() => {
+        if (selectedId === null) return
+        const childId = mintId("node")
+        dispatch({ type: "addLinkedNode", boardId: activeId, parentId: selectedId, childId })
+        setEditOnAddId(childId)
+        focusNode(childId)
+    }, [selectedId, activeId, focusNode])
+
+    // Point the selected linked node at a board (or clear it back to unlinked with null).
+    const setLinkedTarget = useCallback(
+        (boardId: string | null) => {
+            if (selectedId === null) return
+            dispatch({ type: "setLinkedTarget", boardId: activeId, id: selectedId, targetBoardId: boardId })
+        },
+        [selectedId, activeId]
+    )
+
     // Switch to another tab, selecting its root node so the card shows something valid immediately.
     const switchBoard = useCallback(
         (id: string) => {
@@ -614,6 +633,14 @@ export function App() {
         },
         [boards]
     )
+
+    // Go to Board: the selected linked node's action. Route to (activate) its target board; a no-op
+    // while the node is unlinked (the card renders the button disabled in that case anyway).
+    const goToBoard = useCallback(() => {
+        if (selectedId === null || !active) return
+        const target = active.nodes[selectedId]?.targetBoardId
+        if (target && boards[target]) switchBoard(target)
+    }, [selectedId, active, boards, switchBoard])
 
     // Create a blank board (root node only, named "New Quest") and open it, its root node's card in edit
     // mode so the name is editable at once.
@@ -729,12 +756,18 @@ export function App() {
 
     const closing = selectedId === null && displayId !== null
     // The node backing the open detail card. Kind is positional: the root node is the one whose id is
-    // the board's rootId; deleting it removes the whole board, any other node removes its own subtree.
+    // the board's rootId; a linked node carries the targetBoardId key; otherwise it's a regular node.
+    // Deleting the root removes the whole board; any other node removes its own subtree.
     const shown: Node | undefined = displayId !== null ? active?.nodes[displayId] : undefined
     const isRoot = !!shown && !!active && shown.id === active.rootId
-    const deleteKind: "milestone" | "board" = isRoot ? "board" : "milestone"
+    const isLinked = !!shown && isLinkedNode(shown)
+    const deleteKind: "node" | "board" = isRoot ? "board" : "node"
     const onDeleteShown = !shown ? undefined : isRoot ? () => removeBoard(activeId) : deleteSelected
     const deleteDescendantCount = shown && !isRoot && active ? descendantsOf(shown.id, active.edges).length : 0
+    // Linked-node card inputs (meaningful only when isLinked): the live-mirrored display name, and the
+    // dropdown of every OTHER board (self -- the active board -- excluded).
+    const linkedName = shown && isLinked ? linkedNodeName(boards, shown.targetBoardId) : ""
+    const linkedBoardOptions = isLinked ? tabs.filter((tab) => tab.id !== activeId) : []
 
     // The Draw note open in the editor (null → show the wall). A deleted id resolves to undefined, which
     // falls back to the wall.
@@ -878,6 +911,7 @@ export function App() {
                                     mastered={active.mastered}
                                     nodes={active.nodes}
                                     edges={active.edges}
+                                    boards={boards}
                                     onMove={moveNode}
                                     focusId={focusId}
                                     focusNonce={focusNonce}
@@ -906,20 +940,27 @@ export function App() {
                             >
                                 <NodeDetailCard
                                     key={shown.id}
-                                    milestone={shown}
+                                    node={shown}
                                     state={stateOf(shown.id, active.mastered, active.edges)}
-                                    todos={isRoot ? [] : (active.todos[shown.id] ?? [])}
+                                    todos={isRoot || isLinked ? [] : (active.todos[shown.id] ?? [])}
                                     isRoot={isRoot}
+                                    isLinked={isLinked}
+                                    linkedName={linkedName}
+                                    boardOptions={linkedBoardOptions}
+                                    targetBoardId={shown.targetBoardId ?? null}
+                                    onSetLinkedTarget={setLinkedTarget}
+                                    onGoToBoard={goToBoard}
                                     closing={closing}
                                     onToggle={toggleTodo}
                                     onComplete={completeSelected}
                                     onUncomplete={uncompleteSelected}
-                                    onEditMilestone={editNode}
+                                    onEditNode={editNode}
                                     onEditTodo={editTodo}
                                     onDeleteTodo={deleteTodo}
                                     onAddTodo={addTodo}
                                     onAddChild={addChild}
-                                    onAddParent={addParent}
+                                    onAddParent={isLinked ? undefined : addParent}
+                                    onAddLinkedNode={addLinkedNode}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}
                                     descendantCount={deleteDescendantCount}

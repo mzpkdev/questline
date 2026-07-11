@@ -5,24 +5,26 @@ import type { Edge as RFEdge, Node as RFNode } from "@xyflow/react"
 import type { Node, NodeState } from "./nodes"
 
 export type NodeData = {
-    milestone: Node
+    node: Node
     state: NodeState
     isRoot: boolean
     isSelected: boolean
 }
 
-export type NodeFlowNode = RFNode<NodeData, "milestone">
+export type NodeFlowNode = RFNode<NodeData, "node">
 
-// A linked node points at another board (Phase 2). It carries a label and whether that board is
-// complete (its root node is done); clicking it opens the shared detail card. Dormant scaffold for now:
-// nothing builds one until linked nodes land, but the render path (LinkedNode) stays registered.
+// A linked node points at another board (its action is "Go to Board"); clicking it opens the shared
+// detail card. `name` is derived live from the target board's root node (board.linkedNodeName), so a
+// rename of that board flows through here. `state` is the ordinary tri-state from its own subtree: a
+// linked node never enters a `mastered` set (its completion is deferred to Phase 3), so it only ever
+// reads locked or available here.
 export type LinkedNodeData = {
     name: string
+    state: NodeState
     isSelected: boolean
-    complete: boolean
 }
 
-export type LinkedFlowNode = RFNode<LinkedNodeData, "view">
+export type LinkedFlowNode = RFNode<LinkedNodeData, "linked">
 
 // Every node React Flow holds is one of these.
 export type FlowNode = NodeFlowNode | LinkedFlowNode

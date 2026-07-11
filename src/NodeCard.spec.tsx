@@ -5,7 +5,7 @@ import { byId } from "./graph"
 import { NodeCard } from "./NodeCard"
 import type { NodeState } from "./nodes"
 
-const nodeTypes = { milestone: NodeCard }
+const nodeTypes = { node: NodeCard }
 
 type NodeOverrides = {
     id?: string
@@ -15,15 +15,15 @@ type NodeOverrides = {
 }
 
 function renderNode(overrides: NodeOverrides = {}) {
-    const milestone = byId(overrides.id ?? "plan-goal")
-    if (!milestone) throw new Error(`missing milestone fixture: ${overrides.id}`)
+    const domainNode = byId(overrides.id ?? "plan-goal")
+    if (!domainNode) throw new Error(`missing node fixture: ${overrides.id}`)
 
     const node: NodeFlowNode = {
-        id: milestone.id,
-        type: "milestone",
+        id: domainNode.id,
+        type: "node",
         position: { x: 0, y: 0 },
         data: {
-            milestone,
+            node: domainNode,
             state: overrides.state ?? "available",
             isRoot: overrides.isRoot ?? false,
             isSelected: overrides.isSelected ?? false
@@ -38,7 +38,7 @@ function renderNode(overrides: NodeOverrides = {}) {
 }
 
 describe("NodeCard", () => {
-    it("renders the milestone title", () => {
+    it("renders the node title", () => {
         renderNode({ id: "plan-goal" })
         expect(screen.getByText("Plan your goal")).toBeInTheDocument()
     })

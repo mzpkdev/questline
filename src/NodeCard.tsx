@@ -69,10 +69,10 @@ const BAR_BY_STATE: Record<NodeState, string> = {
 const HANDLE_STYLE: CSSProperties = { opacity: 0, width: 6, height: 6, border: "none" }
 
 export function NodeCard({ data }: NodeProps<NodeFlowNode>) {
-    const { milestone, state, isRoot, isSelected } = data
+    const { node, state, isRoot, isSelected } = data
     // Drives this card's motion: spawn-in when added, ignite on unlock, seal when completed, pop when
     // an edge reaches it.
-    const cardRef = useNodeMotion<HTMLDivElement>(milestone.id, state)
+    const cardRef = useNodeMotion<HTMLDivElement>(node.id, state)
 
     const size = isRoot ? NODE_SIZE.root : NODE_SIZE.normal
     const inset = isRoot ? 5 : 3.5
@@ -96,7 +96,7 @@ export function NodeCard({ data }: NodeProps<NodeFlowNode>) {
         <div
             ref={cardRef}
             className="relative flex items-center cursor-pointer select-none transition-transform hover:scale-[1.04]"
-            data-id={milestone.id}
+            data-id={node.id}
             data-state={state}
             style={{
                 width: size.width,
@@ -139,7 +139,7 @@ export function NodeCard({ data }: NodeProps<NodeFlowNode>) {
             )}
 
             <div className={titleClass} style={{ color: titleColor }}>
-                {milestone.name}
+                {node.name}
             </div>
 
             {isSelected ? <SelectionBox outset={selOutset} /> : null}

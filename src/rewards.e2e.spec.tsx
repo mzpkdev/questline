@@ -249,7 +249,7 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(step)
             await screen.findByRole("heading", { name: /break it into steps/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
             await waitFor(() => expect(nodeRoot("break-steps")?.getAttribute("data-state")).not.toBe("mastered"))
 
             openShop()
@@ -265,7 +265,7 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(step)
             await screen.findByRole("heading", { name: /break it into steps/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Delete milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete node" }))
             fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
             await waitFor(() => expect(nodeRoot("break-steps")).toBeNull())
 

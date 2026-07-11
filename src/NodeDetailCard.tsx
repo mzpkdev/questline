@@ -7,34 +7,52 @@ import { useCheckPop } from "./nodeMotion"
 import { PlusIcon } from "./PlusIcon"
 
 // A visual re-port of the mockup's detail sidebar (renderCard). Checklist ticks call `onToggle`
-// (only when the milestone is actionable); the pencil flips to the mockup's edit layout, whose
-// fields (name, description, checklist item text / delete / add) commit live through the on* edit
-// callbacks, as do the add sub-/parent-milestone buttons. The App remounts this card via a React key
-// on selection change, so both the cardSwap animation and the edit toggle reset per node.
+// (only when the node is actionable); the pencil flips to the mockup's edit layout, whose fields
+// (name, description, checklist item text / delete / add) commit live through the on* edit callbacks,
+// as do the add child / parent / linked-node buttons. A linked node (isLinked) gets a distinct mode:
+// no checklist / reward / description, a board dropdown to pick its target, and a Go to Board action.
+// The App remounts this card via a React key on selection change, so both the cardSwap animation and
+// the edit toggle reset per node.
 export type NodeDetailCardProps = {
-    milestone: Node
+    node: Node
     state: NodeState
     todos: Todo[]
     isRoot: boolean
+    // A linked node: renders the linked mode (board dropdown + Go to Board), no checklist/reward/desc.
+    isLinked?: boolean
+    // A linked node's live-derived display name (its target board's root node name, or a placeholder
+    // while unlinked). Ignored unless isLinked.
+    linkedName?: string
+    // Every OTHER board this linked node may point at (self already excluded), for the dropdown.
+    boardOptions?: { id: string; name: string }[]
+    // The linked node's current target (null while unlinked). Drives the dropdown value and whether Go
+    // to Board is enabled.
+    targetBoardId?: string | null
+    // Pick (or clear, with null) the linked node's target board.
+    onSetLinkedTarget?: (boardId: string | null) => void
+    // Navigate to the linked node's target board. Rendered disabled while the node is unlinked.
+    onGoToBoard?: () => void
     closing?: boolean
     onToggle?: (index: number) => void
     onComplete?: () => void
     onUncomplete?: () => void
-    onEditMilestone?: (patch: { name?: string; description?: string; reward?: number }) => void
+    onEditNode?: (patch: { name?: string; description?: string; reward?: number }) => void
     onEditTodo?: (index: number, text: string) => void
     onDeleteTodo?: (index: number) => void
     onAddTodo?: () => void
     onAddChild?: () => void
     onAddParent?: () => void
+    // Attach an (unlinked) linked node as a child. Offered on every node kind.
+    onAddLinkedNode?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
     onDelete?: () => void
     // What the delete removes: a node + its subtree, or the whole board (deleting a board's root node).
     // Drives the button label + confirm copy.
-    deleteKind?: "milestone" | "board"
-    // Sub-milestone count under this node, so the milestone confirm can warn about the cascade.
+    deleteKind?: "node" | "board"
+    // Sub-node count under this node, so the delete confirm can warn about the cascade.
     descendantCount?: number
-    // Open the card straight in edit mode (used for a just-added milestone, so its name is editable at
-    // once). Read on mount only; the card is remounted per node via a key, so it seeds each fresh node.
+    // Open the card straight in edit mode (used for a just-added node, so its name / target is editable
+    // at once). Read on mount only; the card is remounted per node via a key, so it seeds each fresh node.
     initialEditing?: boolean
     onExited?: () => void
 }
@@ -95,8 +113,8 @@ const MUTED_STYLE: CSSProperties = {
 }
 
 const ACTION_CLASS = "w-full rounded-[11px] py-3 font-display text-[14px] font-bold uppercase tracking-wide"
-// The action button (Complete / Reset / Locked / View): lifts on hover, presses on click, and eases
-// its colours when the state flips in place (e.g. available -> mastered morphs gold to muted). The
+// The action button (Complete / Reset / Locked / Go to Board): lifts on hover, presses on click, and
+// eases its colours when the state flips in place (e.g. available -> mastered morphs gold to muted). The
 // global reduced-motion rule zeroes these transitions.
 const ACTION_BTN_CLASS = `${ACTION_CLASS} transition-[background-color,color,box-shadow,transform] duration-200 ease-out enabled:hover:-translate-y-0.5 enabled:hover:scale-[1.02] enabled:active:translate-y-0 enabled:active:scale-100`
 
@@ -105,12 +123,13 @@ const FIELD_FOCUS = "focus:border-[#b8892b] focus:outline-none focus:ring-2 focu
 const EDIT_TITLE_CLASS = `w-full rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-1.5 pr-10 font-display text-[20px] font-bold text-[#4a3410] ${FIELD_FOCUS}`
 const EDIT_DESC_CLASS = `my-[14px] min-h-24 w-full resize-y rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-2 text-[15.5px] leading-relaxed text-[#5a4a2c] ${FIELD_FOCUS}`
 const TODO_EDIT_CLASS = `min-w-0 flex-1 rounded-[7px] border border-[#d8c48f] bg-[#fffdf5] px-2 py-1.5 text-[14.5px] text-[#5a4a2c] ${FIELD_FOCUS}`
+const SELECT_CLASS = `w-full rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-2 font-display text-[15px] text-[#4a3410] ${FIELD_FOCUS}`
 const EDIT_BTN_TRANSITION = "transition-colors duration-150 ease-out"
 const TODO_DEL_CLASS = `grid h-6 w-6 flex-none appearance-none place-items-center rounded-[7px] border border-transparent bg-transparent text-[17px] leading-none text-[#b3a074] opacity-[.42] transition-[opacity,color,background-color,transform] duration-150 ease-out hover:opacity-100 hover:bg-[#f4ead0]/70 hover:text-[#8a6b28] active:scale-95`
 const TODO_ADD_CLASS = `mt-2.5 self-start rounded-lg border-[1.5px] border-dashed border-[#cdb373] px-3 py-1.5 font-display text-[11px] uppercase tracking-wide text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
 const ADD_BTN_LAYOUT = "flex items-center justify-center gap-1.5"
 const ADD_DESC_CLASS = `${ACTION_CLASS} ${ADD_BTN_LAYOUT} border-[1.5px] border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
-// Destructive action (delete node / view): danger-red outline on parchment, colour-only hover, matching
+// Destructive action (delete node / board): danger-red outline on parchment, colour-only hover, matching
 // the tab-remove affordance (#a5482a). Lives in edit mode only, so read mode can't fat-finger a delete.
 const DELETE_BTN_CLASS = `${ACTION_CLASS} mt-2.5 border-[1.5px] border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] ${EDIT_BTN_TRANSITION} hover:bg-[#a5482a]/10`
 const CHECKLIST_HEAD_CLASS = "font-display text-[11px] uppercase tracking-widest text-[#8a6b28]"
@@ -166,22 +185,29 @@ function ChecklistItem({
 
 export function NodeDetailCard(props: NodeDetailCardProps) {
     const {
-        milestone,
+        node,
         state,
         todos,
         isRoot,
+        isLinked = false,
+        linkedName = "",
+        boardOptions = [],
+        targetBoardId = null,
+        onSetLinkedTarget,
+        onGoToBoard,
         closing,
         onToggle,
         onComplete,
         onUncomplete,
-        onEditMilestone,
+        onEditNode,
         onEditTodo,
         onDeleteTodo,
         onAddTodo,
         onAddChild,
         onAddParent,
+        onAddLinkedNode,
         onDelete,
-        deleteKind = "milestone",
+        deleteKind = "node",
         descendantCount = 0,
         initialEditing = false,
         onExited
@@ -190,15 +216,20 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     const [confirmOpen, setConfirmOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const titleRef = useRef<HTMLInputElement>(null)
+    const selectRef = useRef<HTMLSelectElement>(null)
 
-    // A just-added milestone opens in edit mode: focus and select its name so a rename is one keystroke
-    // away. Mount-only (the card remounts per node), so it never steals focus on a later edit toggle.
+    // A just-added node opens in edit mode: focus its first field so the primary edit is one keystroke
+    // away -- the name for a regular node, the board dropdown for a linked one. Mount-only (the card
+    // remounts per node), so it never steals focus on a later edit toggle.
     useEffect(() => {
-        if (initialEditing) {
+        if (!initialEditing) return
+        if (isLinked) {
+            selectRef.current?.focus()
+        } else {
             titleRef.current?.focus()
             titleRef.current?.select()
         }
-    }, [initialEditing])
+    }, [initialEditing, isLinked])
 
     // Fire onExited once the dismissal animation ends. A native listener (attached only while closing)
     // sidesteps React's delegated onAnimationEnd, which needs the event to bubble to the root.
@@ -211,10 +242,6 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         return () => el.removeEventListener("animationend", handleEnd)
     }, [closing, onExited])
 
-    const showChecklist = !isRoot && todos.length > 0
-    const doneCount = todos.filter((todo) => todo.done).length
-    const allDone = todos.every((todo) => todo.done) // vacuously true for the root node's empty list
-
     const badge = (
         <span
             className="inline-block rounded-full px-2.5 py-0.5 font-display text-[10.5px] uppercase tracking-wide transition-[background-color,color,border-color] duration-300 ease-out"
@@ -223,6 +250,173 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             {STATE_LABEL[state]}
         </span>
     )
+
+    const animation = closing
+        ? "animate-[cardSwapOut_0.2s_ease-in_forwards]"
+        : "animate-[cardSwap_0.26s_cubic-bezier(0.2,0.75,0.25,1)]"
+
+    // The name shown at the top + in the delete confirm: a linked node mirrors its target board (a
+    // placeholder while unlinked); every other node uses its own stored name.
+    const displayName = isLinked ? linkedName : node.name
+
+    const pencil = (
+        <button
+            type="button"
+            aria-label={editing ? "Finish editing" : "Edit"}
+            onClick={() => setEditing((prev) => !prev)}
+            className="absolute right-3 top-3 grid h-[30px] w-[30px] place-items-center rounded-[9px] transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
+            style={PENCIL_STYLE}
+        >
+            <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                width={15}
+                height={15}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                {editing ? (
+                    <path d="M5 12l5 5L20 6" />
+                ) : (
+                    <>
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </>
+                )}
+            </svg>
+        </button>
+    )
+
+    // Shared add-parent / add-child / add-linked-node buttons (edit mode). Add child is always offered;
+    // Add parent only when it's allowed (App omits it for a linked node), and Add linked node only when
+    // wired. So a linked node shows the two child adds, a regular / root node shows all three.
+    const addButtons = (
+        <div className="flex flex-col gap-2.5">
+            {onAddParent && (
+                <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
+                    <PlusIcon size={16} />
+                    Add parent node
+                </button>
+            )}
+            <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
+                <PlusIcon size={16} />
+                Add child node
+            </button>
+            {onAddLinkedNode && (
+                <button type="button" className={ADD_DESC_CLASS} onClick={onAddLinkedNode}>
+                    <PlusIcon size={16} />
+                    Add linked node
+                </button>
+            )}
+        </div>
+    )
+
+    // Shared delete affordance (edit mode). Label + confirm copy follow deleteKind.
+    const deleteSection = onDelete ? (
+        <>
+            <button type="button" className={DELETE_BTN_CLASS} onClick={() => setConfirmOpen(true)}>
+                {deleteKind === "board" ? "Delete board" : "Delete node"}
+            </button>
+            <ConfirmDialog
+                open={confirmOpen}
+                title={deleteKind === "board" ? "Remove this board?" : "Delete this node?"}
+                message={
+                    deleteKind === "board" ? (
+                        <>
+                            Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? This removes
+                            the whole board and can't be undone.
+                        </>
+                    ) : descendantCount > 0 ? (
+                        <>
+                            Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong> and its{" "}
+                            {descendantCount} sub-node{descendantCount === 1 ? "" : "s"}? This can't be undone.
+                        </>
+                    ) : (
+                        <>
+                            Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? This can't be
+                            undone.
+                        </>
+                    )
+                }
+                confirmLabel="Delete"
+                onConfirm={() => {
+                    // Close first, THEN delete: onDelete may unmount this card, so touching confirmOpen
+                    // afterward would be a set-state-on-unmounted warning.
+                    setConfirmOpen(false)
+                    onDelete()
+                }}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmOpen(false)
+                }}
+            />
+        </>
+    ) : null
+
+    // A linked node: no checklist / reward / description. Its action is Go to Board (disabled while
+    // unlinked); edit mode adds the board dropdown and the add / delete affordances.
+    if (isLinked) {
+        const goToBoard = (
+            <button
+                type="button"
+                onClick={onGoToBoard}
+                disabled={!targetBoardId}
+                className={ACTION_BTN_CLASS}
+                style={targetBoardId ? UNLOCK_STYLE : MUTED_STYLE}
+            >
+                Go to Board
+            </button>
+        )
+        return (
+            <div ref={rootRef} data-testid="detail-card" className={`relative font-serif ${animation}`} style={CARD_STYLE}>
+                {pencil}
+                {editing ? (
+                    <>
+                        <h3 className="mt-0.5 pr-10 font-display text-[20px] font-bold text-[#4a3410]">{displayName}</h3>
+                        <div className="mt-[7px]">{badge}</div>
+                        <div className="mb-[15px] mt-[14px]">
+                            <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Linked board</span>
+                            <select
+                                ref={selectRef}
+                                aria-label="Link to board"
+                                className={SELECT_CLASS}
+                                value={targetBoardId ?? ""}
+                                onChange={(event) => onSetLinkedTarget?.(event.target.value || null)}
+                            >
+                                <option value="">Choose a board…</option>
+                                {boardOptions.map((board) => (
+                                    <option key={board.id} value={board.id}>
+                                        {board.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="mb-[15px]">{goToBoard}</div>
+                        {addButtons}
+                        {deleteSection}
+                    </>
+                ) : (
+                    <>
+                        <div className="mb-[14px] flex items-center gap-[14px]">
+                            <div>
+                                <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">
+                                    {displayName}
+                                </h3>
+                                <span className="mt-[7px] inline-block">{badge}</span>
+                            </div>
+                        </div>
+                        <div className="mt-[14px]">{goToBoard}</div>
+                    </>
+                )}
+            </div>
+        )
+    }
+
+    const showChecklist = !isRoot && todos.length > 0
+    const doneCount = todos.filter((todo) => todo.done).length
+    const allDone = todos.every((todo) => todo.done) // vacuously true for the root node's empty list
 
     let action: ReactElement
     let hint: ReactElement | null = null
@@ -246,7 +440,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         )
         hint = (
             <p className="mt-[9px] text-center text-[12.5px] italic text-[#a2916c]">
-                Check off every item to complete this milestone.
+                Check off every item to complete this node.
             </p>
         )
     } else {
@@ -257,55 +451,24 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         )
     }
 
-    const animation = closing
-        ? "animate-[cardSwapOut_0.2s_ease-in_forwards]"
-        : "animate-[cardSwap_0.26s_cubic-bezier(0.2,0.75,0.25,1)]"
-
     return (
         <div ref={rootRef} data-testid="detail-card" className={`relative font-serif ${animation}`} style={CARD_STYLE}>
-            <button
-                type="button"
-                aria-label={editing ? "Finish editing" : "Edit"}
-                onClick={() => setEditing((prev) => !prev)}
-                className="absolute right-3 top-3 grid h-[30px] w-[30px] place-items-center rounded-[9px] transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
-                style={PENCIL_STYLE}
-            >
-                <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    width={15}
-                    height={15}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    {editing ? (
-                        <path d="M5 12l5 5L20 6" />
-                    ) : (
-                        <>
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </>
-                    )}
-                </svg>
-            </button>
+            {pencil}
 
             {editing ? (
                 <>
                     <input
                         ref={titleRef}
                         className={EDIT_TITLE_CLASS}
-                        value={milestone.name}
+                        value={node.name}
                         maxLength={60}
-                        onChange={(event) => onEditMilestone?.({ name: event.target.value })}
+                        onChange={(event) => onEditNode?.({ name: event.target.value })}
                     />
                     <div className="mt-[7px]">{badge}</div>
                     <textarea
                         className={EDIT_DESC_CLASS}
-                        value={milestone.description ?? ""}
-                        onChange={(event) => onEditMilestone?.({ description: event.target.value })}
+                        value={node.description ?? ""}
+                        onChange={(event) => onEditNode?.({ description: event.target.value })}
                     />
 
                     <div className="mb-[15px]">
@@ -317,10 +480,10 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                                 type="number"
                                 min={0}
                                 step={1}
-                                value={milestone.reward ?? 0}
+                                value={node.reward ?? 0}
                                 onChange={(event) => {
                                     const n = event.target.valueAsNumber
-                                    onEditMilestone?.({ reward: Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0 })
+                                    onEditNode?.({ reward: Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0 })
                                 }}
                                 className={`${TODO_EDIT_CLASS} max-w-[92px] flex-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                             />
@@ -367,89 +530,28 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         </div>
                     )}
 
-                    <div className="flex flex-col gap-2.5">
-                        {onAddParent && (
-                            <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
-                                <PlusIcon size={16} />
-                                Add parent milestone
-                            </button>
-                        )}
-                        <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
-                            <PlusIcon size={16} />
-                            Add sub-milestone
-                        </button>
-                    </div>
+                    {addButtons}
 
-                    {onDelete && (
-                        <>
-                            <button
-                                type="button"
-                                className={DELETE_BTN_CLASS}
-                                onClick={() => setConfirmOpen(true)}
-                            >
-                                {deleteKind === "board" ? "Delete board" : "Delete milestone"}
-                            </button>
-                            <ConfirmDialog
-                                open={confirmOpen}
-                                title={deleteKind === "board" ? "Remove this board?" : "Delete this milestone?"}
-                                message={
-                                    deleteKind === "board" ? (
-                                        <>
-                                            Delete{" "}
-                                            <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>?
-                                            This removes the whole board and can't be undone.
-                                        </>
-                                    ) : descendantCount > 0 ? (
-                                        <>
-                                            Delete{" "}
-                                            <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>{" "}
-                                            and its {descendantCount} sub-milestone
-                                            {descendantCount === 1 ? "" : "s"}? This can't be undone.
-                                        </>
-                                    ) : (
-                                        <>
-                                            Delete{" "}
-                                            <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>?
-                                            This can't be undone.
-                                        </>
-                                    )
-                                }
-                                confirmLabel="Delete"
-                                onConfirm={() => {
-                                    // Close first, THEN delete: onDelete may unmount this card (view removal), so
-                                    // touching confirmOpen afterward would be a set-state-on-unmounted warning.
-                                    setConfirmOpen(false)
-                                    onDelete()
-                                }}
-                                onOpenChange={(open) => {
-                                    if (!open) setConfirmOpen(false)
-                                }}
-                            />
-                        </>
-                    )}
+                    {deleteSection}
                 </>
             ) : (
                 <>
                     <div className="mb-[14px] flex items-center gap-[14px]">
                         <div>
-                            <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">
-                                {milestone.name}
-                            </h3>
+                            <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">{node.name}</h3>
                             <span className="mt-[7px] inline-block">{badge}</span>
                         </div>
                     </div>
 
-                    {milestone.description && (
-                        <p className="mb-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.description}</p>
+                    {node.description && (
+                        <p className="mb-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{node.description}</p>
                     )}
 
                     <div className="mb-[15px]">
                         <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
                         <div className="flex items-center gap-2">
                             <Coin size={20} className="flex-none" />
-                            <span className="font-display text-[15px] font-bold text-[#6f5316]">
-                                {milestone.reward ?? 0}
-                            </span>
+                            <span className="font-display text-[15px] font-bold text-[#6f5316]">{node.reward ?? 0}</span>
                             <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
                                 gold on completion
                             </span>

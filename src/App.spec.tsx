@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { decompressFromUTF16 } from "lz-string"
 import { App } from "./App"
 
@@ -6,6 +6,10 @@ import { App } from "./App"
 // root is the one that also has data-state, so we target [data-id][data-state]. Clicks use
 // fireEvent (not userEvent) to avoid React Flow's d3-zoom mousedown path crashing under jsdom.
 const nodeRoot = (id: string) => document.querySelector(`[data-id="${id}"][data-state]`)
+// A linked node is a real node too, but its card carries data-linked-node (no data-state), so match on
+// that. Its id is minted at random, so tests read it from the URL hash after it's added.
+const linkedNode = (id: string) => document.querySelector(`[data-id="${id}"][data-linked-node]`)
+const selectedNodeId = () => window.location.hash.slice("#node-".length)
 const waitForNode = (id: string) =>
     waitFor(() => {
         const el = nodeRoot(id)
@@ -160,9 +164,9 @@ describe("App", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a milestone/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
 
-            expect(await screen.findByText("New Milestone")).toBeInTheDocument()
+            expect(await screen.findByText("New Node")).toBeInTheDocument()
         })
 
         it("focuses a newly added sub-node, writing a random node id to the url", async () => {
@@ -172,7 +176,7 @@ describe("App", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a milestone/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
 
             // The new node becomes the selection, so the url follows it -- a random `#node-node-<uuid>`.
             await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
@@ -186,7 +190,7 @@ describe("App", () => {
             fireEvent.click(step)
             await screen.findByRole("heading", { name: /break it into steps/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add sub-milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
 
             await waitFor(() => expect(nodeRoot("break-steps")?.getAttribute("data-state")).toBe("locked"))
         })
@@ -200,10 +204,10 @@ describe("App", () => {
             // Selecting the board's root, then adding a parent, promotes a new tier-0 root above it.
             selectSeedRoot()
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add parent milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add parent node" }))
 
             // The tab follows the new root name, instantly (the tab is a button named after the root).
-            expect(await screen.findByRole("button", { name: "New Milestone" })).toBeInTheDocument()
+            expect(await screen.findByRole("button", { name: "New Node" })).toBeInTheDocument()
             expect(screen.queryByRole("button", { name: "Learn Questline" })).toBeNull()
             // The old root drops to normal size; the new node renders at root size (the one 240px card).
             expect((nodeRoot("learn") as HTMLElement).style.width).toBe("180px")
@@ -211,7 +215,109 @@ describe("App", () => {
                 (el) => (el as HTMLElement).style.width === "240px"
             )
             expect(rootCards).toHaveLength(1)
-            expect(rootCards[0]?.textContent).toContain("New Milestone")
+            expect(rootCards[0]?.textContent).toContain("New Node")
+        })
+    })
+
+    context("linked nodes", () => {
+        // Create a second board "New Quest" (B), return to the seed board (A), add a linked node under
+        // finish-milestone, and point it at B. Returns the linked node's (random) id from the URL hash.
+        async function linkSeedNodeToNewBoard(): Promise<string> {
+            fireEvent.click(screen.getByRole("button", { name: "Add board" }))
+            await screen.findByDisplayValue("New Quest") // B's root card, edit mode
+            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to seed board A
+
+            const leaf = await waitForNode("finish-milestone")
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+
+            const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
+            const option = within(dropdown).getByRole("option", { name: "New Quest" }) as HTMLOptionElement
+            fireEvent.change(dropdown, { target: { value: option.value } })
+            return selectedNodeId()
+        }
+
+        it("attaches a linked node, selects it, and opens its card in edit mode", async () => {
+            render(<App />)
+            const leaf = await waitForNode("finish-milestone")
+
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+
+            // The new linked node becomes the selection (a random #node-node-<uuid> in the url)...
+            await waitFor(() => expect(window.location.hash).toMatch(/^#node-node-/))
+            const id = selectedNodeId()
+            // ...it's a real linked node on the tree (data-linked-node, not a node card)...
+            await waitFor(() => expect(linkedNode(id)).not.toBeNull())
+            expect(nodeRoot(id)).toBeNull()
+            // ...and its card opened in edit mode, showing the board dropdown.
+            expect(screen.getByRole("combobox", { name: "Link to board" })).toBeInTheDocument()
+        })
+
+        it("has an empty dropdown and a disabled Go to Board when there is no other board", async () => {
+            render(<App />)
+            const leaf = await waitForNode("finish-milestone")
+
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a milestone/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+
+            const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
+            // Only the placeholder option (the seed board itself is excluded, and it's the only board).
+            expect(dropdown.querySelectorAll("option")).toHaveLength(1)
+            expect(screen.getByRole("button", { name: "Go to Board" })).toBeDisabled()
+        })
+
+        it("sets the target on pick, and live-mirrors the target board's name onto the linked node", async () => {
+            render(<App />)
+            await waitForNode("learn")
+
+            const id = await linkSeedNodeToNewBoard()
+            // The linked node now reads its target board's root name.
+            await waitFor(() => expect(linkedNode(id)?.textContent).toContain("New Quest"))
+
+            // Rename board B via its tab; the linked node's label follows live (it's derived, not copied).
+            fireEvent.dblClick(screen.getByRole("button", { name: "New Quest" }))
+            const input = screen.getByRole("textbox", { name: "Rename board" })
+            fireEvent.change(input, { target: { value: "Renamed Quest" } })
+            fireEvent.keyDown(input, { key: "Enter" })
+
+            await waitFor(() => expect(linkedNode(id)?.textContent).toContain("Renamed Quest"))
+        })
+
+        it("navigates to the target board when Go to Board is clicked", async () => {
+            render(<App />)
+            await waitForNode("learn")
+
+            await linkSeedNodeToNewBoard()
+            fireEvent.click(screen.getByRole("button", { name: "Go to Board" }))
+
+            // Now on board B: its root node "New Quest" is shown and the seed tree is gone.
+            await waitFor(() => expect(nodeRoot("learn")).toBeNull())
+            expect(await screen.findByRole("heading", { name: "New Quest" })).toBeInTheDocument()
+        })
+
+        it("unlinks a linked node when its target board is deleted, leaving the node in place", async () => {
+            render(<App />)
+            await waitForNode("learn")
+
+            const id = await linkSeedNodeToNewBoard()
+            await waitFor(() => expect(linkedNode(id)?.textContent).toContain("New Quest"))
+
+            // Delete board B via its root card.
+            fireEvent.click(screen.getByRole("button", { name: "New Quest" })) // switch to B
+            await screen.findByRole("heading", { name: "New Quest" })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete board" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+
+            // Back on the seed board, the linked node survives but has reverted to unlinked.
+            await waitFor(() => expect(linkedNode(id)?.textContent).toContain("Unlinked"))
         })
     })
 
@@ -225,7 +331,7 @@ describe("App", () => {
             fireEvent.click(node)
             await screen.findByRole("heading", { name: /plan your goal/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Delete milestone" }))
+            fireEvent.click(screen.getByRole("button", { name: "Delete node" }))
             fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
 
             await waitFor(() => {

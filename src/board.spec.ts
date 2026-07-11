@@ -1,7 +1,8 @@
-import type { Edge, Node } from "./nodes"
+import { type Edge, isLinkedNode, type Node } from "./nodes"
 import {
     addBoard,
     addChild,
+    addLinkedNode,
     type Board,
     boardsReducer,
     type BoardsState,
@@ -9,12 +10,15 @@ import {
     deleteNode,
     editNode,
     insertParent,
+    linkedNodeName,
     moveNode,
     newBoard,
     removeBoard,
     seedBoard,
+    setLinkedTarget,
     toggleTodo,
-    uncompleteNode
+    uncompleteNode,
+    UNLINKED_LABEL
 } from "./board"
 
 // A minimal node record for hand-built fixtures (kind is positional, so no tag/branch fields).
@@ -138,6 +142,73 @@ describe("addChild", () => {
     })
 })
 
+describe("addLinkedNode", () => {
+    it("attaches an unlinked linked node child (targetBoardId null, no reward/checklist)", () => {
+        const next = addLinkedNode(seedBoard(), "finish-milestone", "node-link")
+        const link = next.nodes["node-link"]
+        expect(link).toBeDefined()
+        // Kind is positional: the targetBoardId key is present, and starts null (unlinked).
+        expect(isLinkedNode(link as Node)).toBe(true)
+        expect(link?.targetBoardId).toBeNull()
+        // No reward / description of its own; positioned a tier below its parent, with the edge.
+        expect(link?.reward).toBeUndefined()
+        expect(link?.description).toBeUndefined()
+        expect(link?.tier).toBe(3)
+        expect(next.edges).toContainEqual(["finish-milestone", "node-link"])
+    })
+
+    it("un-completes the parent (and ancestors) when the fresh linked child is incomplete", () => {
+        const board = completeNode(seedBoard(), "plan-goal", true)
+        expect(board.mastered.has("plan-goal")).toBe(true)
+        const next = addLinkedNode(board, "plan-goal", "node-link")
+        expect(next.mastered.has("plan-goal")).toBe(false)
+    })
+
+    it("is a no-op (same reference) for an unknown parent", () => {
+        const board = seedBoard()
+        expect(addLinkedNode(board, "nope", "node-link")).toBe(board)
+    })
+})
+
+describe("setLinkedTarget", () => {
+    // A board holding one linked node (unlinked) under its root.
+    const withLink = (): Board => addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "link")
+
+    it("points a linked node at a board, and clears it back to unlinked with null", () => {
+        const linked = setLinkedTarget(withLink(), "link", "board-x")
+        expect(linked.nodes.link?.targetBoardId).toBe("board-x")
+        const cleared = setLinkedTarget(linked, "link", null)
+        expect(cleared.nodes.link?.targetBoardId).toBeNull()
+    })
+
+    it("is a no-op (same reference) on a regular node (no targetBoardId key)", () => {
+        const board = seedBoard()
+        expect(setLinkedTarget(board, "plan-goal", "board-x")).toBe(board)
+    })
+
+    it("is a no-op (same reference) for an unknown id or an unchanged target", () => {
+        const board = withLink()
+        expect(setLinkedTarget(board, "nope", "board-x")).toBe(board)
+        expect(setLinkedTarget(board, "link", null)).toBe(board) // already null
+    })
+})
+
+describe("linkedNodeName", () => {
+    it("derives the display name from the target board's root node, live", () => {
+        const boards = { seed: seedBoard(), other: newBoard("other", "other-root", "Other Quest") }
+        expect(linkedNodeName(boards, "other")).toBe("Other Quest")
+        // Rename that board's root -> the derived name follows.
+        const renamed = { ...boards, other: editNode(boards.other, "other-root", { name: "Renamed Quest" }) }
+        expect(linkedNodeName(renamed, "other")).toBe("Renamed Quest")
+    })
+
+    it("falls back to the placeholder when unlinked or the target is gone", () => {
+        const boards = { seed: seedBoard() }
+        expect(linkedNodeName(boards, null)).toBe(UNLINKED_LABEL)
+        expect(linkedNodeName(boards, "does-not-exist")).toBe(UNLINKED_LABEL)
+    })
+})
+
 describe("editNode / moveNode", () => {
     it("patches a node's name / description / reward", () => {
         const next = editNode(seedBoard(), "plan-goal", { name: "Renamed", reward: 9 })
@@ -214,14 +285,44 @@ describe("removeBoard", () => {
         expect(next.order).toEqual([])
     })
 
-    it("does not reparent or touch the surviving boards", () => {
+    it("does not reparent or touch the surviving boards with no linked nodes", () => {
         const a = newBoard("a", "a-root", "A")
         const b = newBoard("b", "b-root", "B")
         const state: BoardsState = { boards: { a, b }, order: ["a", "b"] }
         const next = removeBoard(state, "a")
         expect(next.order).toEqual(["b"])
-        expect(next.boards.b).toBe(b) // surviving board kept as-is
+        expect(next.boards.b).toBe(b) // surviving board kept as-is (same reference)
         expect(next.boards.a).toBeUndefined()
+    })
+
+    it("unlinks every linked node pointing at the deleted board, across all survivors, keeping subtrees", () => {
+        // Two survivors each carry a linked node aimed at the doomed board `t`; a child hangs under one
+        // of those linked nodes to prove the subtree stays put.
+        let a = addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link")
+        a = setLinkedTarget(a, "a-link", "t")
+        a = addChild(a, "a-link", "a-link-child")
+        let b = addLinkedNode(newBoard("b", "b-root", "B"), "b-root", "b-link")
+        b = setLinkedTarget(b, "b-link", "t")
+        const t = newBoard("t", "t-root", "Target")
+        const state: BoardsState = { boards: { a, b, t }, order: ["a", "b", "t"] }
+
+        const next = removeBoard(state, "t")
+        expect(next.boards.t).toBeUndefined()
+        // Both linked nodes revert to unlinked (null), but stay in the tree with their subtrees intact.
+        expect(next.boards.a?.nodes["a-link"]?.targetBoardId).toBeNull()
+        expect(next.boards.a?.nodes["a-link-child"]).toBeDefined()
+        expect(next.boards.a?.edges).toContainEqual(["a-link", "a-link-child"])
+        expect(next.boards.b?.nodes["b-link"]?.targetBoardId).toBeNull()
+    })
+
+    it("leaves a survivor's reference stable when none of its linked nodes pointed at the deleted board", () => {
+        let a = addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link")
+        a = setLinkedTarget(a, "a-link", "other") // points elsewhere, not at the doomed board
+        const b = newBoard("b", "b-root", "B")
+        const state: BoardsState = { boards: { a, b }, order: ["a", "b"] }
+        const next = removeBoard(state, "b")
+        expect(next.boards.a).toBe(a) // untouched -> same reference
+        expect(next.boards.a?.nodes["a-link"]?.targetBoardId).toBe("other")
     })
 
     it("is a no-op (same reference) for an unknown id", () => {
@@ -236,6 +337,15 @@ describe("boardsReducer", () => {
     it("routes a single-board action through the matching op", () => {
         const next = boardsReducer(state(), { type: "editNode", boardId: "seed", id: "plan-goal", patch: { name: "X" } })
         expect(next.boards.seed?.nodes["plan-goal"]?.name).toBe("X")
+    })
+
+    it("routes addLinkedNode then setLinkedTarget through their ops", () => {
+        let s = boardsReducer(state(), { type: "addLinkedNode", boardId: "seed", parentId: "learn", childId: "link" })
+        expect(isLinkedNode(s.boards.seed?.nodes.link as Node)).toBe(true)
+        expect(s.boards.seed?.nodes.link?.targetBoardId).toBeNull()
+
+        s = boardsReducer(s, { type: "setLinkedTarget", boardId: "seed", id: "link", targetBoardId: "board-x" })
+        expect(s.boards.seed?.nodes.link?.targetBoardId).toBe("board-x")
     })
 
     it("keeps the whole state reference stable on a no-op single-board action", () => {

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
+import { type Boards, newBoard, UNLINKED_LABEL } from "./board"
 import { BoardTree } from "./BoardTree"
 import { EDGES, MASTERED, type Edge, type Node, NODES } from "./nodes"
 
@@ -12,7 +13,8 @@ function renderTree(
     mastered: ReadonlySet<string> = MASTERED,
     nodes: Record<string, Node> = defaultNodes,
     edges: Edge[] = EDGES,
-    rootId = "learn"
+    rootId = "learn",
+    boards: Boards = {}
 ) {
     return render(
         <div style={{ width: 1200, height: 800 }}>
@@ -23,6 +25,7 @@ function renderTree(
                 mastered={mastered}
                 nodes={nodes}
                 edges={edges}
+                boards={boards}
                 onMove={vi.fn()}
             />
         </div>
@@ -75,6 +78,43 @@ describe("BoardTree", () => {
         })
     })
 
+    context("linked nodes (kind by targetBoardId, not a static id set)", () => {
+        // A tiny board: a regular root with one linked child. The child's kind is decided purely by the
+        // presence of its targetBoardId key -- no id list.
+        const root: Node = { id: "g", name: "Goal", x: 200, y: 80, tier: 0, description: "", reward: 5 }
+        const linked = (targetBoardId: string | null): Node => ({ id: "lk", name: "", x: 200, y: 240, tier: 1, targetBoardId })
+        const targetBoards: Boards = { target: newBoard("target", "target-root", "Other Quest") }
+
+        it("renders a linked child, live-mirroring its target board's root name", async () => {
+            const { container } = renderTree(null, vi.fn(), new Set(), { g: root, lk: linked("target") }, [["g", "lk"]], "g", targetBoards)
+
+            // The linked node reads as its target board's root name, and carries the linked-node marker
+            // (not data-state, which is a regular node card's).
+            expect(await screen.findByText("Other Quest")).toBeInTheDocument()
+            const chip = container.querySelector('[data-id="lk"][data-linked-node]')
+            expect(chip).not.toBeNull()
+            expect(chip?.hasAttribute("data-state")).toBe(false)
+            // The regular root is a node card (data-state), proving the two kinds split on targetBoardId.
+            expect(container.querySelector('[data-id="g"][data-state]')).not.toBeNull()
+            expect(container.querySelector('[data-id="g"][data-linked-node]')).toBeNull()
+        })
+
+        it("shows the placeholder for an unlinked linked node", async () => {
+            renderTree(null, vi.fn(), new Set(), { g: root, lk: linked(null) }, [["g", "lk"]], "g", {})
+            expect(await screen.findByText(UNLINKED_LABEL)).toBeInTheDocument()
+        })
+
+        it("selects a linked node by id on click, like any node", async () => {
+            const onSelect = vi.fn()
+            const { container } = renderTree(null, onSelect, new Set(), { g: root, lk: linked("target") }, [["g", "lk"]], "g", targetBoards)
+            await screen.findByText("Other Quest")
+
+            const chip = container.querySelector('[data-id="lk"][data-linked-node]')
+            fireEvent.click(chip as Element)
+            expect(onSelect).toHaveBeenCalledWith("lk")
+        })
+    })
+
     context("when a node is added after the tree has settled", () => {
         // Stub the Web Animations API jsdom lacks; a spawned card calls el.animate().
         const divProto = Object.getPrototypeOf(document.createElement("div")) as HTMLDivElement
@@ -110,6 +150,7 @@ describe("BoardTree", () => {
                         mastered={new Set()}
                         nodes={{ g: root, c: child }}
                         edges={[["g", "c"]]}
+                        boards={{}}
                         onMove={vi.fn()}
                     />
                 </div>

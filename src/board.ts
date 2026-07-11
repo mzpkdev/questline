@@ -61,7 +61,21 @@ export function seedBoard(): Board {
 }
 
 // Default blurb on a fresh board's root node.
-const NEW_ROOT_DESC = "The end goal for this quest. Add sub-milestones to break it down into steps."
+const NEW_ROOT_DESC = "The end goal for this quest. Add child nodes to break it down into steps."
+
+// Placeholder name shown for a linked node that has not been pointed at a board yet (targetBoardId is
+// null), and the fallback when its target board can no longer be found.
+export const UNLINKED_LABEL = "Unlinked"
+
+// The display name of a linked node: its target board's root (tier-0) node name, derived live so a
+// rename of that board flows through to every linked node pointing at it. Unlinked (or a dangling
+// target) falls back to the placeholder. A linked node's own stored `name` is never the display source.
+export function linkedNodeName(boards: Boards, targetBoardId: string | null | undefined): string {
+    if (!targetBoardId) return UNLINKED_LABEL
+    const target = boards[targetBoardId]
+    const root = target && target.nodes[target.rootId]
+    return root?.name ?? UNLINKED_LABEL
+}
 
 // A blank roadmap: a single gold root node named after the tab, no children and nothing complete.
 export function newBoard(id: string, rootId: string, name: string): Board {
@@ -113,7 +127,7 @@ export function insertParent(board: Board, targetId: string, newId: string): Boa
         }
         nodes[newId] = {
             id: newId,
-            name: "New Milestone",
+            name: "New Node",
             x: target.x,
             y: target.y - TIER_GAP,
             tier: 0,
@@ -131,7 +145,7 @@ export function insertParent(board: Board, targetId: string, newId: string): Boa
     }
     nodes[newId] = {
         id: newId,
-        name: "New Milestone",
+        name: "New Node",
         x: target.x,
         y: target.y,
         tier: target.tier,
@@ -154,7 +168,7 @@ export function addChild(board: Board, parentId: string, childId: string): Board
     const siblings = board.edges.filter((edge) => edge[0] === parentId).length
     const child: Node = {
         id: childId,
-        name: "New Milestone",
+        name: "New Node",
         x: parent.x + siblings * SIBLING_FAN,
         y: parent.y + TIER_GAP,
         tier: parent.tier + 1,
@@ -163,6 +177,36 @@ export function addChild(board: Board, parentId: string, childId: string): Board
     }
     const edges: Edge[] = [...board.edges, [parentId, childId]]
     return { ...board, nodes: { ...board.nodes, [childId]: child }, edges, mastered: uncomplete(parentId, board.mastered, edges) }
+}
+
+// Add an unlinked linked node under `parentId`: a real tree node placed like addChild (a tier below,
+// fanned past siblings), but marked linked by carrying the `targetBoardId` key (null until a board is
+// picked via setLinkedTarget). It has no checklist / reward / description; its display name is derived
+// (linkedNodeName), so the stored `name` is left blank. A fresh child is incomplete, so the parent (and
+// any now-inconsistent ancestor) drops out of the completed set. An unknown parent is a no-op.
+export function addLinkedNode(board: Board, parentId: string, childId: string): Board {
+    const parent = board.nodes[parentId]
+    if (!parent) return board
+    const siblings = board.edges.filter((edge) => edge[0] === parentId).length
+    const child: Node = {
+        id: childId,
+        name: "",
+        x: parent.x + siblings * SIBLING_FAN,
+        y: parent.y + TIER_GAP,
+        tier: parent.tier + 1,
+        targetBoardId: null
+    }
+    const edges: Edge[] = [...board.edges, [parentId, childId]]
+    return { ...board, nodes: { ...board.nodes, [childId]: child }, edges, mastered: uncomplete(parentId, board.mastered, edges) }
+}
+
+// Point a linked node at a board (or clear it back to unlinked with null). Only touches a node that is
+// already linked (the `targetBoardId` key is present); a regular / root node, an unknown id, or an
+// unchanged target is a no-op (same reference).
+export function setLinkedTarget(board: Board, id: string, targetBoardId: string | null): Board {
+    const current = board.nodes[id]
+    if (!current || !("targetBoardId" in current) || current.targetBoardId === targetBoardId) return board
+    return { ...board, nodes: { ...board.nodes, [id]: { ...current, targetBoardId } } }
 }
 
 // Edit a node's name / description / reward in place. Unknown id is a no-op (same reference).
@@ -226,18 +270,32 @@ export function addBoard(state: BoardsState, boardId: string, rootId: string, na
     return { boards: { ...state.boards, [boardId]: newBoard(boardId, rootId, name) }, order: [...state.order, boardId] }
 }
 
-// Remove a board outright: no floor (the last board can go) and no reparenting (boards are flat). An
-// unknown id is a no-op (same reference).
-//
-// Phase 2 seam: linked nodes carry a `targetBoardId`. Deleting a board must unlink every linked node
-// pointing at it. The loop below is where that transform slots in -- replace `board` with
-// `unlinkTargets(board, boardId)`. No linked nodes exist yet, so each surviving board is kept as-is.
+// Revert every linked node on `board` whose target is `deletedBoardId` back to unlinked
+// (targetBoardId: null); the linked nodes and their subtrees stay put. Returns the same reference when
+// nothing pointed at that board, so removeBoard leaves untouched survivors untouched.
+function unlinkTargets(board: Board, deletedBoardId: string): Board {
+    let changed = false
+    const nodes: Record<string, Node> = {}
+    for (const [id, node] of Object.entries(board.nodes)) {
+        if (node.targetBoardId === deletedBoardId) {
+            nodes[id] = { ...node, targetBoardId: null }
+            changed = true
+        } else {
+            nodes[id] = node
+        }
+    }
+    return changed ? { ...board, nodes } : board
+}
+
+// Remove a board outright: no floor (the last board can go) and no reparenting (boards are flat). Every
+// surviving board has its linked nodes pointing at the deleted board reverted to unlinked (the
+// empty-dropdown state). An unknown id is a no-op (same reference).
 export function removeBoard(state: BoardsState, boardId: string): BoardsState {
     if (!(boardId in state.boards)) return state
     const boards: Boards = {}
     for (const [id, board] of Object.entries(state.boards)) {
         if (id === boardId) continue
-        boards[id] = board
+        boards[id] = unlinkTargets(board, boardId)
     }
     return { boards, order: state.order.filter((id) => id !== boardId) }
 }
@@ -255,6 +313,8 @@ export type BoardsAction =
     | { type: "editNode"; boardId: string; id: string; patch: NodePatch }
     | { type: "moveNode"; boardId: string; id: string; x: number; y: number }
     | { type: "addChild"; boardId: string; parentId: string; childId: string }
+    | { type: "addLinkedNode"; boardId: string; parentId: string; childId: string }
+    | { type: "setLinkedTarget"; boardId: string; id: string; targetBoardId: string | null }
     | { type: "addParent"; boardId: string; targetId: string; newId: string }
     | { type: "deleteNode"; boardId: string; id: string }
     | { type: "renameBoard"; boardId: string; name: string }
@@ -289,6 +349,10 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
             return updateBoard(state, action.boardId, (b) => moveNode(b, action.id, action.x, action.y))
         case "addChild":
             return updateBoard(state, action.boardId, (b) => addChild(b, action.parentId, action.childId))
+        case "addLinkedNode":
+            return updateBoard(state, action.boardId, (b) => addLinkedNode(b, action.parentId, action.childId))
+        case "setLinkedTarget":
+            return updateBoard(state, action.boardId, (b) => setLinkedTarget(b, action.id, action.targetBoardId))
         case "addParent":
             return updateBoard(state, action.boardId, (b) => insertParent(b, action.targetId, action.newId))
         case "deleteNode":

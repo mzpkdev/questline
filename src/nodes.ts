@@ -28,9 +28,15 @@ export type Node = {
     // the detail card. Absent on a linked node (which pays no gold).
     reward?: number
     // Presence marks a linked node: a board id once chosen, null while unlinked. Absent on regular and
-    // root nodes. Unused until Phase 2 (linked nodes), but part of the v4 shape + validator now.
+    // root nodes. The display name of a linked node is derived live from its target board's root node
+    // (see board.linkedNodeName), so a linked node's own `name` is unused.
     targetBoardId?: string | null
 }
+
+// Node kind is positional (never a stored flag): a linked node is any node carrying the `targetBoardId`
+// key -- present as a board id (linked) or null (unlinked). Regular and root nodes omit the key. The
+// root node is separately identified by `id === board.rootId`.
+export const isLinkedNode = (node: Node): boolean => "targetBoardId" in node
 
 // Default gold a node pays on completion, used to seed a new node's `reward`. The root node (tier 0)
 // is the big payoff; every node below it pays the smaller node reward.
