@@ -291,8 +291,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     )
 
     // Shared add-parent / add-child / add-linked-node buttons (edit mode). Add child is always offered;
-    // Add parent only when it's allowed (App omits it for a linked node), and Add linked node only when
-    // wired. So a linked node shows the two child adds, a regular / root node shows all three.
+    // Add parent and Add linked node each render only when their handler is wired. App wires Add parent
+    // for regular AND linked nodes (insertParent splices a node above either), so every kind can show all three.
     const addButtons = (
         <div className="flex flex-col gap-2.5">
             {onAddParent && (
@@ -355,8 +355,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         </>
     ) : null
 
-    // A linked node: no checklist / reward / description. Its action is Go to Board (disabled while
-    // unlinked); edit mode adds the board dropdown and the add / delete affordances.
+    // A linked node: no checklist / reward / description. Read mode's action is Go to Board (disabled
+    // while unlinked); edit mode swaps that for the board dropdown plus the add / delete affordances.
     if (isLinked) {
         const goToBoard = (
             <button
@@ -393,7 +393,6 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                                 ))}
                             </select>
                         </div>
-                        <div className="mb-[15px]">{goToBoard}</div>
                         {addButtons}
                         {deleteSection}
                     </>

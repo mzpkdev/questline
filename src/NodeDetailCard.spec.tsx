@@ -515,14 +515,16 @@ describe("NodeDetailCard", () => {
                 />
             )
 
-            // The dropdown exists but offers only the placeholder; Go to Board stays disabled.
+            // The dropdown exists but offers only the placeholder; Go to Board is read-mode only, so
+            // edit mode doesn't render it here.
             expect(screen.getByRole("combobox", { name: "Link to board" })).toBeInTheDocument()
             expect(screen.getAllByRole("option")).toHaveLength(1)
-            expect(screen.getByRole("button", { name: "Go to Board" })).toBeDisabled()
+            expect(screen.queryByRole("button", { name: "Go to Board" })).not.toBeInTheDocument()
         })
 
-        it("offers add child / add linked node and delete node, but not add parent", async () => {
+        it("offers add parent / child / linked node and delete, but no Go to Board (edit mode)", async () => {
             const user = userEvent.setup()
+            const onAddParent = vi.fn()
             const onAddChild = vi.fn()
             const onAddLinkedNode = vi.fn()
             render(
@@ -534,19 +536,25 @@ describe("NodeDetailCard", () => {
                     isLinked
                     linkedName="Target Quest"
                     targetBoardId="board-x"
+                    onAddParent={onAddParent}
                     onAddChild={onAddChild}
                     onAddLinkedNode={onAddLinkedNode}
+                    onGoToBoard={vi.fn()}
                     onDelete={vi.fn()}
                     initialEditing
                 />
             )
 
+            // insertParent is node-agnostic, so a linked node offers Add parent alongside the child adds.
+            await user.click(screen.getByRole("button", { name: "Add parent node" }))
+            expect(onAddParent).toHaveBeenCalledTimes(1)
             await user.click(screen.getByRole("button", { name: "Add child node" }))
             expect(onAddChild).toHaveBeenCalledTimes(1)
             await user.click(screen.getByRole("button", { name: "Add linked node" }))
             expect(onAddLinkedNode).toHaveBeenCalledTimes(1)
-            expect(screen.queryByRole("button", { name: "Add parent node" })).not.toBeInTheDocument()
             expect(screen.getByRole("button", { name: "Delete node" })).toBeInTheDocument()
+            // Go to Board is a read-mode navigation action: edit mode omits it even with onGoToBoard wired.
+            expect(screen.queryByRole("button", { name: "Go to Board" })).not.toBeInTheDocument()
         })
     })
 })

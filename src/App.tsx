@@ -961,7 +961,7 @@ export function App() {
                                     onDeleteTodo={deleteTodo}
                                     onAddTodo={addTodo}
                                     onAddChild={addChild}
-                                    onAddParent={isLinked ? undefined : addParent}
+                                    onAddParent={addParent}
                                     onAddLinkedNode={addLinkedNode}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}

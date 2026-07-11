@@ -270,6 +270,8 @@ describe("App", () => {
             const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
             // Only the placeholder option (the seed board itself is excluded, and it's the only board).
             expect(dropdown.querySelectorAll("option")).toHaveLength(1)
+            // Go to Board is read-mode only: leave edit mode, where it renders but stays disabled (unlinked).
+            fireEvent.click(screen.getByRole("button", { name: "Finish editing" }))
             expect(screen.getByRole("button", { name: "Go to Board" })).toBeDisabled()
         })
 
@@ -295,6 +297,8 @@ describe("App", () => {
             await waitForNode("learn")
 
             await linkSeedNodeToNewBoard()
+            // Go to Board is read-mode only, so leave edit mode before navigating.
+            fireEvent.click(screen.getByRole("button", { name: "Finish editing" }))
             fireEvent.click(screen.getByRole("button", { name: "Go to Board" }))
 
             // Now on board B: its root node "New Quest" is shown and the seed tree is gone.

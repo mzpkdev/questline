@@ -118,6 +118,29 @@ describe("insertParent", () => {
         expect(next.mastered.has("g")).toBe(false) // ...and its ancestors drop too
     })
 
+    it("splices a regular node above a linked target, dropping its subtree a tier and keeping it linked", () => {
+        // A linked node under finish-node (tier 2 -> the link lands at tier 3), pointed at another board
+        // and carrying a child of its own, so the subtree shift is observable.
+        const linked = setLinkedTarget(addLinkedNode(seedBoard(), "finish-node", "link-x"), "link-x", "other-board")
+        const withChild = addChild(linked, "link-x", "link-child")
+        expect(isLinkedNode(withChild.nodes["link-x"] as Node)).toBe(true)
+
+        const next = insertParent(withChild, "link-x", "node-x")
+        // A regular node is spliced between the linked node and its parent.
+        expect(next.edges).toContainEqual(["finish-node", "node-x"])
+        expect(next.edges).toContainEqual(["node-x", "link-x"])
+        expect(next.edges).not.toContainEqual(["finish-node", "link-x"])
+        expect(isLinkedNode(next.nodes["node-x"] as Node)).toBe(false) // the inserted node is a plain node
+
+        // The linked node keeps its identity + target; it and its subtree each drop a tier.
+        expect(isLinkedNode(next.nodes["link-x"] as Node)).toBe(true)
+        expect(next.nodes["link-x"]?.targetBoardId).toBe("other-board")
+        expect(next.nodes["node-x"]?.tier).toBe(3)
+        expect(next.nodes["link-x"]?.tier).toBe(4)
+        expect(next.nodes["link-child"]?.tier).toBe(5) // subtree shifted with it
+        expect(next.edges).toContainEqual(["link-x", "link-child"])
+    })
+
     it("is a no-op (same reference) for an unknown id", () => {
         const board = seedBoard()
         expect(insertParent(board, "does-not-exist", "node-x")).toBe(board)
