@@ -12,25 +12,28 @@ export type Todo = {
     done: boolean
 }
 
+// A tree node. Its kind is positional, never stored: the root node is the one whose id equals its
+// board's rootId; a linked node (Phase 2) is any node carrying the `targetBoardId` key. A regular
+// or root node carries `description` + `reward`; a linked node carries neither.
 export type Node = {
     id: string
     name: string
-    tag: string
     x: number
     y: number
     tier: number
-    branch: string
-    description: string
-    // Gold minted when this node is completed. Seeded from DEFAULT_ROOT_REWARD (the tier-0 root)
-    // or DEFAULT_NODE_REWARD (every node below it) when the node is created, then editable per
-    // node in the detail card. Required: reward-less data from before this field is upgraded on load
-    // (see persist.deserialize), so every live node carries one.
-    reward: number
+    // Present on regular and root nodes; absent on a linked node.
+    description?: string
+    // Gold minted when this node is completed. Seeded from DEFAULT_ROOT_REWARD (the tier-0 root) or
+    // DEFAULT_NODE_REWARD (every node below it) when the node is created, then editable per node in
+    // the detail card. Absent on a linked node (which pays no gold).
+    reward?: number
+    // Presence marks a linked node: a board id once chosen, null while unlinked. Absent on regular and
+    // root nodes. Unused until Phase 2 (linked nodes), but part of the v4 shape + validator now.
+    targetBoardId?: string | null
 }
 
-// Default gold a node pays on completion, used to seed a new node's `reward` and to upgrade older
-// data with none set (in persist.deserialize). The root node (tier 0) is the big payoff; every node
-// below it pays the smaller node reward.
+// Default gold a node pays on completion, used to seed a new node's `reward`. The root node (tier 0)
+// is the big payoff; every node below it pays the smaller node reward.
 export const DEFAULT_NODE_REWARD = 3
 export const DEFAULT_ROOT_REWARD = 5
 
@@ -41,58 +44,53 @@ export const NODES: Node[] = [
     {
         id: "learn",
         name: "Learn Questline",
-        tag: "Root",
         x: 700,
         y: 90,
         tier: 0,
-        branch: "Root",
-        description: "This is your goal, the thing everything below builds toward. Click any node to open its card; the pencil (top-right) edits its name, description, checklist, and reward. Progress climbs from the bottom up: a node lights up once every step beneath it is done.",
+        description:
+            "This is your goal, the thing everything below builds toward. Click any node to open its card; the pencil (top-right) edits its name, description, checklist, and reward. Progress climbs from the bottom up: a node lights up once every step beneath it is done.",
         reward: DEFAULT_ROOT_REWARD
     },
 
     {
         id: "plan-goal",
         name: "Plan your goal",
-        tag: "Track",
         x: 440,
         y: 250,
         tier: 1,
-        branch: "Plan",
-        description: "Sub-milestones split a goal into tracks. The step beneath this one is already done, so this track has unlocked and shows In Progress. Its own checklist decides when you can mark it complete.",
+        description:
+            "Sub-milestones split a goal into tracks. The step beneath this one is already done, so this track has unlocked and shows In Progress. Its own checklist decides when you can mark it complete.",
         reward: DEFAULT_NODE_REWARD
     },
     {
         id: "track-progress",
         name: "Track your progress",
-        tag: "Track",
         x: 960,
         y: 250,
         tier: 1,
-        branch: "Track",
-        description: "This track is Locked: it waits until the milestone beneath it is complete. Finish the step below and watch this light up.",
+        description:
+            "This track is Locked: it waits until the milestone beneath it is complete. Finish the step below and watch this light up.",
         reward: DEFAULT_NODE_REWARD
     },
 
     {
         id: "break-steps",
         name: "Break it into steps",
-        tag: "Step",
         x: 440,
         y: 410,
         tier: 2,
-        branch: "Plan",
-        description: "Every milestone carries a checklist, its definition of done. Every box here is ticked and the milestone is marked complete, which is why the track above unlocked.",
+        description:
+            "Every milestone carries a checklist, its definition of done. Every box here is ticked and the milestone is marked complete, which is why the track above unlocked.",
         reward: DEFAULT_NODE_REWARD
     },
     {
         id: "finish-milestone",
         name: "Finish a milestone",
-        tag: "Step",
         x: 960,
         y: 410,
         tier: 2,
-        branch: "Track",
-        description: "Your turn: tick each item below, then press Mark Complete. The track above will unlock the moment this is done.",
+        description:
+            "Your turn: tick each item below, then press Mark Complete. The track above will unlock the moment this is done.",
         reward: DEFAULT_NODE_REWARD
     }
 ]

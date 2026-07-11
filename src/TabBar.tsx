@@ -1,8 +1,8 @@
-// Tab chrome, ported from the mockup's `.tabbar` and made functional. Each tab is one roadmap
-// (a Project); its label is the goal node's name, so renaming a tab renames the goal and vice
-// versa. Double-click (or long-press on touch) a tab to rename it. Views are deleted from a detail
-// card's Delete button, not here; new views come from the Root node's "+ Add sub-view". Styling
-// matches the mockup: solid colors via Tailwind, gold gradients / inset "ring" shadows via inline style.
+// Tab chrome, ported from the mockup's `.tabbar` and made functional. Each tab is one board; its label
+// is the root node's name, so renaming a tab renames the root node and vice versa. Double-click (or
+// long-press on touch) a tab to rename it. A board is deleted from its root node's detail card, not
+// here; new boards come from the "+ New Quest" button at the end of the row. Styling matches the
+// mockup: solid colors via Tailwind, gold gradients / inset "ring" shadows via inline style.
 
 import {
     type CSSProperties,
@@ -12,19 +12,23 @@ import {
     useRef,
     useState
 } from "react"
+import { PlusIcon } from "./PlusIcon"
 
 // How long a press must hold before it opens the inline rename (touch has no double-click).
 const LONG_PRESS_MS = 500
 // A press that drifts more than this is a scroll/drag, not a hold, so it cancels the rename.
 const PRESS_MOVE_TOLERANCE = 10
 
-export type TabDescriptor = { id: string; name: string; pinned?: boolean }
+export type TabDescriptor = { id: string; name: string }
 
 type TabBarProps = {
     tabs: TabDescriptor[]
     activeId: string
     onSelect: (id: string) => void
     onRename: (id: string, name: string) => void
+    // Create a fresh board (rendered as a "+ New Quest" chip at the end of the tab row). Omitted when
+    // the bar is rendered in isolation.
+    onAddBoard?: () => void
     // App-level chips rendered at the leading end of the bar, ahead of the tabs.
     leading?: ReactNode
     // App-level controls pinned to the trailing (right) end of the bar, after the tabs. Right-aligned
@@ -117,7 +121,7 @@ export function TabBar(props: TabBarProps) {
                             {/* biome-ignore lint/a11y/noAutofocus: inline rename should take focus immediately */}
                             <input
                                 autoFocus
-                                aria-label="Rename view"
+                                aria-label="Rename board"
                                 className="w-28 bg-transparent outline-none"
                                 value={draft}
                                 maxLength={40}
@@ -147,22 +151,23 @@ export function TabBar(props: TabBarProps) {
                             onPointerCancel={cancelPress}
                             onContextMenu={(event) => event.preventDefault()}
                         >
-                            {tab.pinned && (
-                                <svg
-                                    className="flex-none text-[#8a641d]"
-                                    width={13}
-                                    height={13}
-                                    viewBox="0 0 24 24"
-                                    aria-hidden="true"
-                                >
-                                    <path d="M3 8l4.5 3.5L12 4l4.5 7.5L21 8l-2 11H5z" fill="currentColor" />
-                                </svg>
-                            )}
                             {tab.name}
                         </button>
                     </span>
                 )
             })}
+            {props.onAddBoard && (
+                <button
+                    type="button"
+                    className={`${chipBase} ${inactiveChip} gap-1`}
+                    aria-label="Add board"
+                    title="New Quest"
+                    onClick={props.onAddBoard}
+                >
+                    <PlusIcon size={13} />
+                    New Quest
+                </button>
+            )}
             {props.trailing && <div className="ml-auto flex items-center gap-1">{props.trailing}</div>}
         </div>
     )

@@ -9,8 +9,8 @@ import { PlusIcon } from "./PlusIcon"
 // A visual re-port of the mockup's detail sidebar (renderCard). Checklist ticks call `onToggle`
 // (only when the milestone is actionable); the pencil flips to the mockup's edit layout, whose
 // fields (name, description, checklist item text / delete / add) commit live through the on* edit
-// callbacks, as do the add sub-/parent-milestone and sub-view buttons. The App remounts this card via a
-// React key on selection change, so both the cardSwap animation and the edit toggle reset per node.
+// callbacks, as do the add sub-/parent-milestone buttons. The App remounts this card via a React key
+// on selection change, so both the cardSwap animation and the edit toggle reset per node.
 export type NodeDetailCardProps = {
     milestone: Node
     state: NodeState
@@ -26,21 +26,11 @@ export type NodeDetailCardProps = {
     onAddTodo?: () => void
     onAddChild?: () => void
     onAddParent?: () => void
-    // When set, edit mode offers "Add sub-view" (a child view in the Root hub). Shown for view
-    // chips and the Root node.
-    onAddSubView?: () => void
-    // View-node mode: the action is a single "View" button, and edit mode is limited to name,
-    // description, and reward (plus Add sub-view); no badge, checklist, sub-milestone, or parent
-    // buttons. A view chip's reward is its underlying root node's, editable here via onEditMilestone.
-    isView?: boolean
-    // Whether completing this node mints gold. True for every real node/root node and view chip; false
-    // only for the Root hub's root node (which never pays out), which hides the reward editor.
-    earnsGold?: boolean
-    onView?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
     onDelete?: () => void
-    // What the delete removes: a milestone + its subtree, or the whole view. Drives the button + copy.
-    deleteKind?: "milestone" | "view"
+    // What the delete removes: a node + its subtree, or the whole board (deleting a board's root node).
+    // Drives the button label + confirm copy.
+    deleteKind?: "milestone" | "board"
     // Sub-milestone count under this node, so the milestone confirm can warn about the cascade.
     descendantCount?: number
     // Open the card straight in edit mode (used for a just-added milestone, so its name is editable at
@@ -190,10 +180,6 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onAddTodo,
         onAddChild,
         onAddParent,
-        onAddSubView,
-        isView,
-        earnsGold = true,
-        onView,
         onDelete,
         deleteKind = "milestone",
         descendantCount = 0,
@@ -240,13 +226,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
 
     let action: ReactElement
     let hint: ReactElement | null = null
-    if (onView) {
-        action = (
-            <button type="button" onClick={onView} className={ACTION_BTN_CLASS} style={UNLOCK_STYLE}>
-                View
-            </button>
-        )
-    } else if (state === "mastered") {
+    if (state === "mastered") {
         action = (
             <button type="button" onClick={onUncomplete} className={ACTION_BTN_CLASS} style={UNDO_STYLE}>
                 {isRoot ? "Reset Quest" : "Mark Incomplete"}
@@ -321,38 +301,36 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         maxLength={60}
                         onChange={(event) => onEditMilestone?.({ name: event.target.value })}
                     />
-                    {!isView && <div className="mt-[7px]">{badge}</div>}
+                    <div className="mt-[7px]">{badge}</div>
                     <textarea
                         className={EDIT_DESC_CLASS}
-                        value={milestone.description}
+                        value={milestone.description ?? ""}
                         onChange={(event) => onEditMilestone?.({ description: event.target.value })}
                     />
 
-                    {earnsGold && (
-                        <div className="mb-[15px]">
-                            <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
-                            <div className="flex items-center gap-2">
-                                <Coin size={20} className="flex-none" />
-                                <input
-                                    aria-label="Reward in gold"
-                                    type="number"
-                                    min={0}
-                                    step={1}
-                                    value={milestone.reward}
-                                    onChange={(event) => {
-                                        const n = event.target.valueAsNumber
-                                        onEditMilestone?.({ reward: Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0 })
-                                    }}
-                                    className={`${TODO_EDIT_CLASS} max-w-[92px] flex-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                                />
-                                <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
-                                    gold on completion
-                                </span>
-                            </div>
+                    <div className="mb-[15px]">
+                        <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
+                        <div className="flex items-center gap-2">
+                            <Coin size={20} className="flex-none" />
+                            <input
+                                aria-label="Reward in gold"
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={milestone.reward ?? 0}
+                                onChange={(event) => {
+                                    const n = event.target.valueAsNumber
+                                    onEditMilestone?.({ reward: Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0 })
+                                }}
+                                className={`${TODO_EDIT_CLASS} max-w-[92px] flex-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                            />
+                            <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
+                                gold on completion
+                            </span>
                         </div>
-                    )}
+                    </div>
 
-                    {!isView && !isRoot && (
+                    {!isRoot && (
                         <div className="mb-[15px]">
                             <div className="mb-[9px] flex items-baseline justify-between">
                                 <span className={CHECKLIST_HEAD_CLASS}>Checklist</span>
@@ -389,28 +367,18 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         </div>
                     )}
 
-                    {(!isView || onAddSubView) && (
-                        <div className="flex flex-col gap-2.5">
-                            {!isView && onAddParent && (
-                                <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
-                                    <PlusIcon size={16} />
-                                    Add parent milestone
-                                </button>
-                            )}
-                            {!isView && (
-                                <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
-                                    <PlusIcon size={16} />
-                                    Add sub-milestone
-                                </button>
-                            )}
-                            {onAddSubView && (
-                                <button type="button" className={ADD_DESC_CLASS} onClick={onAddSubView}>
-                                    <PlusIcon size={16} />
-                                    Add sub-view
-                                </button>
-                            )}
-                        </div>
-                    )}
+                    <div className="flex flex-col gap-2.5">
+                        {onAddParent && (
+                            <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
+                                <PlusIcon size={16} />
+                                Add parent milestone
+                            </button>
+                        )}
+                        <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
+                            <PlusIcon size={16} />
+                            Add sub-milestone
+                        </button>
+                    </div>
 
                     {onDelete && (
                         <>
@@ -419,17 +387,17 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                                 className={DELETE_BTN_CLASS}
                                 onClick={() => setConfirmOpen(true)}
                             >
-                                {deleteKind === "view" ? "Delete view" : "Delete milestone"}
+                                {deleteKind === "board" ? "Delete board" : "Delete milestone"}
                             </button>
                             <ConfirmDialog
                                 open={confirmOpen}
-                                title={deleteKind === "view" ? "Remove this view?" : "Delete this milestone?"}
+                                title={deleteKind === "board" ? "Remove this board?" : "Delete this milestone?"}
                                 message={
-                                    deleteKind === "view" ? (
+                                    deleteKind === "board" ? (
                                         <>
                                             Delete{" "}
                                             <strong className="font-semibold text-[#4a3410]">{milestone.name}</strong>?
-                                            This removes the whole view and can't be undone.
+                                            This removes the whole board and can't be undone.
                                         </>
                                     ) : descendantCount > 0 ? (
                                         <>
@@ -467,7 +435,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                             <h3 className="mt-0.5 font-display text-[20px] font-bold text-[#4a3410]">
                                 {milestone.name}
                             </h3>
-                            {!onView && <span className="mt-[7px] inline-block">{badge}</span>}
+                            <span className="mt-[7px] inline-block">{badge}</span>
                         </div>
                     </div>
 
@@ -475,20 +443,18 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         <p className="mb-[14px] text-[15.5px] leading-relaxed text-[#5a4a2c]">{milestone.description}</p>
                     )}
 
-                    {earnsGold && (
-                        <div className="mb-[15px]">
-                            <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
-                            <div className="flex items-center gap-2">
-                                <Coin size={20} className="flex-none" />
-                                <span className="font-display text-[15px] font-bold text-[#6f5316]">
-                                    {milestone.reward}
-                                </span>
-                                <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
-                                    gold on completion
-                                </span>
-                            </div>
+                    <div className="mb-[15px]">
+                        <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Reward</span>
+                        <div className="flex items-center gap-2">
+                            <Coin size={20} className="flex-none" />
+                            <span className="font-display text-[15px] font-bold text-[#6f5316]">
+                                {milestone.reward ?? 0}
+                            </span>
+                            <span className="font-display text-[11px] uppercase tracking-wide text-[#b09a63]">
+                                gold on completion
+                            </span>
                         </div>
-                    )}
+                    </div>
 
                     {showChecklist && (
                         <div className="mb-[15px] mt-0.5">

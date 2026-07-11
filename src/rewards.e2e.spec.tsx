@@ -64,7 +64,7 @@ const purse = () => screen.getByTestId("purse")
 const balance = () => Number((purse().getAttribute("aria-label") ?? "").replace(/ gold$/, ""))
 
 // localStorage holds lz-string-compressed JSON now; unpack it to assert on the saved roadmap text.
-const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v3") ?? "") ?? ""
+const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v4") ?? "") ?? ""
 
 // Real wall-clock, captured before any Date.now spy so frozen-time tests can still let RTL's waitFor
 // tick against real time when they aren't pinning the clock.
@@ -148,18 +148,13 @@ describe("Rewards & gold (e2e)", () => {
             expect(balance()).toBe(BASE_GOLD + 3)
         })
 
-        it("mints the larger goal reward when a tab's tier-0 goal is completed", async () => {
+        it("mints the larger root reward when a board's tier-0 root node is completed", async () => {
             render(<App />)
-            await waitForNode("root-root")
+            await waitForNode("learn")
 
-            // Spin up a fresh view (its goal is a lone leaf worth the larger goal reward, 5) and complete it.
-            fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
-            await screen.findByTestId("detail-card")
-            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add sub-view" }))
-            // The new view's card opens in edit mode; finish editing to reveal the View action.
+            // A fresh board's root is a lone leaf worth the larger root reward (5); complete it.
+            fireEvent.click(screen.getByRole("button", { name: "Add board" }))
             fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
-            fireEvent.click(await screen.findByRole("button", { name: "View" }))
             fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
 
             openShop()
@@ -176,31 +171,18 @@ describe("Rewards & gold (e2e)", () => {
             expect(balance()).toBe(BASE_GOLD + 3 + 3)
         })
 
-        it("sums gold across every roadmap/view, not just the active tab", async () => {
+        it("sums gold across every board, not just the active tab", async () => {
             render(<App />)
-            await completeFinishMilestone() // earned in the seed view (+3)
+            await completeFinishMilestone() // earned in the seed board (+3)
 
-            // Switch the active tab away to Root (which earns nothing); the purse still counts the seed view.
-            fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
-            await waitForNode("root-root")
-            openShop()
-            await screen.findByRole("button", { name: "Open Fancy coffee" })
-            expect(balance()).toBe(BASE_GOLD + 3)
-        })
-
-        it("never mints gold for the Root hub node", async () => {
-            render(<App />)
-            await waitForNode("root-root")
-
-            // Complete the Root node itself; it is the home for views, not real work, so it pays nothing.
-            fireEvent.click(screen.getByRole("button", { name: "Quest Board" }))
-            await screen.findByTestId("detail-card")
-            fireEvent.click(screen.getByRole("button", { name: "Complete Quest" }))
-            await waitFor(() => expect(nodeRoot("root-root")?.getAttribute("data-state")).toBe("mastered"))
+            // Add a second board and complete its root node (a lone leaf, +5). The purse counts both.
+            fireEvent.click(screen.getByRole("button", { name: "Add board" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Finish editing" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Complete Quest" }))
 
             openShop()
             await screen.findByRole("button", { name: "Open Fancy coffee" })
-            expect(balance()).toBe(BASE_GOLD)
+            expect(balance()).toBe(BASE_GOLD + 3 + 5)
         })
 
         it("does not add gold while a milestone stays available or locked (only on complete)", async () => {
@@ -643,8 +625,11 @@ describe("Rewards & gold (e2e)", () => {
             await addRewardViaCard("Round", 2.6) // -> 3
             await addRewardViaCard("Floor", 0) // -> 1
 
-            expect(within(document.querySelector('[data-reward-id="reward-4"]') as HTMLElement).getByText("3")).toBeInTheDocument()
-            expect(within(document.querySelector('[data-reward-id="reward-5"]') as HTMLElement).getByText("1")).toBeInTheDocument()
+            // Ids are random now, so find each tile by its name (the Open button lives inside the tile).
+            const roundTile = screen.getByRole("button", { name: "Open Round" }).closest("[data-reward-id]") as HTMLElement
+            const floorTile = screen.getByRole("button", { name: "Open Floor" }).closest("[data-reward-id]") as HTMLElement
+            expect(within(roundTile).getByText("3")).toBeInTheDocument()
+            expect(within(floorTile).getByText("1")).toBeInTheDocument()
         })
 
         it("creates an auto-replenishing reward when the checkbox is ticked", async () => {

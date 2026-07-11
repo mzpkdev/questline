@@ -1,7 +1,11 @@
-// A linked node: the Root view's read-only mirror of another tab. It reuses the node card's
+// A linked node points at another board (its action is "Go to Board"). It reuses the node card's
 // gilded container and font so it reads as a node, with a stacked-cards shadow and a layers icon to
 // mark it as a whole board rather than a single node. Clicking it selects it; App then opens the
-// shared detail card in view mode (no editing, a "View" button). It's draggable like any node.
+// shared detail card. It's draggable like any node.
+//
+// Dormant scaffold for Phase 1: no linked nodes exist yet, so nothing builds one. BoardTree keeps the
+// "view" node type registered so Phase 2 only has to reintroduce a draggable makeLinkedNode and the
+// board-dropdown card mode; the completion/naming wiring lands then too.
 
 import { Handle, type NodeProps, Position } from "@xyflow/react"
 import type { CSSProperties } from "react"

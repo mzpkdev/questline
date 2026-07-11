@@ -13,8 +13,9 @@ export type NodeData = {
 
 export type NodeFlowNode = RFNode<NodeData, "milestone">
 
-// A linked node: the Root view's read-only mirror of another tab. It carries a label and whether the
-// board it stands for is complete (its root node is done); clicking it opens the shared detail card.
+// A linked node points at another board (Phase 2). It carries a label and whether that board is
+// complete (its root node is done); clicking it opens the shared detail card. Dormant scaffold for now:
+// nothing builds one until linked nodes land, but the render path (LinkedNode) stays registered.
 export type LinkedNodeData = {
     name: string
     isSelected: boolean

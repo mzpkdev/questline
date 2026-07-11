@@ -3,9 +3,8 @@ import userEvent from "@testing-library/user-event"
 import { TabBar } from "./TabBar"
 
 const tabs = [
-    { id: "root", name: "Quest Board", pinned: true },
     { id: "seed", name: "Learn Questline" },
-    { id: "view-1", name: "Marketing Q3" }
+    { id: "board-1", name: "Marketing Q3" }
 ]
 
 function renderBar(overrides: Partial<Parameters<typeof TabBar>[0]> = {}) {
@@ -20,10 +19,9 @@ function renderBar(overrides: Partial<Parameters<typeof TabBar>[0]> = {}) {
 }
 
 describe("TabBar", () => {
-    it("renders a tab per project", () => {
+    it("renders a tab per board", () => {
         renderBar()
 
-        expect(screen.getByRole("button", { name: "Quest Board" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Learn Questline" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Marketing Q3" })).toBeInTheDocument()
     })
@@ -31,13 +29,27 @@ describe("TabBar", () => {
     it("selects a tab when its label is clicked", async () => {
         const { props } = renderBar()
         await userEvent.click(screen.getByRole("button", { name: "Marketing Q3" }))
-        expect(props.onSelect).toHaveBeenCalledWith("view-1")
+        expect(props.onSelect).toHaveBeenCalledWith("board-1")
     })
 
-    it("renders no per-tab remove affordance (views are deleted from the detail card)", () => {
+    it("renders no per-tab remove affordance (boards are deleted from the root node's card)", () => {
         renderBar()
-        expect(screen.queryByRole("button", { name: "Remove Quest Board" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Remove Learn Questline" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Remove Marketing Q3" })).not.toBeInTheDocument()
+    })
+
+    context("the Add board button", () => {
+        it("creates a board when clicked", async () => {
+            const onAddBoard = vi.fn()
+            renderBar({ onAddBoard })
+            await userEvent.click(screen.getByRole("button", { name: "Add board" }))
+            expect(onAddBoard).toHaveBeenCalledTimes(1)
+        })
+
+        it("is omitted when onAddBoard isn't provided", () => {
+            renderBar()
+            expect(screen.queryByRole("button", { name: "Add board" })).not.toBeInTheDocument()
+        })
     })
 
     context("renaming a tab", () => {
@@ -46,7 +58,7 @@ describe("TabBar", () => {
             const { props } = renderBar()
 
             await user.dblClick(screen.getByRole("button", { name: "Learn Questline" }))
-            const input = screen.getByRole("textbox", { name: "Rename view" })
+            const input = screen.getByRole("textbox", { name: "Rename board" })
             await user.clear(input)
             await user.type(input, "Launch Plan{Enter}")
 
@@ -59,7 +71,7 @@ describe("TabBar", () => {
                 renderBar()
                 fireEvent.pointerDown(screen.getByRole("button", { name: "Learn Questline" }))
                 act(() => vi.advanceTimersByTime(600))
-                expect(screen.getByRole("textbox", { name: "Rename view" })).toBeInTheDocument()
+                expect(screen.getByRole("textbox", { name: "Rename board" })).toBeInTheDocument()
             } finally {
                 vi.useRealTimers()
             }
@@ -73,7 +85,7 @@ describe("TabBar", () => {
                 fireEvent.pointerDown(label, { clientX: 0, clientY: 0 })
                 fireEvent.pointerMove(label, { clientX: 40, clientY: 0 })
                 act(() => vi.advanceTimersByTime(600))
-                expect(screen.queryByRole("textbox", { name: "Rename view" })).not.toBeInTheDocument()
+                expect(screen.queryByRole("textbox", { name: "Rename board" })).not.toBeInTheDocument()
             } finally {
                 vi.useRealTimers()
             }
@@ -84,7 +96,7 @@ describe("TabBar", () => {
             const { props } = renderBar()
 
             await user.dblClick(screen.getByRole("button", { name: "Learn Questline" }))
-            const input = screen.getByRole("textbox", { name: "Rename view" })
+            const input = screen.getByRole("textbox", { name: "Rename board" })
             await user.clear(input)
             fireEvent.blur(input)
 

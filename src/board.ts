@@ -1,8 +1,15 @@
-// A Board is one tab's roadmap: its own node records, edges, checklists, and completed set.
-// The tab's label is simply the root (tier-0) node's name, so renaming the tab and renaming the
-// root node are the same edit seen from two places.
+// A Board is one tab's roadmap: its own node records, edges, checklists, and completed set. All
+// boards are equal -- there is no Root hub and no tree between boards. The tab's label is simply the
+// root (tier-0) node's name, so renaming the tab and renaming the root node are the same edit seen
+// from two places.
+//
+// This module owns the boards data: the wire type, the seed, and every pure `(board, ...) -> board`
+// op App used to inline (todo edits, complete / uncomplete, editNode, moveNode, addChild, addParent
+// via insertParent, deleteNode), plus the map-level addBoard / removeBoard. `boardsReducer` routes a
+// single dispatch over `{ boards, order }` through those ops, keeping references stable on a no-op so
+// autosave and the gold memo don't churn.
 
-import { descendantsOf, parentOf, uncomplete } from "./graph"
+import { complete, descendantsOf, parentOf, uncomplete } from "./graph"
 import {
     DEFAULT_NODE_REWARD,
     DEFAULT_ROOT_REWARD,
@@ -15,130 +22,119 @@ import {
     type Todo
 } from "./nodes"
 
-// Vertical gap between tiers when a node is pushed down a tier (matches App's auto-placement).
+// Vertical gap between tiers, and the horizontal fan for each extra sibling, when a node is
+// auto-placed (a new child, or a subtree pushed down a tier). Matches the seed's layout.
 const TIER_GAP = 160
+const SIBLING_FAN = 70
 
 export type Board = {
     id: string
-    // The tier-0 root node; its name is the tab label.
+    // The tier-0 root node; its name is the tab label. Node kind is positional: the root is the node
+    // whose id equals this.
     rootId: string
-    // The view this one hangs under in the Root hub tree (another view's id, or ROOT_ID for a
-    // top-level view). Root itself has none.
-    parentId?: string
-    milestones: Record<string, Node>
+    nodes: Record<string, Node>
     edges: Edge[]
+    // Per-node checklists; root (and, from Phase 2, linked) nodes have none.
     todos: Record<string, Todo[]>
+    // Ids of nodes the user ticked complete. Live as a Set (graph.ts relies on Set semantics); it
+    // crosses the persist wire as an array and is rebuilt into a Set on load.
     mastered: ReadonlySet<string>
 }
 
-// The bundled sample roadmap, as the first tab (a top-level view under Root). Everything is
-// deep-copied so editing a board never mutates the module seeds.
+export type Boards = Record<string, Board>
+export type BoardsState = { boards: Boards; order: string[] }
+
+// Fields the detail card edits in place on a regular / root node.
+type NodePatch = Partial<Pick<Node, "name" | "description" | "reward">>
+
+// The bundled sample roadmap. Everything is deep-copied so editing a board never mutates the module
+// seeds. A fresh install seeds exactly this one board (no linked nodes).
 export function seedBoard(): Board {
     return {
         id: "seed",
         rootId: "learn",
-        parentId: ROOT_ID,
-        milestones: Object.fromEntries(NODES.map((node) => [node.id, { ...node }])),
+        nodes: Object.fromEntries(NODES.map((node) => [node.id, { ...node }])),
         edges: EDGES.map((edge) => [...edge] as Edge),
         todos: Object.fromEntries(Object.entries(TODOS).map(([id, list]) => [id, list.map((todo) => ({ ...todo }))])),
         mastered: new Set(MASTERED)
     }
 }
 
-// Default blurb on a fresh board's root node (Root overrides its own below).
-const NEW_ROOT_DESC = "The end goal for this view. Add sub-milestones to break it down into steps."
+// Default blurb on a fresh board's root node.
+const NEW_ROOT_DESC = "The end goal for this quest. Add sub-milestones to break it down into steps."
 
 // A blank roadmap: a single gold root node named after the tab, no children and nothing complete.
-// `parentId` places it in the Root hub tree.
-export function newBoard(id: string, name: string, parentId?: string): Board {
-    const rootId = `${id}-root`
+export function newBoard(id: string, rootId: string, name: string): Board {
     const root: Node = {
         id: rootId,
         name,
-        tag: "Root",
         x: 0,
         y: 0,
         tier: 0,
-        branch: "Root",
         description: NEW_ROOT_DESC,
         reward: DEFAULT_ROOT_REWARD
     }
-    return { id, rootId, parentId, milestones: { [rootId]: root }, edges: [], todos: {}, mastered: new Set() }
+    return { id, rootId, nodes: { [rootId]: root }, edges: [], todos: {}, mastered: new Set() }
 }
 
-// The persistent first tab: a single "Quest Board" node that can't be deleted. It's the top of the view
-// tree (no parent), with a default blurb on its node.
-export const ROOT_ID = "root"
-const ROOT_DESC = "Home base for every roadmap. Each view you create branches off this node; open one to dive in."
-export function rootProject(): Board {
-    const board = newBoard(ROOT_ID, "Quest Board")
-    const root = board.milestones[board.rootId]
-    if (!root) return board
-    return { ...board, milestones: { ...board.milestones, [board.rootId]: { ...root, description: ROOT_DESC } } }
-}
-
-// Remove a node and its whole subtree from a board: the node, every descendant, the edges
-// touching any of them, their checklists, and any completed marks. The root (tier-0) node is never
-// removed this way -- deleting a whole board is a separate op (removeBoard) -- and an unknown id is
-// a no-op, both returning the same reference so callers can skip a redundant update.
+// Remove a node and its whole subtree from a board: the node, every descendant, the edges touching any
+// of them, their checklists, and any completed marks. The root (tier-0) node is never removed this way
+// -- deleting a whole board is a separate op (removeBoard) -- and an unknown id is a no-op, both
+// returning the same reference so callers can skip a redundant update.
 export function deleteNode(board: Board, id: string): Board {
-    if (id === board.rootId || !board.milestones[id]) return board
+    if (id === board.rootId || !board.nodes[id]) return board
     const doomed = new Set<string>([id, ...descendantsOf(id, board.edges)])
-    const milestones: Record<string, Node> = {}
-    for (const [mid, node] of Object.entries(board.milestones)) {
-        if (!doomed.has(mid)) milestones[mid] = node
+    const nodes: Record<string, Node> = {}
+    for (const [nid, node] of Object.entries(board.nodes)) {
+        if (!doomed.has(nid)) nodes[nid] = node
     }
     const todos: Record<string, Todo[]> = {}
-    for (const [mid, list] of Object.entries(board.todos)) {
-        if (!doomed.has(mid)) todos[mid] = list
+    for (const [nid, list] of Object.entries(board.todos)) {
+        if (!doomed.has(nid)) todos[nid] = list
     }
     const edges = board.edges.filter(([parent, child]) => !doomed.has(parent) && !doomed.has(child))
     const mastered = new Set([...board.mastered].filter((mid) => !doomed.has(mid)))
-    return { ...board, milestones, edges, todos, mastered }
+    return { ...board, nodes, edges, todos, mastered }
 }
 
 // Insert a fresh, blank parent above `targetId`, opened later in edit mode. Above the root (tier-0) the
-// new node becomes the root and every node shifts down a tier (a new top). Above a regular node M
-// it splices in between M and its current parent P, so `P -> M` becomes `P -> N -> M`, and M with its
+// new node becomes the root and every node shifts down a tier (a new top). Above a regular node M it
+// splices in between M and its current parent P, so `P -> M` becomes `P -> N -> M`, and M with its
 // whole subtree drops a tier; P, now holding a fresh incomplete child, drops out of the completed set
 // (mirroring adding a child node). An unknown id is a no-op (same reference).
 export function insertParent(board: Board, targetId: string, newId: string): Board {
-    const target = board.milestones[targetId]
+    const target = board.nodes[targetId]
     if (!target) return board
 
     if (targetId === board.rootId) {
-        const milestones: Record<string, Node> = {}
-        for (const [id, node] of Object.entries(board.milestones)) {
-            milestones[id] = { ...node, tier: node.tier + 1 }
+        const nodes: Record<string, Node> = {}
+        for (const [id, node] of Object.entries(board.nodes)) {
+            nodes[id] = { ...node, tier: node.tier + 1 }
         }
-        milestones[newId] = {
+        nodes[newId] = {
             id: newId,
             name: "New Milestone",
-            tag: "Root",
             x: target.x,
             y: target.y - TIER_GAP,
             tier: 0,
-            branch: "Root",
             description: "",
             reward: DEFAULT_ROOT_REWARD
         }
         const edges: Edge[] = [...board.edges, [newId, board.rootId]]
-        return { ...board, milestones, edges, rootId: newId }
+        return { ...board, nodes, edges, rootId: newId }
     }
 
     const subtree = new Set<string>([targetId, ...descendantsOf(targetId, board.edges)])
-    const milestones: Record<string, Node> = {}
-    for (const [id, node] of Object.entries(board.milestones)) {
-        milestones[id] = subtree.has(id) ? { ...node, tier: node.tier + 1, y: node.y + TIER_GAP } : { ...node }
+    const nodes: Record<string, Node> = {}
+    for (const [id, node] of Object.entries(board.nodes)) {
+        nodes[id] = subtree.has(id) ? { ...node, tier: node.tier + 1, y: node.y + TIER_GAP } : { ...node }
     }
-    milestones[newId] = {
+    nodes[newId] = {
         id: newId,
         name: "New Milestone",
-        tag: target.tag,
         x: target.x,
         y: target.y,
         tier: target.tier,
-        branch: target.branch,
         description: "",
         reward: DEFAULT_NODE_REWARD
     }
@@ -146,5 +142,164 @@ export function insertParent(board: Board, targetId: string, newId: string): Boa
     const edges: Edge[] = board.edges.map((edge) => (edge[1] === targetId ? [edge[0], newId] : edge))
     edges.push([newId, targetId])
     const mastered = oldParent ? uncomplete(oldParent, board.mastered, edges) : board.mastered
-    return { ...board, milestones, edges, mastered }
+    return { ...board, nodes, edges, mastered }
+}
+
+// Add a sub-node under `parentId`: a new leaf, an edge parent -> child, placed a tier below and fanned
+// past existing siblings. A fresh child is incomplete, so the parent (and any now-inconsistent
+// ancestor) drops out of the completed set. An unknown parent is a no-op (same reference).
+export function addChild(board: Board, parentId: string, childId: string): Board {
+    const parent = board.nodes[parentId]
+    if (!parent) return board
+    const siblings = board.edges.filter((edge) => edge[0] === parentId).length
+    const child: Node = {
+        id: childId,
+        name: "New Milestone",
+        x: parent.x + siblings * SIBLING_FAN,
+        y: parent.y + TIER_GAP,
+        tier: parent.tier + 1,
+        description: "",
+        reward: DEFAULT_NODE_REWARD
+    }
+    const edges: Edge[] = [...board.edges, [parentId, childId]]
+    return { ...board, nodes: { ...board.nodes, [childId]: child }, edges, mastered: uncomplete(parentId, board.mastered, edges) }
+}
+
+// Edit a node's name / description / reward in place. Unknown id is a no-op (same reference).
+export function editNode(board: Board, id: string, patch: NodePatch): Board {
+    const current = board.nodes[id]
+    if (!current) return board
+    return { ...board, nodes: { ...board.nodes, [id]: { ...current, ...patch } } }
+}
+
+// Persist a node's dragged position (its centre). Unknown id or an unchanged position is a no-op.
+export function moveNode(board: Board, id: string, x: number, y: number): Board {
+    const current = board.nodes[id]
+    if (!current || (current.x === x && current.y === y)) return board
+    return { ...board, nodes: { ...board.nodes, [id]: { ...current, x, y } } }
+}
+
+// Mark `id` complete via the pure graph rule (unlocked AND every box ticked), returning the board
+// unchanged when the move is disallowed or already done.
+export function completeNode(board: Board, id: string, allTodosDone: boolean): Board {
+    const mastered = complete(id, board.mastered, allTodosDone, board.edges)
+    return mastered === board.mastered ? board : { ...board, mastered }
+}
+
+// Mark `id` incomplete, cascading up (graph.uncomplete), unchanged when it was not complete.
+export function uncompleteNode(board: Board, id: string): Board {
+    const mastered = uncomplete(id, board.mastered, board.edges)
+    return mastered === board.mastered ? board : { ...board, mastered }
+}
+
+// Append a fresh, empty checklist item to a node.
+export function addTodo(board: Board, id: string): Board {
+    return { ...board, todos: { ...board.todos, [id]: [...(board.todos[id] ?? []), { text: "", done: false }] } }
+}
+
+// Retext one checklist item. Unknown node is a no-op (same reference).
+export function editTodo(board: Board, id: string, index: number, text: string): Board {
+    const list = board.todos[id]
+    if (!list) return board
+    return { ...board, todos: { ...board.todos, [id]: list.map((todo, i) => (i === index ? { ...todo, text } : todo)) } }
+}
+
+// Tick / untick one checklist item. Unknown node is a no-op (same reference).
+export function toggleTodo(board: Board, id: string, index: number): Board {
+    const list = board.todos[id]
+    if (!list) return board
+    return {
+        ...board,
+        todos: { ...board.todos, [id]: list.map((todo, i) => (i === index ? { ...todo, done: !todo.done } : todo)) }
+    }
+}
+
+// Drop one checklist item. Unknown node is a no-op (same reference).
+export function deleteTodo(board: Board, id: string, index: number): Board {
+    const list = board.todos[id]
+    if (!list) return board
+    return { ...board, todos: { ...board.todos, [id]: list.filter((_, i) => i !== index) } }
+}
+
+// Create a blank board (root node only) and append it to the order.
+export function addBoard(state: BoardsState, boardId: string, rootId: string, name: string): BoardsState {
+    return { boards: { ...state.boards, [boardId]: newBoard(boardId, rootId, name) }, order: [...state.order, boardId] }
+}
+
+// Remove a board outright: no floor (the last board can go) and no reparenting (boards are flat). An
+// unknown id is a no-op (same reference).
+//
+// Phase 2 seam: linked nodes carry a `targetBoardId`. Deleting a board must unlink every linked node
+// pointing at it. The loop below is where that transform slots in -- replace `board` with
+// `unlinkTargets(board, boardId)`. No linked nodes exist yet, so each surviving board is kept as-is.
+export function removeBoard(state: BoardsState, boardId: string): BoardsState {
+    if (!(boardId in state.boards)) return state
+    const boards: Boards = {}
+    for (const [id, board] of Object.entries(state.boards)) {
+        if (id === boardId) continue
+        boards[id] = board
+    }
+    return { boards, order: state.order.filter((id) => id !== boardId) }
+}
+
+// Apply a single change to `{ boards, order }` through the pure ops above. Single-board actions keep
+// the whole state reference stable on a no-op (updateBoard); map-level actions (add / remove / replace)
+// build fresh state.
+export type BoardsAction =
+    | { type: "toggleTodo"; boardId: string; id: string; index: number }
+    | { type: "editTodo"; boardId: string; id: string; index: number; text: string }
+    | { type: "deleteTodo"; boardId: string; id: string; index: number }
+    | { type: "addTodo"; boardId: string; id: string }
+    | { type: "complete"; boardId: string; id: string; allTodosDone: boolean }
+    | { type: "uncomplete"; boardId: string; id: string }
+    | { type: "editNode"; boardId: string; id: string; patch: NodePatch }
+    | { type: "moveNode"; boardId: string; id: string; x: number; y: number }
+    | { type: "addChild"; boardId: string; parentId: string; childId: string }
+    | { type: "addParent"; boardId: string; targetId: string; newId: string }
+    | { type: "deleteNode"; boardId: string; id: string }
+    | { type: "renameBoard"; boardId: string; name: string }
+    | { type: "addBoard"; boardId: string; rootId: string; name: string }
+    | { type: "removeBoard"; boardId: string }
+    | { type: "replace"; boards: Boards; order: string[] }
+
+function updateBoard(state: BoardsState, boardId: string, fn: (board: Board) => Board): BoardsState {
+    const board = state.boards[boardId]
+    if (!board) return state
+    const next = fn(board)
+    return next === board ? state : { ...state, boards: { ...state.boards, [boardId]: next } }
+}
+
+export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsState {
+    switch (action.type) {
+        case "toggleTodo":
+            return updateBoard(state, action.boardId, (b) => toggleTodo(b, action.id, action.index))
+        case "editTodo":
+            return updateBoard(state, action.boardId, (b) => editTodo(b, action.id, action.index, action.text))
+        case "deleteTodo":
+            return updateBoard(state, action.boardId, (b) => deleteTodo(b, action.id, action.index))
+        case "addTodo":
+            return updateBoard(state, action.boardId, (b) => addTodo(b, action.id))
+        case "complete":
+            return updateBoard(state, action.boardId, (b) => completeNode(b, action.id, action.allTodosDone))
+        case "uncomplete":
+            return updateBoard(state, action.boardId, (b) => uncompleteNode(b, action.id))
+        case "editNode":
+            return updateBoard(state, action.boardId, (b) => editNode(b, action.id, action.patch))
+        case "moveNode":
+            return updateBoard(state, action.boardId, (b) => moveNode(b, action.id, action.x, action.y))
+        case "addChild":
+            return updateBoard(state, action.boardId, (b) => addChild(b, action.parentId, action.childId))
+        case "addParent":
+            return updateBoard(state, action.boardId, (b) => insertParent(b, action.targetId, action.newId))
+        case "deleteNode":
+            return updateBoard(state, action.boardId, (b) => deleteNode(b, action.id))
+        case "renameBoard":
+            return updateBoard(state, action.boardId, (b) => editNode(b, b.rootId, { name: action.name }))
+        case "addBoard":
+            return addBoard(state, action.boardId, action.rootId, action.name)
+        case "removeBoard":
+            return removeBoard(state, action.boardId)
+        case "replace":
+            return { boards: action.boards, order: action.order }
+    }
 }

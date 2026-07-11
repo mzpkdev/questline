@@ -1,11 +1,10 @@
 import { decompressFromUTF16 } from "lz-string"
-import { deserialize, loadState, maxCounter, PERSIST_VERSION, STORAGE_KEY, saveState, serialize } from "./persist"
-import { ROOT_ID, rootProject, seedBoard } from "./board"
+import { deserialize, loadState, PERSIST_VERSION, STORAGE_KEY, saveState, serialize } from "./persist"
+import { seedBoard } from "./board"
 
 const slices = () => ({
-    projects: { [ROOT_ID]: rootProject(), seed: seedBoard() },
-    order: [ROOT_ID, "seed"],
-    mirrorPos: { "view-mirror-seed": { x: 10, y: 20 } },
+    boards: { seed: seedBoard() },
+    boardOrder: ["seed"],
     tasks: [
         { id: "task-1", text: "Scout the trail", done: false, reward: 1 },
         { id: "task-2", text: "Gather moonpetals", done: true, reward: 1 }
@@ -24,11 +23,12 @@ describe("persist", () => {
     it("round-trips the seed state, rebuilding mastered as a Set", () => {
         const back = deserialize(serialize(slices()))
         expect(back).not.toBeNull()
-        expect(back?.order).toEqual([ROOT_ID, "seed"])
-        expect(back?.mirrorPos["view-mirror-seed"]).toEqual({ x: 10, y: 20 })
-        const mastered = back?.projects.seed?.mastered
+        expect(back?.boardOrder).toEqual(["seed"])
+        const mastered = back?.boards.seed?.mastered
         expect(mastered).toBeInstanceOf(Set)
         expect(mastered?.has("break-steps")).toBe(true)
+        // The seed board stores its nodes under `nodes` (v4), keyed by id.
+        expect(back?.boards.seed?.nodes.learn?.name).toBe("Learn Questline")
     })
 
     it("round-trips the tasks list, ids and all", () => {
@@ -55,7 +55,7 @@ describe("persist", () => {
         expect(deserialize(serialize(withNotes))?.notes).toEqual(withNotes.notes)
     })
 
-    it("defaults a missing notes list to empty (a pre-notes v3 save)", () => {
+    it("defaults a missing notes list to empty (a pre-notes save)", () => {
         const legacy = JSON.parse(serialize(slices()))
         delete legacy.notes
         expect(deserialize(JSON.stringify(legacy))?.notes).toEqual([])
@@ -69,48 +69,69 @@ describe("persist", () => {
 
     it("stamps the current version", () => {
         expect(JSON.parse(serialize(slices())).version).toBe(PERSIST_VERSION)
+        expect(PERSIST_VERSION).toBe(4)
+        expect(STORAGE_KEY).toBe("questline:v4")
     })
 
     it("round-trips banked totals and rejects a file missing them", () => {
         const withBanked = { ...slices(), banked: { earned: 12, spent: 5 } }
         expect(deserialize(serialize(withBanked))?.banked).toEqual({ earned: 12, spent: 5 })
 
-        // v3 requires banked: a file without it is rejected wholesale, not defaulted.
+        // v4 requires banked: a file without it is rejected wholesale, not defaulted.
         const missing = JSON.parse(serialize(slices()))
         delete missing.banked
         expect(deserialize(JSON.stringify(missing))).toBeNull()
     })
 
-    it("rejects non-JSON, wrong version, and malformed shapes as null", () => {
+    it("rejects non-JSON, a prior version, and malformed shapes as null (no migration, no salvage)", () => {
         expect(deserialize("not json")).toBeNull()
+        // A v3-shaped file (wrong version, old `projects`/`order` keys) is ignored wholesale.
         expect(
-            deserialize(JSON.stringify({ version: 999, projects: {}, order: [], mirrorPos: {}, tasks: [], rewards: [] }))
+            deserialize(JSON.stringify({ version: 3, projects: {}, order: [], mirrorPos: {}, tasks: [], rewards: [] }))
         ).toBeNull()
-        // A malformed project rejects the whole file.
+        // A malformed board rejects the whole file.
         expect(
             deserialize(
                 JSON.stringify({
                     version: PERSIST_VERSION,
-                    projects: { x: {} },
-                    order: [],
-                    mirrorPos: {},
+                    boards: { x: {} },
+                    boardOrder: [],
                     tasks: [],
-                    rewards: []
+                    rewards: [],
+                    banked: { earned: 0, spent: 0 }
                 })
             )
         ).toBeNull()
-        // v2 is strict: a single malformed task or reward, or a missing tasks/rewards field, rejects it.
+        // A single malformed task or reward, or a missing tasks field, rejects it.
         const valid = JSON.parse(serialize(slices()))
         expect(deserialize(JSON.stringify({ ...valid, rewards: [{ name: "no id", price: 5 }] }))).toBeNull()
         expect(deserialize(JSON.stringify({ ...valid, tasks: [{ text: "no id", done: false }] }))).toBeNull()
         expect(deserialize(JSON.stringify({ ...valid, tasks: undefined }))).toBeNull()
     })
 
+    it("rejects a board whose node is malformed (strict isNode)", () => {
+        const valid = JSON.parse(serialize(slices()))
+        // A node with a non-numeric x is malformed and rejects the whole file (no salvage).
+        valid.boards.seed.nodes.learn.x = "nope"
+        expect(deserialize(JSON.stringify(valid))).toBeNull()
+    })
+
+    it("accepts an optional targetBoardId on a node (the v4 linked-node shape)", () => {
+        const valid = JSON.parse(serialize(slices()))
+        // Present-but-null and a board id are both valid; a wrong type rejects.
+        valid.boards.seed.nodes.learn.targetBoardId = null
+        expect(deserialize(JSON.stringify(valid))).not.toBeNull()
+        valid.boards.seed.nodes.learn.targetBoardId = "board-x"
+        expect(deserialize(JSON.stringify(valid))).not.toBeNull()
+        valid.boards.seed.nodes.learn.targetBoardId = 5
+        expect(deserialize(JSON.stringify(valid))).toBeNull()
+    })
+
     it("saves to and loads from localStorage", () => {
         expect(loadState()).toBeNull()
         saveState(slices())
         expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull()
-        expect(loadState()?.projects.seed?.mastered).toBeInstanceOf(Set)
+        expect(loadState()?.boards.seed?.mastered).toBeInstanceOf(Set)
     })
 
     it("compresses the localStorage save", () => {
@@ -119,11 +140,5 @@ describe("persist", () => {
         // The stored form is lz-string-packed, not raw JSON, and unpacks back to it.
         expect(stored).not.toBe(serialize(slices()))
         expect(decompressFromUTF16(stored)).toBe(serialize(slices()))
-    })
-
-    it("finds the highest counter and ignores suffixed ids", () => {
-        expect(maxCounter(["node-1", "node-7", "node-3", "other"], "node")).toBe(7)
-        expect(maxCounter(["board-2", "board-2-root"], "board")).toBe(2)
-        expect(maxCounter([], "node")).toBe(0)
     })
 })

@@ -2,14 +2,13 @@
 // Node env: real WebCrypto (no polyfill) + a mocked global fetch. sync.ts touches no DOM/localStorage,
 // so the round-trip below runs the genuine encrypt→store→decrypt path end to end.
 
-import { ROOT_ID, rootProject, seedBoard } from "../board"
+import { seedBoard } from "../board"
 import { generateCode } from "./crypto"
 import { pull, push, syncEnabled } from "./sync"
 
 const slices = () => ({
-    projects: { [ROOT_ID]: rootProject(), seed: seedBoard() },
-    order: [ROOT_ID, "seed"],
-    mirrorPos: {},
+    boards: { seed: seedBoard() },
+    boardOrder: ["seed"],
     tasks: [],
     rewards: [],
     banked: { earned: 0, spent: 0 },
@@ -47,12 +46,12 @@ describe("sync client", () => {
 
         expect(await push(code, slices(), 999)).toEqual({ ok: true, version: 111 })
         // The stored body is opaque ciphertext, not the plaintext roadmap.
-        expect(stored).not.toContain("Quest Board")
+        expect(stored).not.toContain("Learn Questline")
 
         const pulled = await pull(code)
         expect(pulled?.version).toBe(111)
-        expect(pulled?.slices.order).toEqual([ROOT_ID, "seed"])
-        expect(pulled?.slices.projects.seed?.mastered).toBeInstanceOf(Set)
+        expect(pulled?.slices.boardOrder).toEqual(["seed"])
+        expect(pulled?.slices.boards.seed?.mastered).toBeInstanceOf(Set)
     })
 
     it("returns null when the blob is absent (404)", async () => {

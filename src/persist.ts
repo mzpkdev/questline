@@ -4,25 +4,23 @@
 // The only field that is not already JSON-safe is Board.mastered: it is a Set in the live app
 // (graph.ts relies on Set semantics) but JSON has no Set, so it crosses the wire as string[] and
 // is rebuilt into a Set on the way back in. Scope is data-only: the open tab/selection is not
-// persisted, so a load opens the default tab.
+// persisted, so a load opens a default board.
 
 import { compressToUTF16, decompressFromUTF16 } from "lz-string"
 import type { Task } from "./tasks"
 import type { Banked, Reward } from "./rewards"
 import type { Note } from "./notes"
 import type { Board } from "./board"
+import type { Edge, Node, Todo } from "./nodes"
 
-export const PERSIST_VERSION = 3
-export const STORAGE_KEY = "questline:v3"
-
-export type MirrorPos = Record<string, { x: number; y: number }>
+export const PERSIST_VERSION = 4
+export const STORAGE_KEY = "questline:v4"
 
 // The live slices the app persists (data only — not activeId/selectedId).
 export type PersistedSlices = {
-    projects: Record<string, Board>
-    order: string[]
-    mirrorPos: MirrorPos
-    // The app-level Tasks checklist (one flat list, not tied to any project).
+    boards: Record<string, Board>
+    boardOrder: string[]
+    // The app-level Tasks checklist (one flat list, not tied to any board).
     tasks: Task[]
     // The Rewards shelf. Gold isn't stored -- it's derived from roadmap completion (earnedGold) minus
     // the price of each redeemed reward, so a reward's `redeemedAt` carries the spend across a reload.
@@ -38,29 +36,27 @@ export type PersistedSlices = {
 type WireBoard = Omit<Board, "mastered"> & { mastered: string[] }
 type WireState = {
     version: number
-    projects: Record<string, WireBoard>
-    order: string[]
-    mirrorPos: MirrorPos
-    // The app-level Tasks checklist and the Rewards shelf. Both required in the v3 wire format.
+    boards: Record<string, WireBoard>
+    boardOrder: string[]
+    // The app-level Tasks checklist and the Rewards shelf. Both required in the v4 wire format.
     tasks: Task[]
     rewards: Reward[]
     banked: Banked
-    // The Draw notes. Optional on the wire so a v3 save written before Draw notes existed still loads
-    // (it simply had none); deserialize defaults a missing/legacy list to empty.
+    // The Draw notes. Optional on the wire so an older v4 save written before Draw notes existed still
+    // loads (it simply had none); deserialize defaults a missing list to empty.
     notes?: Note[]
 }
 
 // Live slices -> the JSON string written to a file or to localStorage.
 export function serialize(slices: PersistedSlices): string {
-    const projects: Record<string, WireBoard> = {}
-    for (const [id, board] of Object.entries(slices.projects)) {
-        projects[id] = { ...board, mastered: [...board.mastered] }
+    const boards: Record<string, WireBoard> = {}
+    for (const [id, board] of Object.entries(slices.boards)) {
+        boards[id] = { ...board, mastered: [...board.mastered] }
     }
     const wire: WireState = {
         version: PERSIST_VERSION,
-        projects,
-        order: slices.order,
-        mirrorPos: slices.mirrorPos,
+        boards,
+        boardOrder: slices.boardOrder,
         tasks: slices.tasks,
         rewards: slices.rewards,
         banked: slices.banked,
@@ -69,10 +65,10 @@ export function serialize(slices: PersistedSlices): string {
     return JSON.stringify(wire)
 }
 
-// JSON string -> live slices, or null if the text is not a v3 roadmap file we fully understand (bad
-// JSON, wrong version, or any missing/mistyped field). No salvage: a malformed file is rejected
-// wholesale, so callers treat null as "reject, change nothing". Only Board.mastered is transformed
-// (array back to a Set); every other field is trusted exactly as written.
+// JSON string -> live slices, or null if the text is not a v4 roadmap file we fully understand (bad
+// JSON, wrong version, or any missing/mistyped field). No migration: a prior-version or malformed file
+// is rejected wholesale, so callers treat null as "reject, change nothing". Only Board.mastered is
+// transformed (array back to a Set); every other field is trusted exactly as written.
 export function deserialize(text: string): PersistedSlices | null {
     let raw: unknown
     try {
@@ -81,14 +77,13 @@ export function deserialize(text: string): PersistedSlices | null {
         return null
     }
     if (!isWireState(raw)) return null
-    const projects: Record<string, Board> = {}
-    for (const [id, board] of Object.entries(raw.projects)) {
-        projects[id] = { ...board, mastered: new Set(board.mastered) }
+    const boards: Record<string, Board> = {}
+    for (const [id, board] of Object.entries(raw.boards)) {
+        boards[id] = { ...board, mastered: new Set(board.mastered) }
     }
     return {
-        projects,
-        order: raw.order,
-        mirrorPos: raw.mirrorPos,
+        boards,
+        boardOrder: raw.boardOrder,
         tasks: raw.tasks,
         rewards: raw.rewards,
         banked: raw.banked,
@@ -96,9 +91,9 @@ export function deserialize(text: string): PersistedSlices | null {
     }
 }
 
-// Best-effort read of the autosaved state, or null when absent/corrupt. v3 saves are lz-string-packed
-// into UTF-16 (localStorage stores strings, so this is its densest form). No migration: older v1/v2
-// data lived under a different key and is simply never read.
+// Best-effort read of the autosaved state, or null when absent/corrupt. v4 saves are lz-string-packed
+// into UTF-16 (localStorage stores strings, so this is its densest form). No migration: older data
+// lived under a different key and is simply never read.
 export function loadState(): PersistedSlices | null {
     try {
         const text = localStorage.getItem(STORAGE_KEY)
@@ -120,31 +115,18 @@ export function saveState(slices: PersistedSlices): void {
     }
 }
 
-// Highest N across all `${prefix}-N` ids, so freshly minted ids resume past loaded/imported data
-// instead of colliding with it. Ids like `board-2-root` do not match `board-<N>` and are skipped.
-export function maxCounter(ids: Iterable<string>, prefix: string): number {
-    const re = new RegExp(`^${prefix}-(\\d+)$`)
-    let max = 0
-    for (const id of ids) {
-        const m = re.exec(id)
-        if (m) max = Math.max(max, Number(m[1]))
-    }
-    return max
-}
-
 function isWireState(value: unknown): value is WireState {
     if (typeof value !== "object" || value === null) return false
     const v = value as Record<string, unknown>
     if (v.version !== PERSIST_VERSION) return false
-    if (typeof v.projects !== "object" || v.projects === null) return false
-    if (!Array.isArray(v.order) || !v.order.every((id) => typeof id === "string")) return false
-    if (typeof v.mirrorPos !== "object" || v.mirrorPos === null) return false
+    if (typeof v.boards !== "object" || v.boards === null) return false
+    if (!Array.isArray(v.boardOrder) || !v.boardOrder.every((id) => typeof id === "string")) return false
     if (!Array.isArray(v.tasks) || !v.tasks.every(isTask)) return false
     if (!Array.isArray(v.rewards) || !v.rewards.every(isReward)) return false
     if (!isBanked(v.banked)) return false
-    // Notes are optional (a pre-notes v3 save has none), but any present list must be well-formed.
+    // Notes are optional (a pre-notes save has none), but any present list must be well-formed.
     if (v.notes !== undefined && (!Array.isArray(v.notes) || !v.notes.every(isNote))) return false
-    return Object.values(v.projects as Record<string, unknown>).every(isWireBoard)
+    return Object.values(v.boards as Record<string, unknown>).every(isBoard)
 }
 
 function isBanked(value: unknown): value is Banked {
@@ -193,18 +175,43 @@ function isNote(value: unknown): value is Note {
     )
 }
 
-function isWireBoard(value: unknown): value is WireBoard {
+// A single tree node. Kind is positional (root = id === board.rootId, linked = targetBoardId present),
+// so nothing kind-specific is validated here: description / reward / targetBoardId are all optional,
+// checked only for type when present. A malformed node rejects the whole file (no salvage).
+function isNode(value: unknown): value is Node {
     if (typeof value !== "object" || value === null) return false
-    const p = value as Record<string, unknown>
+    const n = value as Record<string, unknown>
     return (
-        typeof p.id === "string" &&
-        typeof p.rootId === "string" &&
-        typeof p.milestones === "object" &&
-        p.milestones !== null &&
-        Array.isArray(p.edges) &&
-        typeof p.todos === "object" &&
-        p.todos !== null &&
-        Array.isArray(p.mastered) &&
-        p.mastered.every((id) => typeof id === "string")
+        typeof n.id === "string" &&
+        typeof n.name === "string" &&
+        typeof n.x === "number" &&
+        typeof n.y === "number" &&
+        typeof n.tier === "number" &&
+        (n.description === undefined || typeof n.description === "string") &&
+        (n.reward === undefined || typeof n.reward === "number") &&
+        (n.targetBoardId === undefined || n.targetBoardId === null || typeof n.targetBoardId === "string")
     )
+}
+
+function isEdge(value: unknown): value is Edge {
+    return Array.isArray(value) && value.length === 2 && typeof value[0] === "string" && typeof value[1] === "string"
+}
+
+function isTodoList(value: unknown): value is Todo[] {
+    return (
+        Array.isArray(value) &&
+        value.every((t) => typeof t === "object" && t !== null && typeof (t as Todo).text === "string" && typeof (t as Todo).done === "boolean")
+    )
+}
+
+function isBoard(value: unknown): value is WireBoard {
+    if (typeof value !== "object" || value === null) return false
+    const b = value as Record<string, unknown>
+    if (typeof b.id !== "string" || typeof b.rootId !== "string") return false
+    if (typeof b.nodes !== "object" || b.nodes === null) return false
+    if (!Object.values(b.nodes as Record<string, unknown>).every(isNode)) return false
+    if (!Array.isArray(b.edges) || !b.edges.every(isEdge)) return false
+    if (typeof b.todos !== "object" || b.todos === null) return false
+    if (!Object.values(b.todos as Record<string, unknown>).every(isTodoList)) return false
+    return Array.isArray(b.mastered) && b.mastered.every((id) => typeof id === "string")
 }

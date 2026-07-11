@@ -77,31 +77,21 @@ describe("sfx wiring", () => {
         expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 1046.5)).toBe(true)
     })
 
-    it("ticks subtly when a milestone node or a view chip is selected", async () => {
+    it("ticks subtly when a node is selected on the canvas", async () => {
         render(
             <SfxProvider>
                 <App />
             </SfxProvider>
         )
 
-        // The Root hub's own root node is a node card (carries data-id + data-state); wait for React
-        // Flow to mount it, then click it -> selectFromCanvas() -> tick (sine @ 880).
+        // The app boots straight to the seed board; its root node card carries data-id + data-state.
+        // Wait for React Flow to mount it, then click it -> selectFromCanvas() -> tick (sine @ 880).
         const node = await waitFor(() => {
-            const el = document.querySelector('[data-id="root-root"][data-state]')
+            const el = document.querySelector('[data-id="learn"][data-state]')
             if (!el) throw new Error("root node not mounted")
             return el
         })
         fireEvent.click(node)
-        expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 880)).toBe(true)
-
-        // A Root-hub linked-node chip (the mirrored sample roadmap) selects with the same tick.
-        voices = []
-        const chip = await waitFor(() => {
-            const el = document.querySelector("[data-linked-node]")
-            if (!el) throw new Error("linked-node chip not mounted")
-            return el
-        })
-        fireEvent.click(chip)
         expect(voices.some((voice) => voice.type === "sine" && voice.frequency === 880)).toBe(true)
     })
 

@@ -9,11 +9,9 @@ function milestone(overrides: Partial<Node> = {}): Node {
     return {
         id: "plan-goal",
         name: "Feature Complete",
-        tag: "Product",
         x: 0,
         y: 0,
         tier: 1,
-        branch: "Product",
         description: "Every core feature built, integrated, and ready for real users.",
         reward: DEFAULT_NODE_REWARD,
         ...overrides
@@ -208,35 +206,13 @@ describe("NodeDetailCard", () => {
             expect(onEditMilestone).toHaveBeenCalledWith({ reward: 8 })
         })
 
-        it("hides the reward editor for a non-earning node (the Root hub's root node)", async () => {
-            const user = userEvent.setup()
-            render(
-                <NodeDetailCard milestone={milestone()} state="available" todos={[]} isRoot earnsGold={false} />
-            )
-            await user.click(screen.getByRole("button", { name: "Edit" }))
-            expect(screen.queryByRole("spinbutton", { name: "Reward in gold" })).toBeNull()
-        })
-
-        it("shows the reward in read mode, hidden for a non-earning node", () => {
-            const { rerender } = render(
-                <NodeDetailCard milestone={milestone({ reward: 4 })} state="available" todos={[]} isRoot={false} />
-            )
+        it("shows the reward in read mode", () => {
+            render(<NodeDetailCard milestone={milestone({ reward: 4 })} state="available" todos={[]} isRoot={false} />)
             expect(screen.getByText("gold on completion")).toBeInTheDocument()
             expect(screen.getByText("4")).toBeInTheDocument()
-
-            rerender(
-                <NodeDetailCard
-                    milestone={milestone({ reward: 4 })}
-                    state="available"
-                    todos={[]}
-                    isRoot
-                    earnsGold={false}
-                />
-            )
-            expect(screen.queryByText("gold on completion")).toBeNull()
         })
 
-        it("lets a view chip edit its reward too", async () => {
+        it("shows and edits the reward on the root node too (a completed board pays out)", async () => {
             const user = userEvent.setup()
             const onEditMilestone = vi.fn()
             render(
@@ -245,13 +221,13 @@ describe("NodeDetailCard", () => {
                     state="available"
                     todos={[]}
                     isRoot
-                    isView
                     onEditMilestone={onEditMilestone}
-                    onView={vi.fn()}
                 />
             )
             await user.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.change(screen.getByRole("spinbutton", { name: "Reward in gold" }), { target: { value: "12" } })
+            const field = screen.getByRole("spinbutton", { name: "Reward in gold" })
+            expect(field).toHaveValue(5)
+            fireEvent.change(field, { target: { value: "12" } })
             expect(onEditMilestone).toHaveBeenCalledWith({ reward: 12 })
         })
 
@@ -370,22 +346,21 @@ describe("NodeDetailCard", () => {
             expect(onDelete).toHaveBeenCalledTimes(1)
         })
 
-        it("labels the action and confirm for a view when deleteKind is view", async () => {
+        it("labels the action and confirm for a board when deleteKind is board (the root node)", async () => {
             render(
                 <NodeDetailCard
                     milestone={milestone({ name: "Launch Plan" })}
                     state="available"
                     todos={[]}
-                    isRoot={false}
-                    isView
+                    isRoot
                     onDelete={vi.fn()}
-                    deleteKind="view"
+                    deleteKind="board"
                 />
             )
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
 
-            fireEvent.click(screen.getByRole("button", { name: "Delete view" }))
-            expect(await screen.findByRole("alertdialog")).toHaveTextContent("Remove this view?")
+            fireEvent.click(screen.getByRole("button", { name: "Delete board" }))
+            expect(await screen.findByRole("alertdialog")).toHaveTextContent("Remove this board?")
         })
 
         it("warns about the cascade count in the milestone confirm", async () => {
