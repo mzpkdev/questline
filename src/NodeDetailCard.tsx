@@ -44,6 +44,9 @@ export type NodeDetailCardProps = {
     onAddParent?: () => void
     // Attach an (unlinked) linked node as a child. Offered on every node kind.
     onAddLinkedNode?: () => void
+    // Detach this node (with its whole subtree) from its parent and arm reparent mode ("Unconnect").
+    // Offered on every node EXCEPT the root -- App passes it only for a non-root selection. Edit mode only.
+    onUnconnect?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
     onDelete?: () => void
     // What the delete removes: a node + its subtree, or the whole board (deleting a board's root node).
@@ -206,6 +209,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onAddChild,
         onAddParent,
         onAddLinkedNode,
+        onUnconnect,
         onDelete,
         deleteKind = "node",
         descendantCount = 0,
@@ -290,9 +294,11 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         </button>
     )
 
-    // Shared add-parent / add-child / add-linked-node buttons (edit mode). Add child is always offered;
-    // Add parent and Add linked node each render only when their handler is wired. App wires Add parent
-    // for regular AND linked nodes (insertParent splices a node above either), so every kind can show all three.
+    // Shared structural buttons (edit mode), sharing the dashed secondary-action look. Add child is
+    // always offered; Add parent and Add linked node each render only when their handler is wired (App
+    // wires Add parent for regular AND linked nodes, since insertParent splices a node above either).
+    // Unconnect (a detach, not an add, so no + glyph) renders only when onUnconnect is wired -- App
+    // passes it for every non-root node, so the root never offers it.
     const addButtons = (
         <div className="flex flex-col gap-2.5">
             {onAddParent && (
@@ -309,6 +315,11 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                 <button type="button" className={ADD_DESC_CLASS} onClick={onAddLinkedNode}>
                     <PlusIcon size={16} />
                     Add linked node
+                </button>
+            )}
+            {onUnconnect && (
+                <button type="button" className={ADD_DESC_CLASS} onClick={onUnconnect}>
+                    Unconnect
                 </button>
             )}
         </div>

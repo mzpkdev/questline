@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { type Boards, boardCompleter, newBoard, UNLINKED_LABEL } from "./board"
-import { BoardTree, buildEdges } from "./BoardTree"
+import { BoardTree, buildEdges, isReparentTarget } from "./BoardTree"
 import { EDGES, MASTERED, type Edge, type Node, NODES } from "./nodes"
 
 const defaultNodes: Record<string, Node> = Object.fromEntries(NODES.map((n) => [n.id, n]))
@@ -194,6 +194,118 @@ describe("BoardTree", () => {
             await screen.findByText("Fresh Node")
 
             expect(animate).toHaveBeenCalled()
+        })
+    })
+
+    context("reparent affordances (Phase 2: touch + hover + reduced motion)", () => {
+        // Render the tree already armed on `detached`, returning the onAttach spy + render utils.
+        function renderArmed(detached: string, onAttach = vi.fn()) {
+            const utils = render(
+                <div style={{ width: 1200, height: 800 }}>
+                    <BoardTree
+                        selectedId={null}
+                        onSelect={vi.fn()}
+                        rootId="learn"
+                        mastered={MASTERED}
+                        nodes={defaultNodes}
+                        edges={EDGES}
+                        boards={{}}
+                        onMove={vi.fn()}
+                        reparenting={detached}
+                        onAttach={onAttach}
+                    />
+                </div>
+            )
+            return { onAttach, ...utils }
+        }
+
+        // React Flow wraps each node's card in a div carrying data-id but no data-state; that wrapper is
+        // what onNodeMouseEnter is wired to, so hover tests target it.
+        const nodeWrapper = (container: HTMLElement, id: string) =>
+            container.querySelector(`.react-flow__node[data-id="${id}"]`) as Element
+        // Our node card root carries data-id AND data-state (the wrapper above has only data-id).
+        const nodeCard = (container: HTMLElement, id: string) =>
+            container.querySelector(`[data-id="${id}"][data-state]`) as Element
+        // The BoardTree root (its own wrapper, an ancestor of React Flow's pane) captures presses; a
+        // press dispatched here can't reach d3-zoom, which would crash under jsdom.
+        const treeRoot = (container: HTMLElement) => container.querySelector(".relative.h-full.w-full") as HTMLElement
+
+        context("isReparentTarget (validity mirrors App.attachTo, reusing descendantsOf)", () => {
+            it("accepts a node that is neither the detached node nor a descendant", () => {
+                expect(isReparentTarget("plan-goal", "track-progress", EDGES)).toBe(true)
+            })
+            it("rejects the detached node itself", () => {
+                expect(isReparentTarget("track-progress", "track-progress", EDGES)).toBe(false)
+            })
+            it("rejects a descendant of the detached node (attaching there would cycle)", () => {
+                // finish-node hangs under track-progress.
+                expect(isReparentTarget("finish-node", "track-progress", EDGES)).toBe(false)
+            })
+        })
+
+        context("tap-vs-pan (touch attaches only on a tap)", () => {
+            it("attaches on a tap: a press that barely moves before the click", async () => {
+                const { container, onAttach } = renderArmed("finish-node")
+                await screen.findByText("Plan your goal")
+                // Press then click at (near) the same spot -- within the press-move tolerance.
+                fireEvent.pointerDown(treeRoot(container), { clientX: 100, clientY: 100 })
+                fireEvent.click(nodeCard(container, "plan-goal"), { clientX: 103, clientY: 101 })
+                expect(onAttach).toHaveBeenCalledWith("plan-goal")
+            })
+
+            it("does not attach when the press drifts past the tolerance (a pan to reach a target)", async () => {
+                const { container, onAttach } = renderArmed("finish-node")
+                await screen.findByText("Plan your goal")
+                // Press, then release far away: the click that follows a pan must not misfire as attach.
+                fireEvent.pointerDown(treeRoot(container), { clientX: 100, clientY: 100 })
+                fireEvent.click(nodeCard(container, "plan-goal"), { clientX: 180, clientY: 160 })
+                expect(onAttach).not.toHaveBeenCalled()
+            })
+        })
+
+        it("shows the armed hint on the detached node while armed", async () => {
+            renderArmed("finish-node")
+            expect(await screen.findByText("Tap a node to reattach")).toBeInTheDocument()
+        })
+
+        it("highlights a valid hover target, but not the detached node or a descendant", async () => {
+            const { container } = renderArmed("track-progress")
+            await screen.findByText("Plan your goal")
+            const targetRing = () => screen.queryByTestId("reparent-target")
+
+            // No drop-target ring until a valid node is hovered.
+            expect(targetRing()).toBeNull()
+            // Hovering a valid node (React onMouseEnter is driven by the native mouseover) lights it...
+            fireEvent.mouseOver(nodeWrapper(container, "plan-goal"))
+            expect(targetRing()).toBeInTheDocument()
+            fireEvent.mouseOut(nodeWrapper(container, "plan-goal"))
+            expect(targetRing()).toBeNull()
+            // ...but finish-node is a descendant of the detached track-progress, so it stays dim.
+            fireEvent.mouseOver(nodeWrapper(container, "finish-node"))
+            expect(targetRing()).toBeNull()
+        })
+
+        context("reduced motion (the band respects prefers-reduced-motion)", () => {
+            const origMatchMedia = window.matchMedia
+            const bandLine = () => screen.getByTestId("reparent-band").querySelector("line")
+            afterEach(() => {
+                window.matchMedia = origMatchMedia
+            })
+
+            it("marches the band's dashes by default", async () => {
+                window.matchMedia = ((q: string) => ({ matches: false, media: q })) as typeof window.matchMedia
+                renderArmed("finish-node")
+                await screen.findByTestId("reparent-band")
+                expect(bandLine()?.getAttribute("class") ?? "").toContain("march")
+            })
+
+            it("drops the animation under reduced motion, but still draws the band", async () => {
+                window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia
+                renderArmed("finish-node")
+                await screen.findByTestId("reparent-band")
+                expect(bandLine()).toBeInTheDocument()
+                expect(bandLine()?.getAttribute("class") ?? "").not.toContain("march")
+            })
         })
     })
 })

@@ -16,8 +16,10 @@ import { PlusIcon } from "./PlusIcon"
 
 // How long a press must hold before it opens the inline rename (touch has no double-click).
 const LONG_PRESS_MS = 500
-// A press that drifts more than this is a scroll/drag, not a hold, so it cancels the rename.
-const PRESS_MOVE_TOLERANCE = 10
+// A press that drifts more than this (px) is a scroll/drag, not a hold, so it cancels the rename.
+// Exported as the app's shared press-move tolerance: reparent's tap-vs-pan gate reuses it so a touch
+// that pans to reach a target doesn't misfire as an attach (see BoardTree).
+export const PRESS_MOVE_TOLERANCE = 10
 
 export type TabDescriptor = { id: string; name: string }
 

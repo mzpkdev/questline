@@ -9,7 +9,7 @@
 // single dispatch over `{ boards, order }` through those ops, keeping references stable on a no-op so
 // autosave and the gold memo don't churn.
 
-import { type BoardComplete, complete, descendantsOf, parentOf, uncomplete } from "./graph"
+import { type BoardComplete, childrenOf, complete, descendantsOf, parentOf, uncomplete } from "./graph"
 import {
     DEFAULT_NODE_REWARD,
     DEFAULT_ROOT_REWARD,
@@ -204,6 +204,44 @@ export function addChild(board: Board, parentId: string, childId: string): Board
     return { ...board, nodes: { ...board.nodes, [childId]: child }, edges, mastered: uncomplete(parentId, board.mastered, edges) }
 }
 
+// Re-hang `nodeId` (carrying its whole subtree) under a new parent -- the pure op behind the detach +
+// click-to-attach "reparent" gesture. Only the node's single incoming edge is rewired to
+// `[newParentId, nodeId]`; every other edge, including the moved subtree's own internal links, is left
+// as-is. Each moved node keeps its `x/y` (a reparent never repositions a node) while its tier is
+// recomputed down the branch to stay `parent tier + 1` (breadth-first from the moved node over the new
+// edge set). The new parent gained a possibly-incomplete child, so it (and its now-inconsistent
+// ancestors) drop out of the completed set, mirroring addChild / insertParent; the moved nodes keep
+// their own mastered marks. Rejected as a no-op (same reference) when the move is degenerate or would
+// cycle: an unknown node / parent, a parentless node (the root, or a stray -- nothing to rewire),
+// re-hanging under the current parent, the node itself, or any of its own descendants.
+export function reparent(board: Board, nodeId: string, newParentId: string): Board {
+    const node = board.nodes[nodeId]
+    const newParent = board.nodes[newParentId]
+    if (!node || !newParent) return board
+    const currentParent = parentOf(nodeId, board.edges)
+    // A parentless node (root / stray) has no incoming edge to rewire; re-hanging under the current
+    // parent changes nothing; and a node can neither parent itself nor hang under its own subtree.
+    if (currentParent === null || currentParent === newParentId || newParentId === nodeId) return board
+    if (descendantsOf(nodeId, board.edges).includes(newParentId)) return board
+
+    // Swap the one incoming edge for the new parent's; the subtree's own edges ride along untouched.
+    const edges: Edge[] = board.edges.map((edge) => (edge[1] === nodeId ? [newParentId, nodeId] : edge))
+
+    // Walk the moved branch breadth-first over the new edges, re-tiering each node to sit one below its
+    // parent. Positions (x/y) are deliberately left untouched -- only the depth changes.
+    const nodes: Record<string, Node> = { ...board.nodes }
+    const queue: [id: string, tier: number][] = [[nodeId, newParent.tier + 1]]
+    while (queue.length > 0) {
+        const [id, tier] = queue.shift() as [string, number]
+        const current = nodes[id]
+        if (current && current.tier !== tier) nodes[id] = { ...current, tier }
+        for (const child of childrenOf(id, edges)) queue.push([child, tier + 1])
+    }
+
+    // The new parent now holds a possibly-incomplete child, so un-master it up the chain (like addChild).
+    return { ...board, nodes, edges, mastered: uncomplete(newParentId, board.mastered, edges) }
+}
+
 // Add an unlinked linked node under `parentId`: a real tree node placed like addChild (a tier below,
 // fanned past siblings), but marked linked by carrying the `targetBoardId` key (null until a board is
 // picked via setLinkedTarget). It has no checklist / reward / description; its display name is derived
@@ -345,6 +383,7 @@ export type BoardsAction =
     | { type: "addLinkedNode"; boardId: string; parentId: string; childId: string }
     | { type: "setLinkedTarget"; boardId: string; id: string; targetBoardId: string | null }
     | { type: "addParent"; boardId: string; targetId: string; newId: string }
+    | { type: "reparent"; boardId: string; nodeId: string; newParentId: string }
     | { type: "deleteNode"; boardId: string; id: string }
     | { type: "renameBoard"; boardId: string; name: string }
     | { type: "addBoard"; boardId: string; rootId: string; name: string }
@@ -388,6 +427,8 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
             return updateBoard(state, action.boardId, (b) => setLinkedTarget(b, action.id, action.targetBoardId))
         case "addParent":
             return updateBoard(state, action.boardId, (b) => insertParent(b, action.targetId, action.newId))
+        case "reparent":
+            return updateBoard(state, action.boardId, (b) => reparent(b, action.nodeId, action.newParentId))
         case "deleteNode":
             return updateBoard(state, action.boardId, (b) => deleteNode(b, action.id))
         case "renameBoard":

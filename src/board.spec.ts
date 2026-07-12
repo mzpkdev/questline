@@ -17,6 +17,7 @@ import {
     moveNode,
     newBoard,
     removeBoard,
+    reparent,
     seedBoard,
     setLinkedTarget,
     toggleTodo,
@@ -165,6 +166,80 @@ describe("addChild", () => {
     it("is a no-op (same reference) for an unknown parent", () => {
         const board = seedBoard()
         expect(addChild(board, "nope", "node-c")).toBe(board)
+    })
+})
+
+// reparent over the same seed tree (learn tier 0; plan-goal / track-progress tier 1; break-steps under
+// plan-goal and finish-node under track-progress, both tier 2; break-steps pre-mastered).
+describe("reparent", () => {
+    it("rejects the node itself, a descendant, the root, and unknown ids (no-op, same reference)", () => {
+        const board = seedBoard()
+        expect(reparent(board, "finish-node", "finish-node")).toBe(board) // can't parent to itself
+        expect(reparent(board, "plan-goal", "break-steps")).toBe(board) // break-steps is under plan-goal
+        expect(reparent(board, board.rootId, "plan-goal")).toBe(board) // the root has no parent to rewire
+        expect(reparent(board, "nope", "learn")).toBe(board) // unknown node
+        expect(reparent(board, "finish-node", "nope")).toBe(board) // unknown parent
+    })
+
+    it("is a no-op (same reference) when the node already hangs under that parent", () => {
+        const board = seedBoard()
+        expect(reparent(board, "finish-node", "track-progress")).toBe(board)
+    })
+
+    it("rewires only the node's incoming edge to [newParentId, nodeId]", () => {
+        const next = reparent(seedBoard(), "finish-node", "plan-goal")
+        expect(next.edges).toContainEqual(["plan-goal", "finish-node"])
+        expect(next.edges).not.toContainEqual(["track-progress", "finish-node"])
+        // Every other edge is left untouched.
+        expect(next.edges).toContainEqual(["learn", "plan-goal"])
+        expect(next.edges).toContainEqual(["learn", "track-progress"])
+        expect(next.edges).toContainEqual(["plan-goal", "break-steps"])
+    })
+
+    it("recomputes the moved subtree's tiers while keeping every moved node's x/y", () => {
+        const board = seedBoard()
+        const tp = board.nodes["track-progress"] as Node
+        const fn = board.nodes["finish-node"] as Node
+        // track-progress (tier 1, carrying finish-node at tier 2) re-hung under break-steps (tier 2).
+        const next = reparent(board, "track-progress", "break-steps")
+        expect(next.edges).toContainEqual(["break-steps", "track-progress"])
+        expect(next.edges).not.toContainEqual(["learn", "track-progress"])
+        // Tiers cascade one below the new parent, down the whole moved branch...
+        expect(next.nodes["track-progress"]?.tier).toBe(3)
+        expect(next.nodes["finish-node"]?.tier).toBe(4)
+        // ...while positions are never touched by a reparent.
+        expect(next.nodes["track-progress"]?.x).toBe(tp.x)
+        expect(next.nodes["track-progress"]?.y).toBe(tp.y)
+        expect(next.nodes["finish-node"]?.x).toBe(fn.x)
+        expect(next.nodes["finish-node"]?.y).toBe(fn.y)
+    })
+
+    it("un-masters the new parent up the chain, and the moved node keeps its own mastered mark", () => {
+        // g (root) -> a -> b, plus a sibling leaf s under g. g, a, b and the moved node s are all marked
+        // complete by hand; re-hang s under b.
+        const edges: Edge[] = [
+            ["g", "a"],
+            ["a", "b"],
+            ["g", "s"]
+        ]
+        const board: Board = {
+            id: "t",
+            rootId: "g",
+            nodes: { g: node("g", 0), a: node("a", 1), b: node("b", 2), s: node("s", 1) },
+            edges,
+            todos: {},
+            mastered: new Set(["g", "a", "b", "s"])
+        }
+        const next = reparent(board, "s", "b")
+        expect(next.edges).toContainEqual(["b", "s"])
+        expect(next.edges).not.toContainEqual(["g", "s"])
+        // The new parent b and its now-inconsistent ancestors a, g drop out of the completed set...
+        expect(next.mastered.has("b")).toBe(false)
+        expect(next.mastered.has("a")).toBe(false)
+        expect(next.mastered.has("g")).toBe(false)
+        // ...but the moved node keeps its own mastered mark, and its tier lands one below b.
+        expect(next.mastered.has("s")).toBe(true)
+        expect(next.nodes["s"]?.tier).toBe(3)
     })
 })
 

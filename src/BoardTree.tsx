@@ -16,12 +16,13 @@ import { type Boards, boardCompleter, linkedNodeName } from "./board"
 import { Edge } from "./Edge"
 import type { FlowNode, LinkedFlowNode, NodeFlowEdge, NodeFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import { type BoardComplete, isMastered, stateOf } from "./graph"
+import { type BoardComplete, descendantsOf, isMastered, stateOf } from "./graph"
 import { LinkedNode } from "./LinkedNode"
 import { NodeCard } from "./NodeCard"
 // The tuple type `Edge` clashes with the `Edge` edge component above, so alias the tuple here.
 import { type Edge as EdgeTuple, isLinkedNode, type Node } from "./nodes"
-import { SpawnReadyContext } from "./nodeMotion"
+import { prefersReducedMotion, SpawnReadyContext } from "./nodeMotion"
+import { PRESS_MOVE_TOLERANCE } from "./TabBar"
 
 type BoardTreeProps = {
     selectedId: string | null
@@ -41,6 +42,15 @@ type BoardTreeProps = {
     // A node to pan/zoom onto; bumping focusNonce (re)triggers centering (URL routing).
     focusId?: string
     focusNonce?: number
+    // When set, the id of the node being reparented (detach + click-to-attach). While armed a node
+    // click attaches (onAttach) instead of selecting, the node's incoming edge is dropped from the
+    // derived graph -- so the detached subtree reads as inert via the normal state derivation -- and a
+    // loose "rubber band" edge trails the pointer. Null when idle. Purely view: the board's real edges
+    // are untouched, so nothing about the detach is persisted.
+    reparenting?: string | null
+    // Attach the reparenting node under the clicked target; App validates (same board, not the node or
+    // a descendant) and commits the move via the pure reparent op.
+    onAttach?: (targetId: string) => void
 }
 
 // Stable references so React Flow doesn't warn about a freshly-built nodeTypes/edgeTypes each render.
@@ -59,6 +69,9 @@ const proOptions = { hideAttribution: true }
 
 type Size = { width: number; height: number }
 type Point = { x: number; y: number }
+// An on-screen box in container-relative coords: the detached node's box (for the band + armed ring +
+// hint) and a hovered target's box (for the drop-target ring) are both measured as one of these.
+type Rect = Point & Size
 
 // A board node's fixed draw size by kind/role: the root node card is the larger size; linked and
 // regular non-root cards use the normal size. Single source of truth for the centre<->top-left math
@@ -163,10 +176,28 @@ export function buildEdges(
     )
 }
 
+// Whether a node is a valid reparent target while armed: a node in this board that is neither the
+// detached node itself nor one of its descendants (re-hanging under its own subtree would cycle).
+// Mirrors App.attachTo's guard, reusing descendantsOf, so the hover affordance lights exactly the nodes
+// a tap would actually attach to. Exported for a direct unit test (hover is awkward to drive in jsdom).
+export function isReparentTarget(id: string, detachedId: string, edges: EdgeTuple[]): boolean {
+    return id !== detachedId && !descendantsOf(detachedId, edges).includes(id)
+}
+
 export function BoardTree(props: BoardTreeProps) {
     // A completion resolver over every board, so a linked node's tri-state (and the top-down lock of its
     // subtree) derives from its target board. Recomputed only when the boards map changes.
     const isBoardComplete = useMemo(() => boardCompleter(props.boards), [props.boards])
+
+    // While a reparent is armed, drop the detached node's single incoming edge from the graph we draw
+    // and derive state from -- so its subtree reads as detached / inert by the normal rules, and the
+    // loose edge (below) can stand in for it. This never touches the board's real edges (App keeps them
+    // until a target is clicked), so it's stable-by-reference and a no-op when idle.
+    const reparentingId = props.reparenting ?? null
+    const derivedEdges = useMemo(
+        () => (reparentingId ? props.edges.filter((edge) => edge[1] !== reparentingId) : props.edges),
+        [props.edges, reparentingId]
+    )
 
     const buildNodes = (): FlowNode[] =>
         Object.values(props.nodes).map((node) =>
@@ -175,7 +206,7 @@ export function BoardTree(props: BoardTreeProps) {
                 props.rootId,
                 props.selectedId,
                 props.mastered,
-                props.edges,
+                derivedEdges,
                 props.boards,
                 props.nodes,
                 isBoardComplete
@@ -220,7 +251,7 @@ export function BoardTree(props: BoardTreeProps) {
             const byId = new Map(prev.map((node) => [node.id, node]))
             return Object.values(props.nodes).map((node): FlowNode => {
                 const isSelected = node.id === props.selectedId
-                const state = stateOf(node.id, props.mastered, props.edges, props.nodes, isBoardComplete)
+                const state = stateOf(node.id, props.mastered, derivedEdges, props.nodes, isBoardComplete)
                 const existing = byId.get(node.id)
                 const size = sizeOf(node, props.rootId)
 
@@ -240,7 +271,7 @@ export function BoardTree(props: BoardTreeProps) {
                         node,
                         props.selectedId,
                         props.mastered,
-                        props.edges,
+                        derivedEdges,
                         props.boards,
                         props.nodes,
                         isBoardComplete
@@ -268,20 +299,20 @@ export function BoardTree(props: BoardTreeProps) {
                     props.rootId,
                     props.selectedId,
                     props.mastered,
-                    props.edges,
+                    derivedEdges,
                     props.nodes,
                     isBoardComplete
                 )
             })
         })
-    }, [props.selectedId, props.mastered, props.nodes, props.edges, props.rootId, props.boards, isBoardComplete, setNodes])
+    }, [props.selectedId, props.mastered, props.nodes, derivedEdges, props.rootId, props.boards, isBoardComplete, setNodes])
 
     // Edges rebuild when the board's links, completed set, or any board's completion change: a link
     // lights once the node below it is mastered (a linked node counts as mastered when its target
     // board is complete, so its incoming edge lights too). See buildEdges.
     const edges = useMemo<NodeFlowEdge[]>(
-        () => buildEdges(props.edges, props.mastered, props.nodes, isBoardComplete),
-        [props.edges, props.mastered, props.nodes, isBoardComplete]
+        () => buildEdges(derivedEdges, props.mastered, props.nodes, isBoardComplete),
+        [derivedEdges, props.mastered, props.nodes, isBoardComplete]
     )
 
     // Newly added nodes spawn-in, but not the initial batch or a tab-switch remount: flip "ready" a
@@ -289,9 +320,66 @@ export function BoardTree(props: BoardTreeProps) {
     const [spawnReady, setSpawnReady] = useState(false)
     useEffect(() => setSpawnReady(true), [])
 
+    // Tap-vs-pan (touch): remember where each press lands so a tap can be told from a pan. While armed,
+    // a "tap" (barely moved) on a node attaches, but a press that drifts past the shared press-move
+    // tolerance is a pan to reach a target and must NOT misfire as an attach (onNodeClick, below).
+    // Captured on the container so we see the press before React Flow's own pan handler; a mouse click
+    // never drifts, so this leaves the mouse path untouched.
+    const containerRef = useRef<HTMLDivElement>(null)
+    const pressOrigin = useRef<Point | null>(null)
+
+    // The loose "rubber band" + affordances drawn while a reparent is armed. `node` is the detached
+    // node's on-screen box (container-relative), `pointer` the trailing cursor; the band runs from the
+    // node's centre to the pointer, and the same box pins the armed ring + hint. Null when idle.
+    const [armed, setArmed] = useState<{ node: Rect; pointer: Point } | null>(null)
+    // The valid target under the mouse (its container-relative box), lit as a drop target. Set on
+    // hover-enter of a valid node, cleared on leave; touch has no hover, so it stays null there.
+    const [hoverRect, setHoverRect] = useState<Rect | null>(null)
+    useEffect(() => {
+        const container = containerRef.current
+        if (!reparentingId || !container) {
+            setArmed(null)
+            setHoverRect(null)
+            return
+        }
+        // Re-measure the detached node's box each move so panning / zooming keeps the band, ring, and
+        // hint pinned; fall back to the canvas centre if it can't be found (it always should be on screen).
+        const measure = (): Rect => {
+            const box = container.getBoundingClientRect()
+            const node = container.querySelector(`[data-id="${reparentingId}"]`)?.getBoundingClientRect()
+            return node
+                ? { x: node.left - box.left, y: node.top - box.top, width: node.width, height: node.height }
+                : { x: box.width / 2, y: box.height / 2, width: 0, height: 0 }
+        }
+        // Seed as a zero-length band at the node's centre, so it's drawn the instant we arm -- before the
+        // first pointer move.
+        const node = measure()
+        setArmed({ node, pointer: { x: node.x + node.width / 2, y: node.y + node.height / 2 } })
+        const onMove = (event: PointerEvent) => {
+            const box = container.getBoundingClientRect()
+            setArmed({ node: measure(), pointer: { x: event.clientX - box.left, y: event.clientY - box.top } })
+        }
+        window.addEventListener("pointermove", onMove)
+        return () => window.removeEventListener("pointermove", onMove)
+    }, [reparentingId])
+
+    // Reduced motion drops the band's marching dashes (a static line is fine), never the band itself.
+    // Read via the shared prefersReducedMotion guard -- the same one the node motion uses.
+    const reducedMotion = prefersReducedMotion()
+    // The band's pinned end: the detached node's centre.
+    const armedCenter = armed && { x: armed.node.x + armed.node.width / 2, y: armed.node.y + armed.node.height / 2 }
+
     return (
         <SpawnReadyContext.Provider value={spawnReady}>
-            <div className="h-full w-full">
+            <div
+                ref={containerRef}
+                className="relative h-full w-full"
+                // Seed the tap-vs-pan test (see pressOrigin): remember where each press lands. Capture
+                // phase so we record it before React Flow's pane handler can consume the event.
+                onPointerDownCapture={(event) => {
+                    pressOrigin.current = { x: event.clientX, y: event.clientY }
+                }}
+            >
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -302,7 +390,34 @@ export function BoardTree(props: BoardTreeProps) {
                     }}
                     onNodesChange={onNodesChange}
                     onEdgesChange={noop}
-                    onNodeClick={(_, node) => props.onSelect(node.id)}
+                    onNodeClick={(event, node) => {
+                        if (!reparentingId) {
+                            props.onSelect(node.id)
+                            return
+                        }
+                        // A tap attaches; a press that drifted past the tolerance panned to reach the
+                        // node, so swallow it (no attach). A mouse click never drifts, so it always
+                        // attaches; a press with no recorded origin (a bare programmatic click) does too.
+                        const origin = pressOrigin.current
+                        const panned =
+                            !!origin &&
+                            (Math.abs(event.clientX - origin.x) > PRESS_MOVE_TOLERANCE ||
+                                Math.abs(event.clientY - origin.y) > PRESS_MOVE_TOLERANCE)
+                        if (!panned) props.onAttach?.(node.id)
+                    }}
+                    onNodeMouseEnter={(_, node) => {
+                        // Light a valid target as the mouse enters it; invalid nodes (the detached node,
+                        // its descendants) are skipped, so they stay dim. Touch fires no hover.
+                        if (!reparentingId || !isReparentTarget(node.id, reparentingId, props.edges)) return
+                        const container = containerRef.current
+                        if (!container) return
+                        const box = container.getBoundingClientRect()
+                        const el = container.querySelector(`[data-id="${node.id}"]`)?.getBoundingClientRect()
+                        if (el) setHoverRect({ x: el.left - box.left, y: el.top - box.top, width: el.width, height: el.height })
+                    }}
+                    onNodeMouseLeave={() => {
+                        if (reparentingId) setHoverRect(null)
+                    }}
                     onNodeDragStop={(_, node) => {
                         // Convert React Flow's top-left back to the stored centre. Only a root node card
                         // is the larger size; linked and regular non-root nodes use the normal size.
@@ -310,6 +425,9 @@ export function BoardTree(props: BoardTreeProps) {
                         const center = toCenter(node.position, size)
                         props.onMove(node.id, center.x, center.y)
                     }}
+                    // While armed, a press-drag pans (to reach a target) instead of dragging the inert
+                    // detached node, so the tap-vs-pan gate on onNodeClick is all that decides an attach.
+                    nodesDraggable={!reparentingId}
                     nodesConnectable={false}
                     proOptions={proOptions}
                     fitView
@@ -318,6 +436,72 @@ export function BoardTree(props: BoardTreeProps) {
                     <Background />
                     <Controls />
                 </ReactFlow>
+                {/* The reparent affordances, drawn over the canvas while armed. pointer-events-none so a
+                    click falls through to the node / pane beneath (that click is what attaches or
+                    cancels). Dotted gold to read as a not-yet-committed link. */}
+                {reparentingId && armed && armedCenter && (
+                    <>
+                        <svg
+                            data-testid="reparent-band"
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
+                        >
+                            {/* Armed highlight: a gold ring on the detached node, so touch users (no
+                                hover / cursor to follow) can see which node is lifted. */}
+                            <rect
+                                data-testid="reparent-armed"
+                                x={armed.node.x - 5}
+                                y={armed.node.y - 5}
+                                width={armed.node.width + 10}
+                                height={armed.node.height + 10}
+                                rx={16}
+                                fill="none"
+                                stroke="#e9b949"
+                                strokeWidth={3}
+                                style={{ filter: "drop-shadow(0 0 6px rgba(233,185,73,0.7))" }}
+                            />
+                            {/* The loose band, pinned to the detached node and trailing the pointer. Its
+                                dashes march to read as a live link -- dropped under reduced motion. */}
+                            <line
+                                x1={armedCenter.x}
+                                y1={armedCenter.y}
+                                x2={armed.pointer.x}
+                                y2={armed.pointer.y}
+                                stroke="#e9b949"
+                                strokeWidth={2.4}
+                                strokeDasharray="2 9"
+                                strokeLinecap="round"
+                                className={reducedMotion ? undefined : "animate-[march_1.8s_linear_infinite]"}
+                            />
+                            <circle cx={armed.pointer.x} cy={armed.pointer.y} r={4} fill="#e9b949" />
+                            {/* Hover affordance (mouse): a gold drop-target ring on the valid node under
+                                the cursor. Invalid nodes never set hoverRect, so they stay dim. */}
+                            {hoverRect && (
+                                <rect
+                                    data-testid="reparent-target"
+                                    x={hoverRect.x - 4}
+                                    y={hoverRect.y - 4}
+                                    width={hoverRect.width + 8}
+                                    height={hoverRect.height + 8}
+                                    rx={16}
+                                    fill="rgba(233,185,73,0.12)"
+                                    stroke="#dab24c"
+                                    strokeWidth={2.4}
+                                />
+                            )}
+                        </svg>
+                        {/* Touch has no hover to follow, so spell out the gesture under the lifted node.
+                            pointer-events-none so it never swallows the tap that attaches. */}
+                        <div
+                            data-testid="reparent-hint"
+                            aria-hidden="true"
+                            className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#4a3410]/90 px-2.5 py-1 font-display text-[11.5px] font-semibold tracking-wide text-[#f6edd6]"
+                            style={{ left: armedCenter.x, top: armed.node.y + armed.node.height + 8 }}
+                        >
+                            Tap a node to reattach
+                        </div>
+                    </>
+                )}
             </div>
         </SpawnReadyContext.Provider>
     )

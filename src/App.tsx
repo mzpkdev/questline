@@ -119,6 +119,13 @@ export function App() {
     // A node just added via the detail card: its card opens in edit mode so the name is editable at
     // once. Cleared the moment that card mounts, so re-selecting the node later opens the read view.
     const [editOnAddId, setEditOnAddId] = useState<string | null>(null)
+    // A reparent in flight (the "Unconnect" gesture): the node being re-hung -- with its whole subtree
+    // -- plus the parent to fall back to on cancel. Purely transient UI: it is NEVER dispatched into the
+    // boards reducer and never persisted, so the detach leaves no orphan and a reload mid-reparent
+    // reverts to the original parent. Only a completed attach dispatches the pure `reparent` op. One at
+    // a time -- arming dismisses the card, and while armed a node click attaches instead of selecting,
+    // so no second node's card (or its Unconnect) is reachable.
+    const [reparenting, setReparenting] = useState<{ nodeId: string; originalParentId: string } | null>(null)
     // The app-level Tasks checklist (one flat list shared across every tab) and which top-level
     // section is on screen: the roadmap board, the Tasks list, or the Rewards shop.
     const [tasks, setTasks] = useState<Task[]>(boot.tasks)
@@ -607,6 +614,84 @@ export function App() {
         focusNode(newId)
     }, [selectedId, activeId, focusNode])
 
+    // Cancel an in-flight reparent: re-hang the node under its ORIGINAL parent. The detach was
+    // view-only (the board's edges were never touched), so reparent-to-original is a no-op (same
+    // reference); dispatching it anyway keeps cancel honest and self-describing.
+    const cancelReparent = useCallback(() => {
+        if (reparenting === null) return
+        dispatch({ type: "reparent", boardId: activeId, nodeId: reparenting.nodeId, newParentId: reparenting.originalParentId })
+        setReparenting(null)
+    }, [reparenting, activeId])
+
+    // Unconnect the selected node: detach it (with its whole subtree) from its parent and arm reparent
+    // mode. Dismisses the card while the loose edge trails the pointer. The detach is view-only (see
+    // `reparenting`), so nothing is dispatched -- the board keeps its edges until a target is clicked
+    // (attach) or the move is cancelled.
+    const unconnectSelected = useCallback(() => {
+        if (selectedId === null || !active) return
+        const originalParentId = parentOf(selectedId, active.edges)
+        if (originalParentId === null) return // the root has no parent to detach from (App gates this off anyway)
+        setReparenting({ nodeId: selectedId, originalParentId })
+        setSelectedId(null)
+    }, [selectedId, active])
+
+    // Attach the reparenting node under a clicked target. Valid = a node in this board that is neither
+    // the node itself nor one of its descendants (attaching under its own subtree would cycle -- the
+    // pure `reparent` op rejects that too). Clicking the node itself cancels; a descendant is ignored
+    // (stays armed); a valid target commits the move and re-selects the moved node.
+    const attachTo = useCallback(
+        (targetId: string) => {
+            if (reparenting === null || !active) return
+            const { nodeId } = reparenting
+            if (targetId === nodeId) {
+                cancelReparent()
+                return
+            }
+            if (descendantsOf(nodeId, active.edges).includes(targetId)) return
+            dispatch({ type: "reparent", boardId: activeId, nodeId, newParentId: targetId })
+            setReparenting(null)
+            focusNode(nodeId)
+        },
+        [reparenting, active, activeId, focusNode, cancelReparent]
+    )
+
+    // While a reparent is armed, Escape or a click on empty canvas cancels it back to the original
+    // parent. A click on a NODE attaches instead (BoardTree's onNodeClick -> attachTo), so node /
+    // control / tab / card / dialog targets are left alone here. This listens on `click`, not
+    // `pointerdown`: a drag to pan the canvas emits no click, so pan / zoom stay live while armed.
+    useEffect(() => {
+        if (reparenting === null) return
+        const onClick = (event: MouseEvent) => {
+            const target = event.target as Element | null
+            if (
+                target?.closest(".react-flow__node") ||
+                target?.closest(".react-flow__controls") ||
+                target?.closest("[data-tabbar]") ||
+                target?.closest("[data-detail-card]") ||
+                target?.closest('[role="alertdialog"]')
+            ) {
+                return
+            }
+            cancelReparent()
+        }
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") cancelReparent()
+        }
+        document.addEventListener("click", onClick)
+        document.addEventListener("keydown", onKeyDown)
+        return () => {
+            document.removeEventListener("click", onClick)
+            document.removeEventListener("keydown", onKeyDown)
+        }
+    }, [reparenting, cancelReparent])
+
+    // Switching boards or leaving the roadmap disarms any in-flight reparent: its node lives on the
+    // board (and section) we're leaving, so the loose edge shouldn't follow us. The detach was never
+    // committed, so this just drops the transient arm.
+    useEffect(() => {
+        setReparenting(null)
+    }, [activeId, section])
+
     // Add an (unlinked) linked node under the selected node, then select it and open its card in edit
     // mode with the board dropdown -- the same open-in-edit-on-create flow as adding a child node.
     const addLinkedNode = useCallback(() => {
@@ -917,6 +1002,8 @@ export function App() {
                                     onMove={moveNode}
                                     focusId={focusId}
                                     focusNonce={focusNonce}
+                                    reparenting={reparenting?.nodeId ?? null}
+                                    onAttach={attachTo}
                                 />
                             ) : (
                                 <div className="absolute inset-0 grid place-items-center">
@@ -963,6 +1050,7 @@ export function App() {
                                     onAddChild={addChild}
                                     onAddParent={addParent}
                                     onAddLinkedNode={addLinkedNode}
+                                    onUnconnect={isRoot ? undefined : unconnectSelected}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}
                                     descendantCount={deleteDescendantCount}

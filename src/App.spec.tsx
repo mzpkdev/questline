@@ -219,6 +219,101 @@ describe("App", () => {
         })
     })
 
+    context("reparenting a node (Unconnect + click-to-attach)", () => {
+        const band = () => screen.queryByTestId("reparent-band")
+
+        it("offers Unconnect on a non-root node's edit card, but never on the root", async () => {
+            render(<App />)
+            const leaf = await waitForNode("finish-node")
+
+            // A non-root node offers Unconnect in edit mode.
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            expect(screen.getByRole("button", { name: "Unconnect" })).toBeInTheDocument()
+
+            // The root node never does -- it has no parent to detach from.
+            selectSeedRoot()
+            await screen.findByRole("heading", { name: /learn questline/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            expect(screen.queryByRole("button", { name: "Unconnect" })).toBeNull()
+        })
+
+        it("arms on Unconnect, then attaches the branch under a clicked valid target", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            // Seed baseline: plan-goal is unlocked (break-steps is done), track-progress is locked.
+            expect(nodeRoot("plan-goal")?.getAttribute("data-state")).toBe("available")
+            expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("locked")
+
+            // Detach finish-node: the card dismisses, the loose edge appears, and track-progress -- now
+            // childless in the derived view -- reads as available while its old child floats detached.
+            fireEvent.click(nodeRoot("finish-node") as Element)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Unconnect" }))
+
+            expect(await screen.findByTestId("reparent-band")).toBeInTheDocument()
+            await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available"))
+
+            // Click plan-goal (a valid target): the branch re-hangs under it and the mode disarms.
+            fireEvent.click(nodeRoot("plan-goal") as Element)
+
+            await waitFor(() => expect(band()).toBeNull())
+            // plan-goal now owns an incomplete child -> locked; track-progress keeps no child -> available.
+            await waitFor(() => {
+                expect(nodeRoot("plan-goal")?.getAttribute("data-state")).toBe("locked")
+                expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available")
+            })
+            // Selection returns to the moved node.
+            expect(window.location.hash).toBe("#finish-node")
+        })
+
+        it("cancels back to the original parent on an empty-canvas click", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            fireEvent.click(nodeRoot("finish-node") as Element)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Unconnect" }))
+            await screen.findByTestId("reparent-band")
+            await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available"))
+
+            // A click on the empty board area (outside any node) cancels: finish-node snaps back under
+            // track-progress, which locks again, and the loose edge is gone.
+            fireEvent.click(document.querySelector(".board-surface") as Element)
+
+            await waitFor(() => expect(band()).toBeNull())
+            await waitFor(() => {
+                expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("locked")
+                expect(nodeRoot("plan-goal")?.getAttribute("data-state")).toBe("available")
+            })
+        })
+
+        it("ignores a descendant as a target, and Escape cancels the arm", async () => {
+            render(<App />)
+            await waitForNode("track-progress")
+
+            // Detach track-progress (which carries finish-node beneath it).
+            fireEvent.click(nodeRoot("track-progress") as Element)
+            await screen.findByRole("heading", { name: /track your progress/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Unconnect" }))
+            await screen.findByTestId("reparent-band")
+
+            // finish-node is a descendant of track-progress, so it's not a valid target: clicking it
+            // does nothing and the mode stays armed.
+            fireEvent.click(nodeRoot("finish-node") as Element)
+            expect(band()).toBeInTheDocument()
+
+            // Escape cancels the arm.
+            fireEvent.keyDown(document, { key: "Escape" })
+            await waitFor(() => expect(band()).toBeNull())
+        })
+    })
+
     context("linked nodes", () => {
         // Create a second board "New Quest" (B), return to the seed board (A), add a linked node under
         // finish-node, and point it at B. Returns the linked node's (random) id from the URL hash.
