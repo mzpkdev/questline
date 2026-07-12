@@ -560,13 +560,14 @@ describe("App", () => {
     })
 
     context("scribbles (linking Draw notes to milestones)", () => {
-        // Create one scribble on the Draw wall (the "Scribbles" nav chip), return to the roadmap, and
-        // attach it to finish-node from its edit card. Leaves finish-node selected, its card in edit mode
-        // showing the "Scribble" chip. (A fresh scribble takes the default title "Scribble".)
+        // Create one scribble from the Draw wall (the "Scribbles" nav chip -> the + tile, which now opens
+        // the fresh scribble straight in the editor), return to the roadmap, and attach it to finish-node
+        // from its edit card. Leaves finish-node selected, its card in edit mode showing the "Scribble"
+        // chip. (A fresh scribble takes the default title "Scribble".)
         async function linkAScribbleToFinishNode() {
             fireEvent.click(screen.getByRole("button", { name: "Scribbles" })) // open the Draw view
             fireEvent.click(await screen.findByRole("button", { name: "Add Scribble" }))
-            await screen.findByRole("button", { name: "Rename Scribble" }) // the new note card on the wall
+            await screen.findByTestId("excalidraw-mock") // the + drops straight into the new scribble's canvas
 
             fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to the roadmap
             const leaf = await waitForNode("finish-node")

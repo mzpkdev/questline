@@ -456,11 +456,13 @@ export function App() {
     }, [])
     const openNote = useCallback((id: string) => setEditingNoteId(id), [])
     const backToNotes = useCallback(() => setEditingNoteId(null), [])
-    // Add an empty scribble to the wall (newest first); it stays on the grid, opened only on click, and
-    // is ringed briefly so it's easy to spot.
+    // The wall's + : mint an empty scribble (newest first) and drop straight into its blank canvas, so a
+    // new scribble is one click from the editor. The section is already the Draw view (the + only renders
+    // there), so opening it just sets the editing id. Still ringed on the wall for a quick back-out.
     const addNoteItem = useCallback(() => {
         const id = mintId("note")
         setNotes((prev) => addNote(prev, id, Date.now()))
+        setEditingNoteId(id)
         setHighlightNoteId(id)
     }, [])
     const renameNoteItem = useCallback((id: string, title: string) => setNotes((prev) => renameNote(prev, id, title)), [])
