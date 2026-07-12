@@ -9,7 +9,7 @@
 // single dispatch over `{ boards, order }` through those ops, keeping references stable on a no-op so
 // autosave and the gold memo don't churn.
 
-import { type BoardComplete, childrenOf, complete, descendantsOf, parentOf, uncomplete } from "./graph"
+import { type BoardComplete, childrenOf, complete, descendantsOf, parentOf, reachableFromRoot, uncomplete } from "./graph"
 import {
     DEFAULT_NODE_REWARD,
     DEFAULT_ROOT_REWARD,
@@ -94,11 +94,17 @@ export function boardCompleter(boards: Boards): BoardComplete {
 
 // Gold this board has earned: the sum of each mastered node's own `reward` (including a mastered tier-0
 // root). A mastered id with no surviving node record, or a reward-less linked node (a linked node never
-// enters `mastered` anyway), contributes nothing. Kept here so the no-double-count rule lives with the
-// boards data; rewards.earnedGold folds this over every board.
+// enters `mastered` anyway), contributes nothing. A PARKED (detached) branch pays no gold either: a
+// mastered node counts only while it still has a path up to the root, so cutting a branch loose stops
+// its payout, and re-attaching it restores it (detach keeps the mastered marks, never clearing them).
+// Kept here so the no-double-count rule lives with the boards data; rewards.earnedGold folds this over
+// every board.
 export function boardGold(board: Board): number {
     let total = 0
-    for (const id of board.mastered) total += board.nodes[id]?.reward ?? 0
+    for (const id of board.mastered) {
+        if (!reachableFromRoot(id, board.rootId, board.edges)) continue
+        total += board.nodes[id]?.reward ?? 0
+    }
     return total
 }
 
@@ -116,23 +122,26 @@ export function newBoard(id: string, rootId: string, name: string): Board {
     return { id, rootId, nodes: { [rootId]: root }, edges: [], todos: {}, mastered: new Set() }
 }
 
-// Remove a node and its whole subtree from a board: the node, every descendant, the edges touching any
-// of them, their checklists, and any completed marks. The root (tier-0) node is never removed this way
-// -- deleting a whole board is a separate op (removeBoard) -- and an unknown id is a no-op, both
-// returning the same reference so callers can skip a redundant update.
+// Remove a SINGLE node from a board: its record, its checklist, its completed mark, and every edge
+// touching it (its incoming edge plus each edge down to a child). Descendants are NOT removed -- each
+// child loses the edge up to this node, so its whole subtree becomes a parked orphan that derives
+// "detached" (unreachable from the root), to be re-homed or deleted in turn. The root (tier-0) node is
+// never removed this way -- deleting a whole board is a separate op (removeBoard) -- and an unknown id
+// is a no-op, both returning the same reference so callers can skip a redundant update.
 export function deleteNode(board: Board, id: string): Board {
     if (id === board.rootId || !board.nodes[id]) return board
-    const doomed = new Set<string>([id, ...descendantsOf(id, board.edges)])
     const nodes: Record<string, Node> = {}
     for (const [nid, node] of Object.entries(board.nodes)) {
-        if (!doomed.has(nid)) nodes[nid] = node
+        if (nid !== id) nodes[nid] = node
     }
     const todos: Record<string, Todo[]> = {}
     for (const [nid, list] of Object.entries(board.todos)) {
-        if (!doomed.has(nid)) todos[nid] = list
+        if (nid !== id) todos[nid] = list
     }
-    const edges = board.edges.filter(([parent, child]) => !doomed.has(parent) && !doomed.has(child))
-    const mastered = new Set([...board.mastered].filter((mid) => !doomed.has(mid)))
+    // Drop every edge touching the node: the one into it, and each one out to a child -- orphaning that
+    // child (its subtree stays intact but disconnected, so it derives "detached").
+    const edges = board.edges.filter(([parent, child]) => parent !== id && child !== id)
+    const mastered = board.mastered.has(id) ? new Set([...board.mastered].filter((mid) => mid !== id)) : board.mastered
     return { ...board, nodes, edges, todos, mastered }
 }
 
@@ -204,28 +213,34 @@ export function addChild(board: Board, parentId: string, childId: string): Board
     return { ...board, nodes: { ...board.nodes, [childId]: child }, edges, mastered: uncomplete(parentId, board.mastered, edges) }
 }
 
-// Re-hang `nodeId` (carrying its whole subtree) under a new parent -- the pure op behind the detach +
-// click-to-attach "reparent" gesture. Only the node's single incoming edge is rewired to
-// `[newParentId, nodeId]`; every other edge, including the moved subtree's own internal links, is left
-// as-is. Each moved node keeps its `x/y` (a reparent never repositions a node) while its tier is
+// Re-hang `nodeId` (carrying its whole subtree) under a new parent -- the pure op behind click-to-attach
+// (and the Attach action that re-homes a parked orphan). The node's single incoming edge is rewired to
+// `[newParentId, nodeId]`; a PARKED orphan (detached earlier, no incoming edge) instead simply gains
+// that edge (nothing to rewire). Every other edge, including the moved subtree's own internal links, is
+// left as-is. Each moved node keeps its `x/y` (a reparent never repositions a node) while its tier is
 // recomputed down the branch to stay `parent tier + 1` (breadth-first from the moved node over the new
 // edge set). The new parent gained a possibly-incomplete child, so it (and its now-inconsistent
 // ancestors) drop out of the completed set, mirroring addChild / insertParent; the moved nodes keep
 // their own mastered marks. Rejected as a no-op (same reference) when the move is degenerate or would
-// cycle: an unknown node / parent, a parentless node (the root, or a stray -- nothing to rewire),
-// re-hanging under the current parent, the node itself, or any of its own descendants.
+// cycle: an unknown node / parent, the root (no incoming edge and never re-homeable), re-hanging under
+// the current parent, the node itself, or any of its own descendants.
 export function reparent(board: Board, nodeId: string, newParentId: string): Board {
     const node = board.nodes[nodeId]
     const newParent = board.nodes[newParentId]
     if (!node || !newParent) return board
     const currentParent = parentOf(nodeId, board.edges)
-    // A parentless node (root / stray) has no incoming edge to rewire; re-hanging under the current
-    // parent changes nothing; and a node can neither parent itself nor hang under its own subtree.
-    if (currentParent === null || currentParent === newParentId || newParentId === nodeId) return board
+    // The root is never re-homed; re-hanging under the current parent changes nothing; a node can
+    // neither parent itself nor hang under its own subtree (either would cycle). A parentless orphan is
+    // NOT rejected here -- it is exactly the parked branch this op re-attaches.
+    if (nodeId === board.rootId || currentParent === newParentId || newParentId === nodeId) return board
     if (descendantsOf(nodeId, board.edges).includes(newParentId)) return board
 
-    // Swap the one incoming edge for the new parent's; the subtree's own edges ride along untouched.
-    const edges: Edge[] = board.edges.map((edge) => (edge[1] === nodeId ? [newParentId, nodeId] : edge))
+    // Rewire the one incoming edge to the new parent; for a parked orphan (none to rewire) just add it.
+    // The subtree's own edges ride along untouched either way.
+    const edges: Edge[] =
+        currentParent !== null
+            ? board.edges.map((edge) => (edge[1] === nodeId ? [newParentId, nodeId] : edge))
+            : [...board.edges, [newParentId, nodeId]]
 
     // Walk the moved branch breadth-first over the new edges, re-tiering each node to sit one below its
     // parent. Positions (x/y) are deliberately left untouched -- only the depth changes.
@@ -240,6 +255,21 @@ export function reparent(board: Board, nodeId: string, newParentId: string): Boa
 
     // The new parent now holds a possibly-incomplete child, so un-master it up the chain (like addChild).
     return { ...board, nodes, edges, mastered: uncomplete(newParentId, board.mastered, edges) }
+}
+
+// Detach `nodeId` from its parent: drop its single incoming edge and touch nothing else. The node, its
+// whole subtree, every position, tier, checklist, and mastered mark stay exactly as they were -- the
+// branch is simply cut loose from the tree (with no path to the root it now derives as "detached", and
+// so does everything beneath it). Unlike addChild / reparent this deliberately does NOT un-master
+// anything: losing a child can never make a parent's "every child complete" rule fail, so no completion
+// is invalidated (and boardGold, which skips unreachable nodes, stops paying the parked branch without
+// clearing its marks -- re-attaching restores the payout). A no-op (same reference) for the root (tier-0,
+// no parent), an already-parentless node, or an unknown id -- there is no incoming edge to remove.
+// Re-home a parked branch later with `reparent`, which now accepts a parentless orphan.
+export function detach(board: Board, nodeId: string): Board {
+    if (nodeId === board.rootId || parentOf(nodeId, board.edges) === null) return board
+    const edges = board.edges.filter((edge) => edge[1] !== nodeId)
+    return { ...board, edges }
 }
 
 // Add an unlinked linked node under `parentId`: a real tree node placed like addChild (a tier below,
@@ -384,6 +414,7 @@ export type BoardsAction =
     | { type: "setLinkedTarget"; boardId: string; id: string; targetBoardId: string | null }
     | { type: "addParent"; boardId: string; targetId: string; newId: string }
     | { type: "reparent"; boardId: string; nodeId: string; newParentId: string }
+    | { type: "detach"; boardId: string; id: string }
     | { type: "deleteNode"; boardId: string; id: string }
     | { type: "renameBoard"; boardId: string; name: string }
     | { type: "addBoard"; boardId: string; rootId: string; name: string }
@@ -429,6 +460,8 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
             return updateBoard(state, action.boardId, (b) => insertParent(b, action.targetId, action.newId))
         case "reparent":
             return updateBoard(state, action.boardId, (b) => reparent(b, action.nodeId, action.newParentId))
+        case "detach":
+            return updateBoard(state, action.boardId, (b) => detach(b, action.id))
         case "deleteNode":
             return updateBoard(state, action.boardId, (b) => deleteNode(b, action.id))
         case "renameBoard":

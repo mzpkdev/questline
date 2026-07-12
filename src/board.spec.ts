@@ -11,6 +11,7 @@ import {
     type BoardsState,
     completeNode,
     deleteNode,
+    detach,
     editNode,
     insertParent,
     linkedNodeName,
@@ -41,14 +42,18 @@ describe("deleteNode", () => {
         expect(next.mastered.has("break-steps")).toBe(false)
     })
 
-    it("cascades a subtree, leaving unrelated branches intact", () => {
-        // track-progress carries a child (finish-node); both go, while plan-goal's branch stays.
+    it("removes only the node, orphaning its child (not a cascade)", () => {
+        // track-progress carries a child (finish-node). Only track-progress goes; finish-node survives
+        // but loses its incoming edge, so its subtree becomes a parked orphan (derives "detached").
         const next = deleteNode(seedBoard(), "track-progress")
         expect(next.nodes["track-progress"]).toBeUndefined()
-        expect(next.nodes["finish-node"]).toBeUndefined()
+        expect(next.nodes["finish-node"]).toBeDefined() // the child is NOT deleted
+        expect(next.todos["finish-node"]).toBeDefined() // its checklist survives too
+        // Both edges touching track-progress are gone: the one into it and the one down to finish-node.
         expect(next.edges).not.toContainEqual(["learn", "track-progress"])
         expect(next.edges).not.toContainEqual(["track-progress", "finish-node"])
-        expect(next.todos["finish-node"]).toBeUndefined()
+        // finish-node now has no parent -- an orphan.
+        expect(next.edges.some(([, child]) => child === "finish-node")).toBe(false)
         // The other branch (and the root node) is untouched.
         expect(next.nodes["plan-goal"]).toBeDefined()
         expect(next.nodes["break-steps"]).toBeDefined()
@@ -241,6 +246,66 @@ describe("reparent", () => {
         expect(next.mastered.has("s")).toBe(true)
         expect(next.nodes["s"]?.tier).toBe(3)
     })
+
+    it("attaches a parked orphan by ADDING its incoming edge (no prior edge to rewire)", () => {
+        // Detach finish-node first: it becomes a parentless orphan (no incoming edge).
+        const parked = detach(seedBoard(), "finish-node")
+        expect(parked.edges.some((e) => e[1] === "finish-node")).toBe(false)
+
+        // Re-home it under plan-goal: reparent adds [plan-goal, finish-node] and nothing else stray.
+        const next = reparent(parked, "finish-node", "plan-goal")
+        expect(next.edges).toContainEqual(["plan-goal", "finish-node"])
+        expect(next.edges.filter((e) => e[1] === "finish-node")).toHaveLength(1)
+        // Tier lands one below the new parent; x/y untouched.
+        expect(next.nodes["finish-node"]?.tier).toBe((parked.nodes["plan-goal"]?.tier ?? 0) + 1)
+        expect(next.nodes["finish-node"]?.x).toBe(parked.nodes["finish-node"]?.x)
+        expect(next.nodes["finish-node"]?.y).toBe(parked.nodes["finish-node"]?.y)
+    })
+})
+
+// detach over the same seed tree: it drops one incoming edge and nothing else, leaving a parked orphan.
+describe("detach", () => {
+    it("removes only the incoming edge, keeping the node, its subtree, x/y, tiers, and todos", () => {
+        const board = seedBoard()
+        const tp = board.nodes["track-progress"] as Node
+        // track-progress carries finish-node beneath it.
+        const next = detach(board, "track-progress")
+        // The one incoming edge is gone...
+        expect(next.edges).not.toContainEqual(["learn", "track-progress"])
+        // ...but the node, its subtree, that subtree's own edge, positions, tier, and checklists all stay.
+        expect(next.nodes["track-progress"]).toBeDefined()
+        expect(next.nodes["finish-node"]).toBeDefined()
+        expect(next.edges).toContainEqual(["track-progress", "finish-node"])
+        expect(next.nodes["track-progress"]?.x).toBe(tp.x)
+        expect(next.nodes["track-progress"]?.y).toBe(tp.y)
+        expect(next.nodes["track-progress"]?.tier).toBe(tp.tier)
+        expect(next.todos["finish-node"]).toBeDefined()
+    })
+
+    it("keeps every mastered mark (losing a child can't break a parent's completeness)", () => {
+        // g (root) -> a, both mastered by hand; detach a. Neither mark is cleared.
+        const edges: Edge[] = [["g", "a"]]
+        const board: Board = {
+            id: "t",
+            rootId: "g",
+            nodes: { g: node("g", 0), a: node("a", 1) },
+            edges,
+            todos: {},
+            mastered: new Set(["g", "a"])
+        }
+        const next = detach(board, "a")
+        expect(next.edges).not.toContainEqual(["g", "a"])
+        expect(next.mastered.has("a")).toBe(true)
+        expect(next.mastered.has("g")).toBe(true)
+    })
+
+    it("is a no-op (same reference) for the root, an already-parentless node, and an unknown id", () => {
+        const board = seedBoard()
+        expect(detach(board, board.rootId)).toBe(board) // the root has no incoming edge
+        const parked = detach(board, "track-progress")
+        expect(detach(parked, "track-progress")).toBe(parked) // already parentless
+        expect(detach(board, "nope")).toBe(board) // unknown id
+    })
 })
 
 describe("addLinkedNode", () => {
@@ -394,6 +459,28 @@ describe("boardGold", () => {
     it("is zero for a board with nothing mastered", () => {
         expect(boardGold(newBoard("b", "b-root", "B"))).toBe(0)
     })
+
+    it("excludes a mastered node's reward once it is detached (unreachable), counting it again after re-attach", () => {
+        // g (root, not mastered) -> a (mastered, reward 3), so the board pays a's 3.
+        const mk = (id: string, tier: number, reward: number): Node => ({ id, name: id, x: 0, y: tier * 160, tier, description: "", reward })
+        const board: Board = {
+            id: "g2",
+            rootId: "g",
+            nodes: { g: mk("g", 0, 5), a: mk("a", 1, 3) },
+            edges: [["g", "a"]],
+            todos: {},
+            mastered: new Set(["a"])
+        }
+        expect(boardGold(board)).toBe(3)
+        // Detach a: it keeps its mastered mark but, now unreachable from the root, stops paying gold.
+        const parked = detach(board, "a")
+        expect(parked.mastered.has("a")).toBe(true)
+        expect(boardGold(parked)).toBe(0)
+        // Re-home a under the root again: reachable once more, so its 3 gold returns (marks never lost).
+        const rehomed = reparent(parked, "a", "g")
+        expect(rehomed.mastered.has("a")).toBe(true)
+        expect(boardGold(rehomed)).toBe(3)
+    })
 })
 
 describe("completeNode / uncompleteNode across boards (linked children)", () => {
@@ -516,6 +603,15 @@ describe("boardsReducer", () => {
     it("routes a single-board action through the matching op", () => {
         const next = boardsReducer(state(), { type: "editNode", boardId: "seed", id: "plan-goal", patch: { name: "X" } })
         expect(next.boards.seed?.nodes["plan-goal"]?.name).toBe("X")
+    })
+
+    it("routes a detach action through the detach op (drops only the incoming edge)", () => {
+        const next = boardsReducer(state(), { type: "detach", boardId: "seed", id: "track-progress" })
+        expect(next.boards.seed?.edges).not.toContainEqual(["learn", "track-progress"])
+        // The node and its subtree stay put; only the incoming edge is gone.
+        expect(next.boards.seed?.nodes["track-progress"]).toBeDefined()
+        expect(next.boards.seed?.nodes["finish-node"]).toBeDefined()
+        expect(next.boards.seed?.edges).toContainEqual(["track-progress", "finish-node"])
     })
 
     it("routes addLinkedNode then setLinkedTarget through their ops", () => {

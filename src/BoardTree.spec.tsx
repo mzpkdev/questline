@@ -230,16 +230,21 @@ describe("BoardTree", () => {
         // press dispatched here can't reach d3-zoom, which would crash under jsdom.
         const treeRoot = (container: HTMLElement) => container.querySelector(".relative.h-full.w-full") as HTMLElement
 
-        context("isReparentTarget (validity mirrors App.attachTo, reusing descendantsOf)", () => {
-            it("accepts a node that is neither the detached node nor a descendant", () => {
-                expect(isReparentTarget("plan-goal", "track-progress", EDGES)).toBe(true)
+        context("isReparentTarget (validity mirrors App.attachTo, reusing reachableFromRoot + descendantsOf)", () => {
+            it("accepts a node that is on the tree and is neither the detached node nor a descendant", () => {
+                expect(isReparentTarget("plan-goal", "track-progress", EDGES, "learn")).toBe(true)
             })
             it("rejects the detached node itself", () => {
-                expect(isReparentTarget("track-progress", "track-progress", EDGES)).toBe(false)
+                expect(isReparentTarget("track-progress", "track-progress", EDGES, "learn")).toBe(false)
             })
             it("rejects a descendant of the detached node (attaching there would cycle)", () => {
                 // finish-node hangs under track-progress.
-                expect(isReparentTarget("finish-node", "track-progress", EDGES)).toBe(false)
+                expect(isReparentTarget("finish-node", "track-progress", EDGES, "learn")).toBe(false)
+            })
+            it("rejects a target with no path to the root (another parked branch)", () => {
+                // Drop [learn, plan-goal]: plan-goal is now orphaned, so it can't be a re-home target.
+                const orphaned = EDGES.filter((e) => !(e[0] === "learn" && e[1] === "plan-goal"))
+                expect(isReparentTarget("plan-goal", "track-progress", orphaned, "learn")).toBe(false)
             })
         })
 

@@ -6,7 +6,7 @@ import { Corners } from "./Corners"
 import { NodeDetailCard } from "./NodeDetailCard"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { BoardCelebration } from "./BoardCelebration"
-import { complete, descendantsOf, parentOf, stateOf } from "./graph"
+import { complete, descendantsOf, parentOf, reachableFromRoot, stateOf } from "./graph"
 import { IoButtons } from "./IoButtons"
 import {
     addReward,
@@ -119,13 +119,14 @@ export function App() {
     // A node just added via the detail card: its card opens in edit mode so the name is editable at
     // once. Cleared the moment that card mounts, so re-selecting the node later opens the read view.
     const [editOnAddId, setEditOnAddId] = useState<string | null>(null)
-    // A reparent in flight (the "Detach" gesture): the node being re-hung -- with its whole subtree
-    // -- plus the parent to fall back to on cancel. Purely transient UI: it is NEVER dispatched into the
-    // boards reducer and never persisted, so the detach leaves no orphan and a reload mid-reparent
-    // reverts to the original parent. Only a completed attach dispatches the pure `reparent` op. One at
-    // a time -- arming dismisses the card, and while armed a node click attaches instead of selecting,
-    // so no second node's card (or its Detach) is reachable.
-    const [reparenting, setReparenting] = useState<{ nodeId: string; originalParentId: string } | null>(null)
+    // An attach in flight: the id of the node being re-hung (it carries its whole subtree). Reached two
+    // ways -- the "Detach" gesture (which PERSISTS the edge removal first, so the branch is already a
+    // parked orphan while armed) and the "Attach" gesture on an already-parked orphan. Purely transient
+    // UI: arming/cancelling is never persisted; only a completed attach dispatches the pure `reparent`
+    // op. Cancelling does NOT revert -- the (already-persisted) detach stands, leaving the branch parked
+    // and disabled ("detached") until re-attached. One at a time -- arming dismisses the card, and while
+    // armed a node click attaches instead of selecting, so no second node's card is reachable.
+    const [reparenting, setReparenting] = useState<{ nodeId: string } | null>(null)
     // The app-level Tasks checklist (one flat list shared across every tab) and which top-level
     // section is on screen: the roadmap board, the Tasks list, or the Rewards shop.
     const [tasks, setTasks] = useState<Task[]>(boot.tasks)
@@ -540,9 +541,10 @@ export function App() {
         dispatch({ type: "uncomplete", boardId: activeId, id: selectedId })
     }, [selectedId, activeId])
 
-    // Delete the selected node and its subtree (cascade), then move selection to its parent so the
-    // card shows something valid (every non-root node has a parent; fall back to clearing). The root
-    // node is never deleted here -- that path removes the whole board via removeBoard.
+    // Delete just the selected node (its children are orphaned into "detached", not removed), then move
+    // selection to its parent so the card shows something valid (every non-root node has a parent; fall
+    // back to clearing). The root node is never deleted here -- that path removes the whole board via
+    // removeBoard.
     const deleteSelected = useCallback(() => {
         if (selectedId === null || !active) return
         const parent = parentOf(selectedId, active.edges)
@@ -614,31 +616,39 @@ export function App() {
         focusNode(newId)
     }, [selectedId, activeId, focusNode])
 
-    // Cancel an in-flight reparent: re-hang the node under its ORIGINAL parent. The detach was
-    // view-only (the board's edges were never touched), so reparent-to-original is a no-op (same
-    // reference); dispatching it anyway keeps cancel honest and self-describing.
+    // Cancel an in-flight attach (Escape / empty canvas / clicking the lifted node): just disarm. The
+    // detach was already persisted, so this does NOT revert -- the branch stays parked (a disabled
+    // "detached" orphan) until the user re-attaches it. Stable no-op when nothing is armed.
     const cancelReparent = useCallback(() => {
-        if (reparenting === null) return
-        dispatch({ type: "reparent", boardId: activeId, nodeId: reparenting.nodeId, newParentId: reparenting.originalParentId })
         setReparenting(null)
-    }, [reparenting, activeId])
+    }, [])
 
-    // Detach the selected node: lift it (with its whole subtree) off its parent and arm reparent mode.
-    // Dismisses the card while the loose edge trails the pointer. The detach is view-only (see
-    // `reparenting`), so nothing is dispatched -- the board keeps its edges until a target is clicked
-    // (attach) or the move is cancelled.
+    // Detach the selected node: cut it (with its whole subtree) off its parent for real, then arm
+    // attach-mode so it can be re-hung right away. The edge removal is dispatched NOW (persisted), so the
+    // branch immediately reads "detached"; dismissing the card leaves the loose edge trailing the
+    // pointer. If the user cancels without attaching, the branch simply stays parked.
     const detachSelected = useCallback(() => {
         if (selectedId === null || !active) return
-        const originalParentId = parentOf(selectedId, active.edges)
-        if (originalParentId === null) return // the root has no parent to detach from (App gates this off anyway)
-        setReparenting({ nodeId: selectedId, originalParentId })
+        if (parentOf(selectedId, active.edges) === null) return // root / already-parentless: nothing to detach
+        dispatch({ type: "detach", boardId: activeId, id: selectedId })
+        setReparenting({ nodeId: selectedId })
         setSelectedId(null)
-    }, [selectedId, active])
+    }, [selectedId, active, activeId])
 
-    // Attach the reparenting node under a clicked target. Valid = a node in this board that is neither
-    // the node itself nor one of its descendants (attaching under its own subtree would cycle -- the
-    // pure `reparent` op rejects that too). Clicking the node itself cancels; a descendant is ignored
-    // (stays armed); a valid target commits the move and re-selects the moved node.
+    // Attach (re-home) the selected node: it's already a parked orphan (detached earlier), so this just
+    // arms attach-mode -- no detach to dispatch -- and dismisses the card. Clicking a valid target then
+    // re-hangs it through the same attachTo path as a fresh detach.
+    const attachSelected = useCallback(() => {
+        if (selectedId === null) return
+        setReparenting({ nodeId: selectedId })
+        setSelectedId(null)
+    }, [selectedId])
+
+    // Attach the reparenting node under a clicked target. Valid = a node in this board that is reachable
+    // from the root (so you can only re-home under the live tree, never under another parked branch) and
+    // is neither the node itself nor one of its descendants (attaching under its own subtree would cycle
+    // -- the pure `reparent` op rejects that too). Clicking the node itself cancels; a descendant or an
+    // unreachable node is ignored (stays armed); a valid target commits the move and re-selects it.
     const attachTo = useCallback(
         (targetId: string) => {
             if (reparenting === null || !active) return
@@ -648,6 +658,7 @@ export function App() {
                 return
             }
             if (descendantsOf(nodeId, active.edges).includes(targetId)) return
+            if (!reachableFromRoot(targetId, active.rootId, active.edges)) return
             dispatch({ type: "reparent", boardId: activeId, nodeId, newParentId: targetId })
             setReparenting(null)
             focusNode(nodeId)
@@ -655,9 +666,9 @@ export function App() {
         [reparenting, active, activeId, focusNode, cancelReparent]
     )
 
-    // While a reparent is armed, Escape or a click on empty canvas cancels it back to the original
-    // parent. A click on a NODE attaches instead (BoardTree's onNodeClick -> attachTo), so node /
-    // control / tab / card / dialog targets are left alone here. This listens on `click`, not
+    // While an attach is armed, Escape or a click on empty canvas cancels the arm (the branch stays
+    // parked -- no revert). A click on a NODE attaches instead (BoardTree's onNodeClick -> attachTo), so
+    // node / control / tab / card / dialog targets are left alone here. This listens on `click`, not
     // `pointerdown`: a drag to pan the canvas emits no click, so pan / zoom stay live while armed.
     useEffect(() => {
         if (reparenting === null) return
@@ -685,9 +696,9 @@ export function App() {
         }
     }, [reparenting, cancelReparent])
 
-    // Switching boards or leaving the roadmap disarms any in-flight reparent: its node lives on the
-    // board (and section) we're leaving, so the loose edge shouldn't follow us. The detach was never
-    // committed, so this just drops the transient arm.
+    // Switching boards or leaving the roadmap disarms any in-flight attach: its node lives on the board
+    // (and section) we're leaving, so the loose edge shouldn't follow us. Disarming is not a revert --
+    // an already-detached branch just stays parked on its board until the user returns to re-attach it.
     useEffect(() => {
         setReparenting(null)
     }, [activeId, section])
@@ -848,6 +859,9 @@ export function App() {
     const shown: Node | undefined = displayId !== null ? active?.nodes[displayId] : undefined
     const isRoot = !!shown && !!active && shown.id === active.rootId
     const isLinked = !!shown && isLinkedNode(shown)
+    // Whether the shown node still hangs on the tree. A non-root node with a parent offers Detach; a
+    // parked orphan (no parent) offers Attach instead; the root offers neither (it has no parent).
+    const shownHasParent = !!shown && !!active && parentOf(shown.id, active.edges) !== null
     const deleteKind: "node" | "board" = isRoot ? "board" : "node"
     const onDeleteShown = !shown ? undefined : isRoot ? () => removeBoard(activeId) : deleteSelected
     const deleteDescendantCount = shown && !isRoot && active ? descendantsOf(shown.id, active.edges).length : 0
@@ -1030,7 +1044,7 @@ export function App() {
                                 <NodeDetailCard
                                     key={shown.id}
                                     node={shown}
-                                    state={stateOf(shown.id, active.mastered, active.edges, active.nodes, isBoardComplete)}
+                                    state={stateOf(shown.id, active.mastered, active.edges, active.nodes, isBoardComplete, active.rootId)}
                                     todos={isRoot || isLinked ? [] : (active.todos[shown.id] ?? [])}
                                     isRoot={isRoot}
                                     isLinked={isLinked}
@@ -1050,7 +1064,8 @@ export function App() {
                                     onAddChild={addChild}
                                     onAddParent={addParent}
                                     onAddLinkedNode={addLinkedNode}
-                                    onDetach={isRoot ? undefined : detachSelected}
+                                    onDetach={isRoot || !shownHasParent ? undefined : detachSelected}
+                                    onAttach={isRoot || shownHasParent ? undefined : attachSelected}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}
                                     descendantCount={deleteDescendantCount}

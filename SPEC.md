@@ -108,7 +108,8 @@ free-floating nodes, ever.
 - **Add parent** — inserts a new node between the target and its parent (`P -> N -> M`), dropping the
   target's subtree one tier. The root node has no parent to insert above; adding a parent to the root
   makes the new node the root.
-- **Delete** — removes the node and its whole subtree; the root node's deletion removes the board.
+- **Delete** — removes just that node (and the edges touching it), leaving its children detached (their
+  subtrees survive as parked orphans); the root node's deletion removes the board.
 
 ## Linked node semantics
 

@@ -270,7 +270,26 @@ describe("App", () => {
             expect(window.location.hash).toBe("#finish-node")
         })
 
-        it("cancels back to the original parent on an empty-canvas click", async () => {
+        it("detaches the branch for real: it parks as detached, its old parent goes childless", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            fireEvent.click(nodeRoot("finish-node") as Element)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Detach node" }))
+            await screen.findByTestId("reparent-band")
+
+            // The detach PERSISTED: finish-node has no path to the root, so it derives "detached", and
+            // its old parent track-progress -- now childless -- reads available. (The disabled "Detached"
+            // card action is covered directly in NodeDetailCard.spec.)
+            await waitFor(() => {
+                expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("detached")
+                expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available")
+            })
+        })
+
+        it("parks the branch as detached on an empty-canvas click (no revert to the original parent)", async () => {
             render(<App />)
             await waitForNode("finish-node")
 
@@ -281,22 +300,61 @@ describe("App", () => {
             await screen.findByTestId("reparent-band")
             await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available"))
 
-            // A click on the empty board area (outside any node) cancels: finish-node snaps back under
-            // track-progress, which locks again, and the loose edge is gone.
+            // A click on the empty board area (outside any node) cancels the ARM only: the detach stands,
+            // so finish-node stays parked (detached), track-progress keeps no child (stays available),
+            // and the loose edge is gone. It does NOT snap back under track-progress.
             fireEvent.click(document.querySelector(".board-surface") as Element)
 
             await waitFor(() => expect(band()).toBeNull())
             await waitFor(() => {
-                expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("locked")
-                expect(nodeRoot("plan-goal")?.getAttribute("data-state")).toBe("available")
+                expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("detached")
+                expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available")
             })
         })
 
-        it("ignores a descendant as a target, and Escape cancels the arm", async () => {
+        it("re-homes a parked branch under a clicked target via the card's Attach action", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            // Detach finish-node, then Escape: it stays parked (detached).
+            fireEvent.click(nodeRoot("finish-node") as Element)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "Detach node" }))
+            await screen.findByTestId("reparent-band")
+            fireEvent.keyDown(document, { key: "Escape" })
+            await waitFor(() => expect(nodeRoot("finish-node")?.getAttribute("data-state")).toBe("detached"))
+
+            // The card dismissed on detach; finish its exit animation so re-selecting opens it fresh in
+            // read mode (jsdom never fires the CSS animationend on its own, so the card would otherwise
+            // linger in edit mode).
+            fireEvent.animationEnd(screen.getByTestId("detail-card"), { bubbles: true })
+
+            // Re-open the parked node: its edit card offers Attach (not Detach); clicking it re-arms attach-mode.
+            fireEvent.click(nodeRoot("finish-node") as Element)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            expect(screen.queryByRole("button", { name: "Detach node" })).toBeNull()
+            fireEvent.click(screen.getByRole("button", { name: "Attach node" }))
+            await screen.findByTestId("reparent-band")
+
+            // Click plan-goal (a valid, on-tree target): the branch re-hangs under it and disarms.
+            fireEvent.click(nodeRoot("plan-goal") as Element)
+            await waitFor(() => expect(band()).toBeNull())
+            await waitFor(() => {
+                // No longer detached (back on the tree), and plan-goal now owns an incomplete child.
+                expect(nodeRoot("finish-node")?.getAttribute("data-state")).not.toBe("detached")
+                expect(nodeRoot("plan-goal")?.getAttribute("data-state")).toBe("locked")
+            })
+            // Selection returns to the moved node.
+            expect(window.location.hash).toBe("#finish-node")
+        })
+
+        it("ignores a descendant as a target, and Escape leaves the branch parked (no revert)", async () => {
             render(<App />)
             await waitForNode("track-progress")
 
-            // Detach track-progress (which carries finish-node beneath it).
+            // Detach track-progress (which carries finish-node beneath it): both go detached.
             fireEvent.click(nodeRoot("track-progress") as Element)
             await screen.findByRole("heading", { name: /track your progress/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
@@ -308,9 +366,10 @@ describe("App", () => {
             fireEvent.click(nodeRoot("finish-node") as Element)
             expect(band()).toBeInTheDocument()
 
-            // Escape cancels the arm.
+            // Escape cancels the arm; the branch stays parked (detached), it does NOT snap back to the root.
             fireEvent.keyDown(document, { key: "Escape" })
             await waitFor(() => expect(band()).toBeNull())
+            await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("detached"))
         })
     })
 
@@ -444,10 +503,11 @@ describe("App", () => {
     })
 
     context("deleting", () => {
-        it("cascades a node's subtree and moves selection to its parent", async () => {
+        it("deletes only the node, parking its child as detached, and moves selection to its parent", async () => {
             render(<App />)
             const node = await waitForNode("plan-goal")
-            // plan-goal has a child (break-steps); both go on delete.
+            // plan-goal has a child (break-steps). Deleting plan-goal removes only plan-goal; break-steps
+            // survives but loses its parent, so it derives "detached".
             expect(nodeRoot("break-steps")).not.toBeNull()
 
             fireEvent.click(node)
@@ -457,8 +517,8 @@ describe("App", () => {
             fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
 
             await waitFor(() => {
-                expect(nodeRoot("plan-goal")).toBeNull()
-                expect(nodeRoot("break-steps")).toBeNull()
+                expect(nodeRoot("plan-goal")).toBeNull() // the node is gone
+                expect(nodeRoot("break-steps")?.getAttribute("data-state")).toBe("detached") // child parked
             })
             expect(await screen.findByRole("heading", { name: /learn questline/i })).toBeInTheDocument()
         })

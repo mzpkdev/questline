@@ -25,16 +25,20 @@ const HANDLE_STYLE: CSSProperties = { opacity: 0, width: 6, height: 6, border: "
 
 // The linked node's gilded card surface (same as a node) plus a stacked second card peeking behind,
 // marking it as a whole board. A locked linked node (children still incomplete) dims a touch, mirroring
-// a node card.
+// a node card; a detached (parked) one reads distinct -- a dashed grey frame instead of the gilded ring,
+// plus a heavier fade -- exactly like a detached NodeCard.
 function linkedStyle(state: NodeState): CSSProperties {
+    const detached = state === "detached"
     return {
         width: NODE_SIZE.normal.width,
         minHeight: NODE_SIZE.normal.height,
-        border: `${INSET}px solid transparent`,
+        border: detached ? `${INSET}px dashed #b3a480` : `${INSET}px solid transparent`,
         borderRadius: 13,
-        background: `${INNER_BY_STATE[state]} padding-box, ${RING_GOLD} border-box`,
+        background: detached
+            ? `${INNER_BY_STATE.detached} padding-box`
+            : `${INNER_BY_STATE[state]} padding-box, ${RING_GOLD} border-box`,
         boxShadow: "0 3px 6px -1px rgba(90,61,12,0.4), 5px 5px 0 0 #f4e8c8, 5px 5px 0 1.5px #cba94f",
-        opacity: state === "locked" ? 0.92 : 1
+        opacity: detached ? 0.5 : state === "locked" ? 0.92 : 1
     }
 }
 

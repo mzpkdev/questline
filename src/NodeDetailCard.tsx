@@ -1,4 +1,4 @@
-import { Check, Link2, Pencil, Plus, SquareArrowDown, SquareArrowUp, Trash2, Unlink, X } from "lucide-react"
+import { Check, Link, Link2, Pencil, Plus, SquareArrowDown, SquareArrowUp, Trash2, Unlink, X } from "lucide-react"
 import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
@@ -45,8 +45,13 @@ export type NodeDetailCardProps = {
     // Attach an (unlinked) linked node as a child. Offered on every node kind.
     onAddLinkedNode?: () => void
     // Detach this node (with its whole subtree) from its parent and arm reparent mode ("Detach").
-    // Offered on every node EXCEPT the root -- App passes it only for a non-root selection. Edit mode only.
+    // Offered on every node EXCEPT the root -- App passes it only for a non-root node that still hangs on
+    // the tree. Edit mode only.
     onDetach?: () => void
+    // Re-home this node: it's a parked orphan (detached earlier), so this arms attach-mode to hang it
+    // back under a clicked node ("Attach"). App wires it for a non-root node with no parent -- the
+    // mutually-exclusive counterpart to onDetach. Edit mode only.
+    onAttach?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
     onDelete?: () => void
     // What the delete removes: a node + its subtree, or the whole board (deleting a board's root node).
@@ -80,7 +85,9 @@ const PENCIL_STYLE: CSSProperties = {
 const BADGE_STYLE: Record<NodeState, CSSProperties> = {
     mastered: { background: "#d9be74", color: "#4a3410", border: "1px solid #b8892b" },
     available: { background: "#f3e6bf", color: "#8a6b28", border: "1px solid #cdb373" },
-    locked: { background: "#e4dcc4", color: "#8a7c5a", border: "1px solid #b9a986" }
+    locked: { background: "#e4dcc4", color: "#8a7c5a", border: "1px solid #b9a986" },
+    // Detached (parked): a dimmer, cooler grey than locked, with a dashed border to echo the node card.
+    detached: { background: "#e2ddce", color: "#8f8266", border: "1px dashed #b3a480" }
 }
 
 // Checklist tick: parchment when open, gold-tan fill once checked (mockup .todo-check[aria-pressed="true"]).
@@ -239,6 +246,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onAddParent,
         onAddLinkedNode,
         onDetach,
+        onAttach,
         onDelete,
         deleteKind = "node",
         descendantCount = 0,
@@ -307,9 +315,10 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     // Structural actions (edit mode): an icon-only grid, one square per action. Add child is always
     // offered; Add parent and Add linked node each render only when their handler is wired (App wires
     // Add parent for regular AND linked nodes, since insertParent splices a node above either). Detach
-    // renders only when onDetach is wired -- App passes it for every non-root node, so the root never
-    // offers it. Delete (danger red) opens a confirm first. The parent-up / child-down arrows read as
-    // the top-down tree's above / below.
+    // (Unlink) and Attach (Link) are mutually exclusive: App wires Detach for a non-root node still on
+    // the tree and Attach for a parked orphan, so the root offers neither and a node offers exactly one.
+    // Delete (danger red) opens a confirm first. The parent-up / child-down arrows read as the top-down
+    // tree's above / below.
     const actionGrid = (
         <div className="grid grid-cols-4 gap-2">
             {onAddParent && (
@@ -328,6 +337,11 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             {onDetach && (
                 <ActionIcon label="Detach node" onClick={onDetach}>
                     <Unlink size={18} />
+                </ActionIcon>
+            )}
+            {onAttach && (
+                <ActionIcon label="Attach node" onClick={onAttach}>
+                    <Link size={18} />
                 </ActionIcon>
             )}
             {onDelete && (
@@ -356,8 +370,9 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                     </>
                 ) : descendantCount > 0 ? (
                     <>
-                        Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong> and its{" "}
-                        {descendantCount} sub-node{descendantCount === 1 ? "" : "s"}? This can't be undone.
+                        Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? Its{" "}
+                        {descendantCount} sub-node{descendantCount === 1 ? "" : "s"} will be detached from the tree, not
+                        deleted.
                     </>
                 ) : (
                     <>
@@ -464,6 +479,19 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         hint = (
             <p className="mt-[9px] text-center text-[12.5px] italic text-[#a2916c]">
                 Check off every item to complete this node.
+            </p>
+        )
+    } else if (state === "detached") {
+        // A parked orphan: not completable until it's back on the tree. The muted button spells out the
+        // state, and the hint points at the Attach action (edit mode) that re-homes it.
+        action = (
+            <button type="button" disabled className={ACTION_BTN_CLASS} style={MUTED_STYLE}>
+                Detached
+            </button>
+        )
+        hint = (
+            <p className="mt-[9px] text-center text-[12.5px] italic text-[#a2916c]">
+                Detached from the tree. Attach it to a node to re-enable.
             </p>
         )
     } else {

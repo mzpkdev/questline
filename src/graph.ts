@@ -7,7 +7,8 @@ import { type Edge, isLinkedNode, type Node, type NodeState, NODES } from "./nod
 export const STATE_LABEL: Record<NodeState, string> = {
     mastered: "Complete",
     available: "In Progress",
-    locked: "Planned"
+    locked: "Planned",
+    detached: "Detached"
 }
 
 // Look up a node in the bundled seed graph (used by fixtures / tests).
@@ -20,6 +21,23 @@ export const childrenOf = (id: string, edges: Edge[]): string[] =>
 export const parentOf = (id: string, edges: Edge[]): string | null => {
     const edge = edges.find((e) => e[1] === id)
     return edge ? edge[0] : null
+}
+
+// Whether `id` still has a path UP to the board's root: walk parent edges from `id` and return true the
+// moment the walk reaches `rootId`, false if it first hits a node with no parent (the top of a parked /
+// orphaned branch). Cycle-guarded (a malformed edge set can't loop forever) like descendantsOf. This is
+// what tells a detached branch apart from the live tree: `detach` drops a node's single incoming edge,
+// so afterwards neither it nor anything beneath it can reach the root -- and stateOf reads them all as
+// "detached" (see below). The root itself trivially reaches itself, so it is never detached.
+export function reachableFromRoot(id: string, rootId: string, edges: Edge[]): boolean {
+    const seen = new Set<string>()
+    let cursor: string | null = id
+    while (cursor !== null && !seen.has(cursor)) {
+        if (cursor === rootId) return true
+        seen.add(cursor)
+        cursor = parentOf(cursor, edges)
+    }
+    return false
 }
 
 // Every node beneath `id` (its whole subtree), excluding `id` itself. Breadth-first over the edge
@@ -84,8 +102,12 @@ function underUnmasteredLink(
     return false
 }
 
-// The node's tri-state. Additive over the classic bottom-up rule so a tree with no linked nodes is
-// unchanged:
+// The node's tri-state (four, counting detached). Additive over the classic bottom-up rule so a tree
+// with no linked nodes and no detached branch is unchanged:
+//   0. DETACHED GATE: only when a `rootId` is supplied AND the node has no path up to it (its incoming
+//      edge was removed by `detach` and never re-homed) -> "detached". Checked FIRST, so it wins over
+//      mastered / available / locked -- a detached-but-mastered node still reads "detached". Omit
+//      `rootId` (the legacy 3/5-arg calls, and graph.complete's own internal call) and this never fires;
 //   1. mastered (own membership, or a linked node whose target board is complete) -> "mastered";
 //   2. TOP-DOWN GATE: sitting under an unmastered linked ancestor -> "locked" (its subtree waits on the
 //      link mastering); this step never fires without linked nodes;
@@ -98,8 +120,10 @@ export function stateOf(
     mastered: ReadonlySet<string>,
     edges: Edge[],
     nodes: Record<string, Node> = {},
-    boardComplete: BoardComplete = () => false
+    boardComplete: BoardComplete = () => false,
+    rootId?: string
 ): NodeState {
+    if (rootId !== undefined && !reachableFromRoot(id, rootId, edges)) return "detached"
     if (isMastered(id, mastered, nodes, boardComplete)) return "mastered"
     if (underUnmasteredLink(id, mastered, edges, nodes, boardComplete)) return "locked"
     const children = childrenOf(id, edges)

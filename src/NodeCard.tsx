@@ -17,7 +17,9 @@ import { useNodeMotion } from "./nodeMotion"
 export const INNER_BY_STATE: Record<NodeState, string> = {
     mastered: "linear-gradient(180deg,#fdf4d2,#eeddab)",
     available: "linear-gradient(180deg,#fefaee,#f4e8c8)",
-    locked: "linear-gradient(180deg,#efe9d8,#e0d6bd)"
+    locked: "linear-gradient(180deg,#efe9d8,#e0d6bd)",
+    // Detached (parked): a cooler, flatter, greyed parchment -- clearly deader than locked.
+    detached: "linear-gradient(180deg,#e7e3d6,#d7d0bd)"
 }
 const ROOT_INNER = "linear-gradient(180deg,#fcefb8,#f0d992)"
 
@@ -62,7 +64,8 @@ export function SelectionBox({ outset }: { outset: number }) {
 const BAR_BY_STATE: Record<NodeState, string> = {
     mastered: "#c69a34",
     available: "#e6c458",
-    locked: "#bcad86"
+    locked: "#bcad86",
+    detached: "#b0a381"
 }
 
 // Handles exist only to anchor edges; keep them invisible.
@@ -77,9 +80,13 @@ export function NodeCard({ data }: NodeProps<NodeFlowNode>) {
     const size = isRoot ? NODE_SIZE.root : NODE_SIZE.normal
     const inset = isRoot ? 5 : 3.5
     const inner = isRoot ? ROOT_INNER : INNER_BY_STATE[state]
+    // A detached (parked) node reads distinct from locked: a dashed grey frame in place of the gilded
+    // ring, plus a heavier fade -- so a cut-loose branch looks inert, not merely not-yet-unlocked. The
+    // root is always reachable from itself, so it never lands here.
+    const detached = state === "detached"
     const ring = state === "locked" && !isRoot ? RING_DIM : RING_GOLD
-    const cardOpacity = state === "mastered" ? 0.55 : state === "locked" ? 0.92 : 1
-    const titleColor = isRoot ? "#5a4012" : state === "locked" ? "#93815a" : "#6f5316"
+    const cardOpacity = state === "mastered" ? 0.55 : detached ? 0.5 : state === "locked" ? 0.92 : 1
+    const titleColor = isRoot ? "#5a4012" : detached ? "#9c8c68" : state === "locked" ? "#93815a" : "#6f5316"
 
     // Glow shows for available (pulsing) or root (static faint, pulsing when the
     // root is also available). The selection outset keeps the marching ants a few
@@ -101,9 +108,9 @@ export function NodeCard({ data }: NodeProps<NodeFlowNode>) {
             style={{
                 width: size.width,
                 minHeight: size.height,
-                border: `${inset}px solid transparent`,
+                border: detached ? `${inset}px dashed #b3a480` : `${inset}px solid transparent`,
                 borderRadius: 13,
-                background: `${inner} padding-box, ${ring} border-box`,
+                background: detached ? `${inner} padding-box` : `${inner} padding-box, ${ring} border-box`,
                 boxShadow: "0 3px 6px -1px rgba(90,61,12,0.4)",
                 opacity: cardOpacity
             }}

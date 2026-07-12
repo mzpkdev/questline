@@ -16,7 +16,7 @@ import { type Boards, boardCompleter, linkedNodeName } from "./board"
 import { Edge } from "./Edge"
 import type { FlowNode, LinkedFlowNode, NodeFlowEdge, NodeFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import { type BoardComplete, descendantsOf, isMastered, stateOf } from "./graph"
+import { type BoardComplete, descendantsOf, isMastered, reachableFromRoot, stateOf } from "./graph"
 import { LinkedNode } from "./LinkedNode"
 import { NodeCard } from "./NodeCard"
 // The tuple type `Edge` clashes with the `Edge` edge component above, so alias the tuple here.
@@ -42,11 +42,11 @@ type BoardTreeProps = {
     // A node to pan/zoom onto; bumping focusNonce (re)triggers centering (URL routing).
     focusId?: string
     focusNonce?: number
-    // When set, the id of the node being reparented (detach + click-to-attach). While armed a node
-    // click attaches (onAttach) instead of selecting, the node's incoming edge is dropped from the
-    // derived graph -- so the detached subtree reads as inert via the normal state derivation -- and a
-    // loose "rubber band" edge trails the pointer. Null when idle. Purely view: the board's real edges
-    // are untouched, so nothing about the detach is persisted.
+    // When set, the id of the node being re-hung (detach + click-to-attach, or Attach on a parked
+    // orphan). While armed a node click attaches (onAttach) instead of selecting, and a loose "rubber
+    // band" edge trails the pointer. Null when idle. The detach itself is a persisted board op (App
+    // dispatched it before arming), so the board's edges already omit the branch's incoming edge and it
+    // derives as "detached" by the normal state rule -- this prop only drives the armed affordances.
     reparenting?: string | null
     // Attach the reparenting node under the clicked target; App validates (same board, not the node or
     // a descendant) and commits the move via the pure reparent op.
@@ -128,7 +128,7 @@ function makeNode(
         position: toTopLeft(node, sizeOf(node, rootId)),
         data: {
             node,
-            state: stateOf(node.id, mastered, edges, nodes, boardComplete),
+            state: stateOf(node.id, mastered, edges, nodes, boardComplete, rootId),
             isRoot,
             isSelected: node.id === selectedId
         }
@@ -144,7 +144,8 @@ function makeLinkedNode(
     edges: EdgeTuple[],
     boards: Boards,
     nodes: Record<string, Node>,
-    boardComplete: BoardComplete
+    boardComplete: BoardComplete,
+    rootId: string
 ): LinkedFlowNode {
     return {
         id: node.id,
@@ -152,7 +153,7 @@ function makeLinkedNode(
         position: toTopLeft(node, NODE_SIZE.normal),
         data: {
             name: linkedNodeName(boards, node.targetBoardId),
-            state: stateOf(node.id, mastered, edges, nodes, boardComplete),
+            state: stateOf(node.id, mastered, edges, nodes, boardComplete, rootId),
             isSelected: node.id === selectedId
         }
     }
@@ -170,7 +171,7 @@ function buildFlowNode(
     boardComplete: BoardComplete
 ): FlowNode {
     return isLinkedNode(node)
-        ? makeLinkedNode(node, selectedId, mastered, edges, boards, nodes, boardComplete)
+        ? makeLinkedNode(node, selectedId, mastered, edges, boards, nodes, boardComplete, rootId)
         : makeNode(node, rootId, selectedId, mastered, edges, nodes, boardComplete)
 }
 
@@ -194,12 +195,14 @@ export function buildEdges(
     )
 }
 
-// Whether a node is a valid reparent target while armed: a node in this board that is neither the
-// detached node itself nor one of its descendants (re-hanging under its own subtree would cycle).
-// Mirrors App.attachTo's guard, reusing descendantsOf, so the hover affordance lights exactly the nodes
-// a tap would actually attach to. Exported for a direct unit test (hover is awkward to drive in jsdom).
-export function isReparentTarget(id: string, detachedId: string, edges: EdgeTuple[]): boolean {
-    return id !== detachedId && !descendantsOf(detachedId, edges).includes(id)
+// Whether a node is a valid reparent target while armed: a node in this board that is reachable from the
+// root (so you can only re-home under the live tree, never under another parked branch), and is neither
+// the detached node itself nor one of its descendants (re-hanging under its own subtree would cycle).
+// Mirrors App.attachTo's guard, reusing reachableFromRoot / descendantsOf, so the hover affordance lights
+// exactly the nodes a tap would actually attach to. Exported for a direct unit test (hover is awkward to
+// drive in jsdom).
+export function isReparentTarget(id: string, detachedId: string, edges: EdgeTuple[], rootId: string): boolean {
+    return id !== detachedId && reachableFromRoot(id, rootId, edges) && !descendantsOf(detachedId, edges).includes(id)
 }
 
 export function BoardTree(props: BoardTreeProps) {
@@ -207,15 +210,11 @@ export function BoardTree(props: BoardTreeProps) {
     // subtree) derives from its target board. Recomputed only when the boards map changes.
     const isBoardComplete = useMemo(() => boardCompleter(props.boards), [props.boards])
 
-    // While a reparent is armed, drop the detached node's single incoming edge from the graph we draw
-    // and derive state from -- so its subtree reads as detached / inert by the normal rules, and the
-    // loose edge (below) can stand in for it. This never touches the board's real edges (App keeps them
-    // until a target is clicked), so it's stable-by-reference and a no-op when idle.
+    // The armed node id (detach + click-to-attach, or Attach on a parked orphan). Detach persists the
+    // edge removal before arming, so the board's edges already omit the branch's incoming edge and it
+    // derives "detached" straight from props.edges -- no view-only edge surgery here. Drives the band +
+    // gates below; null when idle.
     const reparentingId = props.reparenting ?? null
-    const derivedEdges = useMemo(
-        () => (reparentingId ? props.edges.filter((edge) => edge[1] !== reparentingId) : props.edges),
-        [props.edges, reparentingId]
-    )
 
     const buildNodes = (): FlowNode[] =>
         Object.values(props.nodes).map((node) =>
@@ -224,7 +223,7 @@ export function BoardTree(props: BoardTreeProps) {
                 props.rootId,
                 props.selectedId,
                 props.mastered,
-                derivedEdges,
+                props.edges,
                 props.boards,
                 props.nodes,
                 isBoardComplete
@@ -269,7 +268,7 @@ export function BoardTree(props: BoardTreeProps) {
             const byId = new Map(prev.map((node) => [node.id, node]))
             return Object.values(props.nodes).map((node): FlowNode => {
                 const isSelected = node.id === props.selectedId
-                const state = stateOf(node.id, props.mastered, derivedEdges, props.nodes, isBoardComplete)
+                const state = stateOf(node.id, props.mastered, props.edges, props.nodes, isBoardComplete, props.rootId)
                 const existing = byId.get(node.id)
                 const size = sizeOf(node, props.rootId)
 
@@ -289,10 +288,11 @@ export function BoardTree(props: BoardTreeProps) {
                         node,
                         props.selectedId,
                         props.mastered,
-                        derivedEdges,
+                        props.edges,
                         props.boards,
                         props.nodes,
-                        isBoardComplete
+                        isBoardComplete,
+                        props.rootId
                     )
                 }
 
@@ -317,20 +317,20 @@ export function BoardTree(props: BoardTreeProps) {
                     props.rootId,
                     props.selectedId,
                     props.mastered,
-                    derivedEdges,
+                    props.edges,
                     props.nodes,
                     isBoardComplete
                 )
             })
         })
-    }, [props.selectedId, props.mastered, props.nodes, derivedEdges, props.rootId, props.boards, isBoardComplete, setNodes])
+    }, [props.selectedId, props.mastered, props.nodes, props.edges, props.rootId, props.boards, isBoardComplete, setNodes])
 
     // Edges rebuild when the board's links, completed set, or any board's completion change: a link
     // lights once the node below it is mastered (a linked node counts as mastered when its target
     // board is complete, so its incoming edge lights too). See buildEdges.
     const edges = useMemo<NodeFlowEdge[]>(
-        () => buildEdges(derivedEdges, props.mastered, props.nodes, isBoardComplete),
-        [derivedEdges, props.mastered, props.nodes, isBoardComplete]
+        () => buildEdges(props.edges, props.mastered, props.nodes, isBoardComplete),
+        [props.edges, props.mastered, props.nodes, isBoardComplete]
     )
 
     // Newly added nodes spawn-in, but not the initial batch or a tab-switch remount: flip "ready" a
@@ -426,7 +426,7 @@ export function BoardTree(props: BoardTreeProps) {
                     onNodeMouseEnter={(_, node) => {
                         // Light a valid target as the mouse enters it; invalid nodes (the detached node,
                         // its descendants) are skipped, so they stay dim. Touch fires no hover.
-                        if (!reparentingId || !isReparentTarget(node.id, reparentingId, props.edges)) return
+                        if (!reparentingId || !isReparentTarget(node.id, reparentingId, props.edges, props.rootId)) return
                         const container = containerRef.current
                         if (!container) return
                         const box = container.getBoundingClientRect()

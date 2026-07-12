@@ -5,7 +5,9 @@
 // once: one branch is complete (so its parent is unlocked / In Progress), the other is Locked
 // until the user finishes the actionable leaf.
 
-export type NodeState = "mastered" | "available" | "locked"
+// "detached" is not a bottom-up tier: it derives from reachability (a branch cut loose from the root by
+// `detach`), computed in graph.stateOf and taking precedence over the other three. See stateOf.
+export type NodeState = "mastered" | "available" | "locked" | "detached"
 
 export type Todo = {
     text: string

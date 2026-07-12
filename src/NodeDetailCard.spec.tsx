@@ -130,6 +130,37 @@ describe("NodeDetailCard", () => {
         })
     })
 
+    context("a detached node (a parked orphan)", () => {
+        it("shows the Detached badge, a disabled action with the re-attach hint, and offers Attach (not Detach)", async () => {
+            const user = userEvent.setup()
+
+            render(<NodeDetailCard node={nodeFixture()} state="detached" todos={[]} isRoot={false} onAttach={vi.fn()} />)
+
+            // Read mode: the Detached badge and disabled action both read "Detached" (STATE_LABEL), plus
+            // the hint pointing at Attach.
+            expect(screen.getAllByText(STATE_LABEL.detached)).toHaveLength(2) // badge span + action button
+            expect(screen.getByRole("button", { name: "Detached" })).toBeDisabled()
+            expect(screen.getByText(/Attach it to a node to re-enable/i)).toBeInTheDocument()
+
+            // Edit mode offers the Attach cell in place of Detach.
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+            expect(screen.getByRole("button", { name: "Attach node" })).toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Detach node" })).toBeNull()
+        })
+
+        it("fires onAttach from the Attach cell", async () => {
+            const user = userEvent.setup()
+            const onAttach = vi.fn()
+
+            render(
+                <NodeDetailCard node={nodeFixture()} state="detached" todos={[]} isRoot={false} onAttach={onAttach} />
+            )
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+            await user.click(screen.getByRole("button", { name: "Attach node" }))
+            expect(onAttach).toHaveBeenCalledTimes(1)
+        })
+    })
+
     context("ticking a checklist item", () => {
         it("calls onToggle with the item index when actionable", async () => {
             const user = userEvent.setup()
@@ -372,7 +403,7 @@ describe("NodeDetailCard", () => {
             expect(await screen.findByRole("alertdialog")).toHaveTextContent("Remove this board?")
         })
 
-        it("warns about the cascade count in the node confirm", async () => {
+        it("warns that sub-nodes will be detached in the node confirm", async () => {
             render(
                 <NodeDetailCard
                     node={nodeFixture()}
@@ -386,7 +417,7 @@ describe("NodeDetailCard", () => {
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
             fireEvent.click(screen.getByRole("button", { name: "Delete node" }))
 
-            expect(await screen.findByRole("alertdialog")).toHaveTextContent("2 sub-nodes")
+            expect(await screen.findByRole("alertdialog")).toHaveTextContent("2 sub-nodes will be detached")
         })
 
         it("offers no delete in read mode or when onDelete is absent", () => {

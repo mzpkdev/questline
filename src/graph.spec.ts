@@ -1,4 +1,14 @@
-import { childrenOf, complete, descendantsOf, isMastered, parentOf, STATE_LABEL, stateOf, uncomplete } from "./graph"
+import {
+    childrenOf,
+    complete,
+    descendantsOf,
+    isMastered,
+    parentOf,
+    reachableFromRoot,
+    STATE_LABEL,
+    stateOf,
+    uncomplete
+} from "./graph"
 import { type Edge, EDGES, MASTERED, type Node } from "./nodes"
 
 describe("childrenOf", () => {
@@ -61,6 +71,46 @@ describe("stateOf", () => {
         // learn is locked in the seed set, but unlocks once both its children are passed as complete.
         expect(stateOf("learn", new Set(["plan-goal", "track-progress"]), EDGES)).toBe("available")
     })
+
+    context("a node with no path to the root (detached)", () => {
+        // Dropping the [learn, track-progress] edge orphans track-progress and finish-node beneath it.
+        const orphaned = EDGES.filter((e) => !(e[0] === "learn" && e[1] === "track-progress"))
+
+        it("reads detached when a rootId is supplied and the node is unreachable", () => {
+            // The whole cut-loose branch reads detached: track-progress and its child finish-node.
+            expect(stateOf("track-progress", MASTERED, orphaned, {}, () => false, "learn")).toBe("detached")
+            expect(stateOf("finish-node", MASTERED, orphaned, {}, () => false, "learn")).toBe("detached")
+        })
+
+        it("takes precedence over mastered (a detached-but-mastered node still reads detached)", () => {
+            // break-steps is in MASTERED; orphan it (no edges reach the root) and it reads detached, not mastered.
+            expect(stateOf("break-steps", MASTERED, [], {}, () => false, "learn")).toBe("detached")
+        })
+
+        it("never detaches the root itself (it trivially reaches itself)", () => {
+            expect(stateOf("learn", MASTERED, [], {}, () => false, "learn")).toBe("available")
+        })
+
+        it("is unchanged (never detached) when rootId is omitted", () => {
+            // Without a rootId the reachability gate never runs, so the classic rule stands: break-steps
+            // is mastered even with no edges at all.
+            expect(stateOf("break-steps", MASTERED, [])).toBe("mastered")
+        })
+    })
+})
+
+describe("reachableFromRoot", () => {
+    it("is true for the root itself and for any node with a path up to it", () => {
+        expect(reachableFromRoot("learn", "learn", EDGES)).toBe(true)
+        expect(reachableFromRoot("finish-node", "learn", EDGES)).toBe(true)
+    })
+
+    it("is false once a node's parent chain no longer reaches the root", () => {
+        // Drop [learn, track-progress]: track-progress (and finish-node beneath it) is orphaned.
+        const orphaned = EDGES.filter((e) => !(e[0] === "learn" && e[1] === "track-progress"))
+        expect(reachableFromRoot("track-progress", "learn", orphaned)).toBe(false)
+        expect(reachableFromRoot("finish-node", "learn", orphaned)).toBe(false)
+    })
 })
 
 describe("complete", () => {
@@ -116,7 +166,12 @@ describe("uncomplete", () => {
 
 describe("STATE_LABEL", () => {
     it("maps each state to its human label", () => {
-        expect(STATE_LABEL).toEqual({ mastered: "Complete", available: "In Progress", locked: "Planned" })
+        expect(STATE_LABEL).toEqual({
+            mastered: "Complete",
+            available: "In Progress",
+            locked: "Planned",
+            detached: "Detached"
+        })
     })
 })
 
