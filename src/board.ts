@@ -308,27 +308,6 @@ export function detach(board: Board, nodeId: string): Board {
     return { ...board, edges }
 }
 
-// Add an unlinked linked node under `parentId`: a real tree node placed like addChild (a tier below,
-// fanned past siblings), but marked linked by carrying the `targetBoardId` key (null until a board is
-// picked via setLinkedTarget). It has no checklist / reward / description; its display name is derived
-// (linkedNodeName), so the stored `name` is left blank. A fresh child is incomplete, so the parent (and
-// any now-inconsistent ancestor) drops out of the completed set. An unknown parent is a no-op.
-export function addLinkedNode(board: Board, parentId: string, childId: string): Board {
-    const parent = board.nodes[parentId]
-    if (!parent) return board
-    const siblings = board.edges.filter((edge) => edge[0] === parentId).length
-    const child: Node = {
-        id: childId,
-        name: "",
-        x: parent.x + siblings * SIBLING_FAN,
-        y: parent.y + TIER_GAP,
-        tier: parent.tier + 1,
-        targetBoardId: null
-    }
-    const edges: Edge[] = [...board.edges, [parentId, childId]]
-    return { ...board, nodes: { ...board.nodes, [childId]: child }, edges, mastered: uncomplete(parentId, board.mastered, edges) }
-}
-
 // Point a linked node at a board (or clear it back to unlinked with null). Only touches a node that is
 // already linked (the `targetBoardId` key is present); a regular / root node, an unknown id, or an
 // unchanged target is a no-op (same reference).
@@ -385,37 +364,37 @@ export function editNode(board: Board, id: string, patch: NodePatch): Board {
     return { ...board, nodes: { ...board.nodes, [id]: { ...current, ...patch } } }
 }
 
-// Link a scribble (a Draw note, by id) to a node: append `noteId` to its `noteIds`, minting the list on
+// Link a scribble to a node: append `scribbleId` to its `scribbleIds`, minting the list on
 // the first link. A no-op (same reference) for an unknown id, a linked node (a board pointer carries no
-// scribbles), or a note already linked -- so a double-link never duplicates. The root node MAY carry
-// scribbles (it's a milestone too); only a linked node is refused.
-export function linkNote(board: Board, id: string, noteId: string): Board {
+// scribbles), or a scribble already linked -- so a double-link never duplicates. The root node MAY carry
+// scribbles (it's a node too); only a linked node is refused.
+export function linkScribble(board: Board, id: string, scribbleId: string): Board {
     const current = board.nodes[id]
     if (!current || isLinkedNode(current)) return board
-    const existing = current.noteIds ?? []
-    if (existing.includes(noteId)) return board
-    return { ...board, nodes: { ...board.nodes, [id]: { ...current, noteIds: [...existing, noteId] } } }
+    const existing = current.scribbleIds ?? []
+    if (existing.includes(scribbleId)) return board
+    return { ...board, nodes: { ...board.nodes, [id]: { ...current, scribbleIds: [...existing, scribbleId] } } }
 }
 
-// Unlink a scribble from a node: drop `noteId` from its `noteIds`. A no-op (same reference) for an
-// unknown id or a note that wasn't linked. An emptied list is left as `[]` (not deleted) -- harmless,
+// Unlink a scribble from a node: drop `scribbleId` from its `scribbleIds`. A no-op (same reference) for an
+// unknown id or a scribble that wasn't linked. An emptied list is left as `[]` (not deleted) -- harmless,
 // and the UI reads an empty list as "no scribbles" all the same.
-export function unlinkNote(board: Board, id: string, noteId: string): Board {
+export function unlinkScribble(board: Board, id: string, scribbleId: string): Board {
     const current = board.nodes[id]
-    if (!current || !current.noteIds?.includes(noteId)) return board
-    const noteIds = current.noteIds.filter((n) => n !== noteId)
-    return { ...board, nodes: { ...board.nodes, [id]: { ...current, noteIds } } }
+    if (!current || !current.scribbleIds?.includes(scribbleId)) return board
+    const scribbleIds = current.scribbleIds.filter((n) => n !== scribbleId)
+    return { ...board, nodes: { ...board.nodes, [id]: { ...current, scribbleIds } } }
 }
 
 // Sweep a deleted scribble's id off every node on the board -- called when a scribble is removed from
-// the Draw wall, so no node keeps a dangling reference. Returns the same reference when no node linked
-// it, so the sweep is free for a board that never touched that scribble.
-export function pruneNote(board: Board, noteId: string): Board {
+// the Scribbles wall, so no node keeps a dangling reference. Returns the same reference when no node
+// linked it, so the sweep is free for a board that never touched that scribble.
+export function pruneScribble(board: Board, scribbleId: string): Board {
     let changed = false
     const nodes: Record<string, Node> = {}
     for (const [id, node] of Object.entries(board.nodes)) {
-        if (node.noteIds?.includes(noteId)) {
-            nodes[id] = { ...node, noteIds: node.noteIds.filter((n) => n !== noteId) }
+        if (node.scribbleIds?.includes(scribbleId)) {
+            nodes[id] = { ...node, scribbleIds: node.scribbleIds.filter((n) => n !== scribbleId) }
             changed = true
         } else {
             nodes[id] = node
@@ -523,12 +502,11 @@ export type BoardsAction =
     | { type: "complete"; boardId: string; id: string; allTodosDone: boolean }
     | { type: "uncomplete"; boardId: string; id: string }
     | { type: "editNode"; boardId: string; id: string; patch: NodePatch }
-    | { type: "linkNote"; boardId: string; id: string; noteId: string }
-    | { type: "unlinkNote"; boardId: string; id: string; noteId: string }
-    | { type: "pruneNote"; noteId: string }
+    | { type: "linkScribble"; boardId: string; id: string; scribbleId: string }
+    | { type: "unlinkScribble"; boardId: string; id: string; scribbleId: string }
+    | { type: "pruneScribble"; scribbleId: string }
     | { type: "moveNode"; boardId: string; id: string; x: number; y: number }
     | { type: "addChild"; boardId: string; parentId: string; childId: string }
-    | { type: "addLinkedNode"; boardId: string; parentId: string; childId: string }
     | { type: "setLinkedTarget"; boardId: string; id: string; targetBoardId: string | null }
     | { type: "convertToLinked"; boardId: string; id: string }
     | { type: "convertToRegular"; boardId: string; id: string; restore?: NodeRestore }
@@ -568,17 +546,17 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
             return updateBoard(state, action.boardId, (b) => uncompleteNode(b, action.id))
         case "editNode":
             return updateBoard(state, action.boardId, (b) => editNode(b, action.id, action.patch))
-        case "linkNote":
-            return updateBoard(state, action.boardId, (b) => linkNote(b, action.id, action.noteId))
-        case "unlinkNote":
-            return updateBoard(state, action.boardId, (b) => unlinkNote(b, action.id, action.noteId))
-        case "pruneNote": {
+        case "linkScribble":
+            return updateBoard(state, action.boardId, (b) => linkScribble(b, action.id, action.scribbleId))
+        case "unlinkScribble":
+            return updateBoard(state, action.boardId, (b) => unlinkScribble(b, action.id, action.scribbleId))
+        case "pruneScribble": {
             // Map-level (like removeBoard): a deleted scribble is swept off every node on every board, so
             // no board keeps a dangling reference. Reference-stable when nothing linked it.
             let changed = false
             const boards: Boards = {}
             for (const [id, board] of Object.entries(state.boards)) {
-                const next = pruneNote(board, action.noteId)
+                const next = pruneScribble(board, action.scribbleId)
                 if (next !== board) changed = true
                 boards[id] = next
             }
@@ -588,8 +566,6 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
             return updateBoard(state, action.boardId, (b) => moveNode(b, action.id, action.x, action.y))
         case "addChild":
             return updateBoard(state, action.boardId, (b) => addChild(b, action.parentId, action.childId))
-        case "addLinkedNode":
-            return updateBoard(state, action.boardId, (b) => addLinkedNode(b, action.parentId, action.childId))
         case "setLinkedTarget":
             // Refuse a link that would cycle the board-link graph (uncompletable boards). Clearing (null) is fine.
             if (action.targetBoardId !== null && linkWouldCycle(state.boards, action.boardId, action.targetBoardId)) {

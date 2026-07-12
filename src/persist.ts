@@ -9,12 +9,12 @@
 import { compressToUTF16, decompressFromUTF16 } from "lz-string"
 import type { Task } from "./tasks"
 import type { Banked, Reward } from "./rewards"
-import type { Note } from "./notes"
+import type { Scribble } from "./scribbles"
 import type { Board } from "./board"
 import type { Edge, Node, Todo } from "./nodes"
 
-export const PERSIST_VERSION = 4
-export const STORAGE_KEY = "questline:v4"
+export const PERSIST_VERSION = 5
+export const STORAGE_KEY = "questline:v5"
 
 // The live slices the app persists (data only — not activeId/selectedId).
 export type PersistedSlices = {
@@ -28,8 +28,8 @@ export type PersistedSlices = {
     // Gold earned / spent by tasks and rewards that have been pruned (aged past their 14-day window and
     // dropped from the lists). Carried so the balance survives that compaction. See rewards.compact.
     banked: Banked
-    // The Draw wall: standalone Excalidraw notes, one canvas each. See notes.ts.
-    notes: Note[]
+    // The Scribbles wall: standalone Excalidraw scribbles, one canvas each. See scribbles.ts.
+    scribbles: Scribble[]
 }
 
 // A Board with its Set flattened to an array, so it survives JSON.
@@ -38,13 +38,12 @@ type WireState = {
     version: number
     boards: Record<string, WireBoard>
     boardOrder: string[]
-    // The app-level Tasks checklist and the Rewards shelf. Both required in the v4 wire format.
+    // The app-level Tasks checklist and the Rewards shelf. Both required in the v5 wire format.
     tasks: Task[]
     rewards: Reward[]
     banked: Banked
-    // The Draw notes. Optional on the wire so an older v4 save written before Draw notes existed still
-    // loads (it simply had none); deserialize defaults a missing list to empty.
-    notes?: Note[]
+    // The scribbles. Required, like every other slice: v5 is a single shape with no optional fields.
+    scribbles: Scribble[]
 }
 
 // Live slices -> the JSON string written to a file or to localStorage.
@@ -60,12 +59,12 @@ export function serialize(slices: PersistedSlices): string {
         tasks: slices.tasks,
         rewards: slices.rewards,
         banked: slices.banked,
-        notes: slices.notes
+        scribbles: slices.scribbles
     }
     return JSON.stringify(wire)
 }
 
-// JSON string -> live slices, or null if the text is not a v4 roadmap file we fully understand (bad
+// JSON string -> live slices, or null if the text is not a v5 roadmap file we fully understand (bad
 // JSON, wrong version, or any missing/mistyped field). No migration: a prior-version or malformed file
 // is rejected wholesale, so callers treat null as "reject, change nothing". Only Board.mastered is
 // transformed (array back to a Set); every other field is trusted exactly as written.
@@ -87,11 +86,11 @@ export function deserialize(text: string): PersistedSlices | null {
         tasks: raw.tasks,
         rewards: raw.rewards,
         banked: raw.banked,
-        notes: raw.notes ?? []
+        scribbles: raw.scribbles
     }
 }
 
-// Best-effort read of the autosaved state, or null when absent/corrupt. v4 saves are lz-string-packed
+// Best-effort read of the autosaved state, or null when absent/corrupt. v5 saves are lz-string-packed
 // into UTF-16 (localStorage stores strings, so this is its densest form). No migration: older data
 // lived under a different key and is simply never read.
 export function loadState(): PersistedSlices | null {
@@ -124,8 +123,7 @@ function isWireState(value: unknown): value is WireState {
     if (!Array.isArray(v.tasks) || !v.tasks.every(isTask)) return false
     if (!Array.isArray(v.rewards) || !v.rewards.every(isReward)) return false
     if (!isBanked(v.banked)) return false
-    // Notes are optional (a pre-notes save has none), but any present list must be well-formed.
-    if (v.notes !== undefined && (!Array.isArray(v.notes) || !v.notes.every(isNote))) return false
+    if (!Array.isArray(v.scribbles) || !v.scribbles.every(isScribble)) return false
     return Object.values(v.boards as Record<string, unknown>).every(isBoard)
 }
 
@@ -159,7 +157,7 @@ function isReward(value: unknown): value is Reward {
     )
 }
 
-function isNote(value: unknown): value is Note {
+function isScribble(value: unknown): value is Scribble {
     if (typeof value !== "object" || value === null) return false
     const n = value as Record<string, unknown>
     if (typeof n.id !== "string" || typeof n.title !== "string" || typeof n.updatedAt !== "number") return false
@@ -190,7 +188,7 @@ function isNode(value: unknown): value is Node {
         (n.description === undefined || typeof n.description === "string") &&
         (n.reward === undefined || typeof n.reward === "number") &&
         (n.targetBoardId === undefined || n.targetBoardId === null || typeof n.targetBoardId === "string") &&
-        (n.noteIds === undefined || (Array.isArray(n.noteIds) && n.noteIds.every((v) => typeof v === "string")))
+        (n.scribbleIds === undefined || (Array.isArray(n.scribbleIds) && n.scribbleIds.every((v) => typeof v === "string")))
     )
 }
 

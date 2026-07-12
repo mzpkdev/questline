@@ -1,11 +1,13 @@
 import { render, screen } from "@testing-library/react"
 import { ReactFlow } from "@xyflow/react"
 import type { NodeFlowNode } from "./flow"
-import { byId } from "./graph"
 import { NodeCard } from "./NodeCard"
-import type { NodeState } from "./nodes"
+import { NODES, type NodeState } from "./nodes"
 
 const nodeTypes = { node: NodeCard }
+
+// Look up a node in the bundled seed graph (used by this fixture).
+const byId = (id: string) => NODES.find((n) => n.id === id)
 
 type NodeOverrides = {
     id?: string

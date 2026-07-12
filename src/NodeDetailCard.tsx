@@ -32,16 +32,16 @@ export type NodeDetailCardProps = {
     onSetLinkedTarget?: (boardId: string | null) => void
     // Navigate to the linked node's target board. Rendered disabled while the node is unlinked.
     onGoToBoard?: () => void
-    // Scribbles (Draw notes) linked to this node, resolved to id + title -- dangling ids (a deleted
+    // Scribbles linked to this node, resolved to id + title -- dangling ids (a deleted
     // scribble) are filtered out by App before they reach here. Rendered as the Scribbles section on a
     // regular / root node (a linked node returns earlier, before the section). App wires the scribble
     // props only for a non-linked node.
-    linkedNotes?: { id: string; title: string }[]
-    // Open a linked scribble in the Draw editor (App switches to the Draw view and opens it).
-    onOpenNote?: (noteId: string) => void
+    linkedScribbles?: { id: string; title: string }[]
+    // Open a linked scribble in the Scribbles editor (App switches to the Scribbles view and opens it).
+    onOpenScribble?: (scribbleId: string) => void
     // Unlink a scribble from this node (edit mode, a chip's ×).
-    onUnlinkNote?: (noteId: string) => void
-    // Add a scribble to this node (edit mode): opens the Draw wall in link mode, where picking an existing
+    onUnlinkScribble?: (scribbleId: string) => void
+    // Add a scribble to this node (edit mode): opens the Scribbles wall in link mode, where picking an existing
     // scribble or starting a new one attaches it back here. Its presence gates the whole Scribbles section,
     // so read mode with nothing linked shows nothing.
     onAddScribble?: () => void
@@ -268,9 +268,9 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         targetBoardId = null,
         onSetLinkedTarget,
         onGoToBoard,
-        linkedNotes = [],
-        onOpenNote,
-        onUnlinkNote,
+        linkedScribbles = [],
+        onOpenScribble,
+        onUnlinkScribble,
         onAddScribble,
         closing,
         onToggle,
@@ -353,7 +353,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     )
 
     // Structural actions (edit mode): an icon-only grid, one square per action. Add child is always
-    // offered; Add parent and Add linked node each render only when their handler is wired (App wires
+    // offered; Add parent and Convert to linked node each render only when their handler is wired (App wires
     // Add parent for regular AND linked nodes, since insertParent splices a node above either). Detach
     // and Attach are mutually exclusive: App wires Detach for a non-root node still on the tree and
     // Attach for a parked orphan, so the root offers neither and a node offers exactly one. The icons
@@ -469,35 +469,36 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         />
     ) : null
 
-    // Scribbles: the Draw notes linked to this milestone. Read mode lists them as chips that open the
-    // drawing; edit mode adds an × to unlink each and an "Add scribble" button that opens the Draw wall in
-    // link mode (pick an existing scribble or start a new one, either way linked back here). Shown on a
-    // regular / root node (a linked node returns before it). Gated on onAddScribble; in read mode it stays
-    // hidden until at least one scribble is linked, so an untouched node's card looks exactly as it did.
-    const showScribbles = !!onAddScribble && (editing || linkedNotes.length > 0)
+    // Scribbles linked to this node. Read mode lists them as chips that open the
+    // drawing; edit mode adds an × to unlink each and an "Add scribble" button that opens the Scribbles
+    // wall in link mode (pick an existing scribble or start a new one, either way linked back here). Shown
+    // on a regular / root node (a linked node returns before it). Gated on onAddScribble; in read mode it
+    // stays hidden until at least one scribble is linked, so an untouched node's card looks exactly as it
+    // did.
+    const showScribbles = !!onAddScribble && (editing || linkedScribbles.length > 0)
     const scribbleSection = showScribbles ? (
         <div className="mb-[15px]">
             <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Scribbles</span>
-            {linkedNotes.length > 0 && (
+            {linkedScribbles.length > 0 && (
                 <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
-                    {linkedNotes.map((note) => (
-                        <li key={note.id} className="min-w-0">
+                    {linkedScribbles.map((scribble) => (
+                        <li key={scribble.id} className="min-w-0">
                             {editing ? (
                                 <span className={`${SCRIBBLE_CHIP_CLASS} pr-1`}>
                                     <button
                                         type="button"
-                                        title={`Open ${note.title}`}
-                                        onClick={() => onOpenNote?.(note.id)}
+                                        title={`Open ${scribble.title}`}
+                                        onClick={() => onOpenScribble?.(scribble.id)}
                                         className={SCRIBBLE_OPEN_CLASS}
                                     >
                                         <Scribble size={13} className="flex-none" />
-                                        <span className="truncate">{note.title}</span>
+                                        <span className="truncate">{scribble.title}</span>
                                     </button>
                                     <button
                                         type="button"
-                                        aria-label={`Unlink ${note.title}`}
+                                        aria-label={`Unlink ${scribble.title}`}
                                         title="Unlink"
-                                        onClick={() => onUnlinkNote?.(note.id)}
+                                        onClick={() => onUnlinkScribble?.(scribble.id)}
                                         className={SCRIBBLE_UNLINK_CLASS}
                                     >
                                         <X size={13} />
@@ -506,12 +507,12 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                             ) : (
                                 <button
                                     type="button"
-                                    title={`Open ${note.title}`}
-                                    onClick={() => onOpenNote?.(note.id)}
+                                    title={`Open ${scribble.title}`}
+                                    onClick={() => onOpenScribble?.(scribble.id)}
                                     className={`${SCRIBBLE_CHIP_CLASS} pr-2.5 hover:text-[#8a641d]`}
                                 >
                                     <Scribble size={13} className="flex-none" />
-                                    <span className="truncate">{note.title}</span>
+                                    <span className="truncate">{scribble.title}</span>
                                 </button>
                             )}
                         </li>
@@ -574,7 +575,6 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         {actionGrid}
                         {deleteButton}
                         {confirmDialog}
-                        {convertDialog}
                     </>
                 ) : (
                     <>

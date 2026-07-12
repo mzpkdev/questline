@@ -33,11 +33,11 @@ export type Node = {
     // root nodes. The display name of a linked node is derived live from its target board's root node
     // (see board.linkedNodeName), so a linked node's own `name` is unused.
     targetBoardId?: string | null
-    // Scribbles (Draw notes) linked to this milestone, by note id. Present on regular and root nodes;
+    // Scribbles linked to this node, by scribble id. Present on regular and root nodes;
     // absent on a linked node (a board pointer carries no scribbles). A ONE-WAY reference: the scribble
     // itself is unaware it's linked. Dangling ids (a scribble deleted from the wall) are ignored by the
-    // UI and swept by board.pruneNote on delete, so the list can be trusted lazily.
-    noteIds?: string[]
+    // UI and swept by board.pruneScribble on delete, so the list can be trusted lazily.
+    scribbleIds?: string[]
 }
 
 // Node kind is positional (never a stored flag): a linked node is any node carrying the `targetBoardId`

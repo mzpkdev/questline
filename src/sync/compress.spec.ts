@@ -10,7 +10,7 @@ describe("compress", () => {
 
     it("shrinks repetitive JSON well under a third", async () => {
         const text = JSON.stringify(
-            Array.from({ length: 200 }, (_, i) => ({ id: `node-${i}`, tag: "Step", branch: "Plan", reward: 3 }))
+            Array.from({ length: 200 }, (_, i) => ({ id: `node-${i}`, name: "Step", x: 0, y: 0, tier: 1, reward: 3 }))
         )
         const bytes = await deflate(text)
         expect(bytes.length).toBeLessThan(text.length / 3)

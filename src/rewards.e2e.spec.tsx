@@ -64,7 +64,7 @@ const purse = () => screen.getByTestId("purse")
 const balance = () => Number((purse().getAttribute("aria-label") ?? "").replace(/ gold$/, ""))
 
 // localStorage holds lz-string-compressed JSON now; unpack it to assert on the saved roadmap text.
-const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v4") ?? "") ?? ""
+const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v5") ?? "") ?? ""
 
 // Real wall-clock, captured before any Date.now spy so frozen-time tests can still let RTL's waitFor
 // tick against real time when they aren't pinning the clock.

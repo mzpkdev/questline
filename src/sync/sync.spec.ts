@@ -12,7 +12,7 @@ const slices = () => ({
     tasks: [],
     rewards: [],
     banked: { earned: 0, spent: 0 },
-    notes: []
+    scribbles: []
 })
 
 describe("sync client", () => {

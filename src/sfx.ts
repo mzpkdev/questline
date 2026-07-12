@@ -1,9 +1,9 @@
 // Zero-asset WebAudio SFX kit -- synthesized one-shot sound effects, no audio files to host or ship.
 // Questline is a medieval quest board (parchment, gold, Cinzel type), so the cues are warm struck
-// bells and a harp-like pluck rather than chiptune bleeps: a soft pluck when a to-do is ticked, rising
-// hand-bells when a node lands, a bright coin clink at the rewards, and a regal bell fanfare when
-// a whole quest is done. This is the audio counterpart to the app's visual juice (node seal, purse
-// bump, board-celebration burst).
+// bells rather than chiptune bleeps: a quiet click when a to-do is ticked, rising hand-bells when a
+// node lands, a bright coin clink at the rewards, and a regal bell fanfare when a whole quest is done.
+// This is the audio counterpart to the app's visual juice (node seal, purse bump, board-celebration
+// burst).
 //
 // House style: a callable factory of free functions over closure-private state (no data class, no
 // destroy() -- a single lazy AudioContext is the only resource and it is fine to share for the page's
@@ -31,7 +31,7 @@
 //   import { createSfx } from "./sfx"
 //   const sfx = createSfx()
 //   window.addEventListener("pointerdown", () => sfx.unlock(), { once: true })
-//   sfx.pop()      // a to-do ticked off
+//   sfx.tick()     // a to-do ticked off
 //   sfx.success()  // a node completed
 //   sfx.fanfare()  // the whole quest done
 
@@ -46,17 +46,14 @@ export type SoundEffect = () => void
  * controls. Frozen so callers can destructure freely without risk of reassigning an effect.
  *
  * @property blip    - A soft single bell tap -- a light confirm (used for the unmute cue). ~160ms.
- * @property pop     - A warm harp-like pluck (fundamental + a quiet octave). A spare cue; the app
- *                     currently uses tick for crossing a to-do off. Triangle, ~200ms.
  * @property success - Two rising struck hand-bells with inharmonic overtones -- a node completed.
  *                     Sine, ~550ms.
- * @property error   - A soft low two-note fall -- a muted "denied", not a buzzer. Triangle, ~280ms.
  * @property tick    - A very short, very quiet click -- selecting a node or chip, and ticking a
  *                     node's checklist box. Sine, ~50ms.
  * @property coin    - A bright metallic clink -- gold into the purse when a reward is redeemed, or a
  *                     standalone task crossed off. Sine bells, higher/tighter than success. ~280ms.
  * @property fanfare - The finale: a regal rising bell arpeggio over a low root with a shimmer on top --
- *                     a whole quest's goal completed. The loudest/longest cue; pairs with the on-screen
+ *                     a whole quest's root node completed. The loudest/longest cue; pairs with the on-screen
  *                     board celebration. ~950ms.
  * @property unlock  - Resume the (lazily created) AudioContext. Call from the first user gesture.
  *                     Idempotent and safe to call eagerly.
@@ -66,9 +63,7 @@ export type SoundEffect = () => void
  */
 export interface Sfx {
     readonly blip: SoundEffect
-    readonly pop: SoundEffect
     readonly success: SoundEffect
-    readonly error: SoundEffect
     readonly tick: SoundEffect
     readonly coin: SoundEffect
     readonly fanfare: SoundEffect
@@ -220,25 +215,11 @@ export const createSfx = (): Sfx => {
             strike(context, t, 587.33, 0.16, 0.14, [{ ratio: 2, gain: 0.3 }])
         })
 
-    const pop: SoundEffect = () =>
-        schedule((context, t) => {
-            // A warm harp-like pluck: a triangle fundamental with a quiet octave, ringing out fast. It
-            // fires on every box ticked, so it stays short and gentle.
-            strike(context, t, 587.33, 0.2, 0.17, [{ ratio: 2, gain: 0.3 }], "triangle")
-        })
-
     const success: SoundEffect = () =>
         schedule((context, t) => {
             // Two rising struck hand-bells (A4 -> E5) with inharmonic overtones -- a small, warm chime.
             strike(context, t, 440, 0.5, 0.16, BELL)
             strike(context, t + 0.13, 659.25, 0.55, 0.16, BELL)
-        })
-
-    const error: SoundEffect = () =>
-        schedule((context, t) => {
-            // A soft low two-note fall (A3 -> E3) -- a muted "denied", rounded rather than a buzzer.
-            playVoice(context, "triangle", 220, t, 0.24, 0.16)
-            playVoice(context, "triangle", 164.81, t + 0.12, 0.28, 0.16)
         })
 
     const tick: SoundEffect = () =>
@@ -258,7 +239,7 @@ export const createSfx = (): Sfx => {
     const fanfare: SoundEffect = () =>
         schedule((context, t) => {
             // A regal rising bell arpeggio (G major: G4 B4 D5 G5) over a low G3 root, with a high D6
-            // shimmer over the top -- the finale when a whole quest's goal is done. Peaks are kept low
+            // shimmer over the top -- the finale when a whole quest's root node is done. Peaks are kept low
             // because many voices overlap.
             playVoice(context, "triangle", 196, t, 0.9, 0.1)
             const notes = [392, 493.88, 587.33, 783.99]
@@ -281,5 +262,5 @@ export const createSfx = (): Sfx => {
 
     const isMuted = (): boolean => muted
 
-    return Object.freeze({ blip, pop, success, error, tick, coin, fanfare, unlock, setMuted, isMuted })
+    return Object.freeze({ blip, success, tick, coin, fanfare, unlock, setMuted, isMuted })
 }

@@ -3,8 +3,8 @@ import { decompressFromUTF16 } from "lz-string"
 import { App } from "./App"
 
 // Excalidraw's ESM entry can't be imported under vitest (a transitive JSON module lacks an import
-// attribute), so App's lazy Draw chunk would fail to load. Stub the package with light React shims --
-// enough for the real DrawBoard / ExcalidrawBoard wrappers to mount -- since these tests exercise App's
+// attribute), so App's lazy Scribbles chunk would fail to load. Stub the package with light React shims --
+// enough for the real ScribblesBoard / ScribbleEditor wrappers to mount -- since these tests exercise App's
 // scribble wiring, not the canvas engine. The mocked editor renders under [data-testid="excalidraw-mock"],
 // and its MainMenu.Item entries (e.g. "Delete scribble") become plain buttons that fire their onSelect.
 vi.mock("@excalidraw/excalidraw", async () => {
@@ -58,8 +58,8 @@ const waitForNode = (id: string) =>
 // screen. Selecting the board's root (its card) is a click on the tab, labelled after that root node.
 const selectSeedRoot = () => fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
 
-// localStorage now holds lz-string-compressed JSON under the v4 key; unpack it to assert on the saved roadmap.
-const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v4") ?? "") ?? ""
+// localStorage now holds lz-string-compressed JSON under the v5 key; unpack it to assert on the saved roadmap.
+const savedRoadmap = () => decompressFromUTF16(localStorage.getItem("questline:v5") ?? "") ?? ""
 
 describe("App", () => {
     // The app reads/writes window.location.hash for routing; reset it so tests don't leak into each other.
@@ -559,9 +559,9 @@ describe("App", () => {
         })
     })
 
-    context("scribbles (linking Draw notes to milestones)", () => {
-        // Open finish-node's edit card and press "Add scribble" -> the Draw wall opens in link mode bound
-        // to the node. Leaves the app on the link-mode wall (its Cancel / cards / + tile all in play).
+    context("scribbles (linking scribbles to milestones)", () => {
+        // Open finish-node's edit card and press "Add scribble" -> the Scribbles wall opens in link mode
+        // bound to the node. Leaves the app on the link-mode wall (its Cancel / cards / + tile all in play).
         async function openLinkModeFromFinishNode() {
             const leaf = await waitForNode("finish-node")
             fireEvent.click(leaf)
@@ -580,7 +580,7 @@ describe("App", () => {
         }
 
         // Create a standalone, unlinked scribble on the wall (Scribbles nav -> + -> editor -> back) so it
-        // exists as a card to pick later. Leaves the app on the (normal) Draw wall.
+        // exists as a card to pick later. Leaves the app on the (normal) Scribbles wall.
         async function createStandaloneScribble() {
             fireEvent.click(screen.getByRole("button", { name: "Scribbles" }))
             fireEvent.click(await screen.findByRole("button", { name: "Add Scribble" }))
@@ -593,7 +593,7 @@ describe("App", () => {
             render(<App />)
             await linkNewScribbleToFinishNode()
 
-            // Back from the editor returns to the milestone (not the wall), and the fresh scribble is a chip.
+            // Back from the editor returns to the node (not the wall), and the fresh scribble is a chip.
             fireEvent.click(screen.getByRole("button", { name: "Back to scribbles" }))
             await screen.findByRole("heading", { name: /finish a node/i })
             expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
@@ -609,7 +609,7 @@ describe("App", () => {
 
             // Click the existing card (its container) to link it and return to the node.
             const rename = await screen.findByRole("button", { name: "Rename Scribble" })
-            fireEvent.click(rename.closest("[data-note-id]") as HTMLElement)
+            fireEvent.click(rename.closest("[data-scribble-id]") as HTMLElement)
 
             await screen.findByRole("heading", { name: /finish a node/i })
             expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
@@ -626,7 +626,7 @@ describe("App", () => {
             expect(screen.queryByRole("button", { name: "Scribble" })).toBeNull()
         })
 
-        it("opens the Excalidraw editor for a scribble when its chip is clicked", async () => {
+        it("opens the scribble editor for a scribble when its chip is clicked", async () => {
             render(<App />)
             await linkNewScribbleToFinishNode()
             fireEvent.click(screen.getByRole("button", { name: "Back to scribbles" }))
@@ -634,7 +634,7 @@ describe("App", () => {
 
             fireEvent.click(await screen.findByRole("button", { name: "Scribble" }))
 
-            // The Draw editor for that note is shown; the roadmap board is gone behind it.
+            // The scribble editor for that scribble is shown; the roadmap board is gone behind it.
             expect(await screen.findByTestId("excalidraw-mock")).toBeInTheDocument()
             await waitFor(() => expect(nodeRoot("finish-node")).toBeNull())
         })
@@ -739,8 +739,8 @@ describe("App", () => {
         })
     })
 
-    context("when clicking outside the card", () => {
-        it("plays the exit animation, then removes the card", async () => {
+    context("dismissing the node card", () => {
+        it("plays the exit animation, then removes the card, on a click outside it", async () => {
             render(<App />)
             const node = await waitForNode("learn")
             fireEvent.click(node)
@@ -755,6 +755,41 @@ describe("App", () => {
             fireEvent.animationEnd(card, { bubbles: true })
             expect(screen.queryByTestId("detail-card")).not.toBeInTheDocument()
         })
+
+        // The node card used to ignore Escape entirely (unlike the task / reward cards); it now shares
+        // their dismiss-on-outside wiring, so Escape closes it the same way a click outside does.
+        it("plays the exit animation, then removes the card, on Escape", async () => {
+            render(<App />)
+            const node = await waitForNode("learn")
+            fireEvent.click(node)
+            await screen.findByRole("heading", { name: /learn questline/i })
+            const card = screen.getByTestId("detail-card")
+
+            fireEvent.keyDown(document, { key: "Escape" })
+            // Still mounted while the exit animation runs...
+            expect(screen.getByTestId("detail-card")).toBeInTheDocument()
+
+            // ...and gone once it finishes.
+            fireEvent.animationEnd(card, { bubbles: true })
+            expect(screen.queryByTestId("detail-card")).not.toBeInTheDocument()
+        })
+    })
+
+    context("leaving the roadmap section", () => {
+        // The node card used to stay selected forever (unlike the task / reward cards, which already
+        // closed outright on leaving their section); it now closes the same way, which -- since the
+        // selected id mirrors into the url hash -- is observable as the hash clearing.
+        it("closes the node card, clearing the url hash, when switching to another section", async () => {
+            render(<App />)
+            const node = await waitForNode("plan-goal")
+
+            fireEvent.click(node)
+            await waitFor(() => expect(window.location.hash).toBe("#plan-goal"))
+
+            fireEvent.click(screen.getByRole("button", { name: "Tasks" }))
+
+            await waitFor(() => expect(window.location.hash).toBe(""))
+        })
     })
 
     context("importing a file", () => {
@@ -764,9 +799,9 @@ describe("App", () => {
             render(<App />)
             await waitForNode("learn")
 
-            // A minimal valid v4 export: one board whose root node is `solo-root`.
+            // A minimal valid v5 export: one board whose root node is `solo-root`.
             const imported = {
-                version: 4,
+                version: 5,
                 boards: {
                     solo: {
                         id: "solo",
@@ -783,7 +818,7 @@ describe("App", () => {
                 tasks: [],
                 rewards: [],
                 banked: { earned: 0, spent: 0 },
-                notes: []
+                scribbles: []
             }
             fireEvent.change(screen.getByTestId("import-input"), {
                 target: { files: [exportFile(JSON.stringify(imported))] }
@@ -794,16 +829,18 @@ describe("App", () => {
             expect(nodeRoot("learn")).toBeNull()
         })
 
-        it("alerts and changes nothing on an invalid file", async () => {
-            const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {})
+        it("shows a themed error dialog and changes nothing on an invalid file", async () => {
             render(<App />)
             await waitForNode("learn")
 
             fireEvent.change(screen.getByTestId("import-input"), { target: { files: [exportFile("not json")] } })
 
-            await waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1))
+            expect(await screen.findByRole("alertdialog")).toHaveTextContent("Could not import")
             expect(nodeRoot("learn")).not.toBeNull()
-            alertSpy.mockRestore()
+
+            // Dismissing the dialog is a one-way acknowledgement -- there's nothing to confirm or undo.
+            fireEvent.click(screen.getByRole("button", { name: "Got it" }))
+            await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
         })
     })
 

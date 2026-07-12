@@ -28,7 +28,13 @@ import { RewardDetailCard, RewardsBoard } from "./RewardsBoard"
 import { BoardTree } from "./BoardTree"
 import { isLinkedNode, type Node } from "./nodes"
 import { NavActions } from "./NavActions"
-import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
+import {
+    addScribble as addScribbleToList,
+    removeScribble,
+    renameScribble as renameScribbleInList,
+    type Scribble,
+    updateScribbleScene as updateScribbleSceneInList
+} from "./scribbles"
 import { deserialize, loadState, type PersistedSlices, saveState, serialize } from "./persist"
 import { type Board, boardCompleter, boardsReducer, linkedNodeName, linkWouldCycle, type NodeRestore, seedBoard } from "./board"
 import { SectionTransition } from "./SectionTransition"
@@ -38,13 +44,16 @@ import { TabBar } from "./TabBar"
 import { SyncBoard } from "./sync/SyncBoard"
 import { SyncNavButton } from "./sync/SyncNavButton"
 import { useSync } from "./sync/useSync"
+import { useDetailCard } from "./useDetailCard"
+import { useDismissOnOutside } from "./useDismissOnOutside"
 
-// Lazy so Excalidraw's bundle + CSS only load when the Draw tab is opened, not on first paint. Both
-// the notes wall (DrawBoard renders thumbnails via Excalidraw's exporter) and the editor share that chunk.
-const DrawBoard = lazy(() => import("./DrawBoard").then((m) => ({ default: m.DrawBoard })))
-const ExcalidrawBoard = lazy(() => import("./ExcalidrawBoard").then((m) => ({ default: m.ExcalidrawBoard })))
+// Lazy so Excalidraw's bundle + CSS only load when the Scribbles tab is opened, not on first paint. Both
+// the scribbles wall (ScribblesBoard renders thumbnails via Excalidraw's exporter) and the editor share
+// that chunk.
+const ScribblesBoard = lazy(() => import("./ScribblesBoard").then((m) => ({ default: m.ScribblesBoard })))
+const ScribbleEditor = lazy(() => import("./ScribbleEditor").then((m) => ({ default: m.ScribbleEditor })))
 
-// Node, board, task, reward, and note ids are globally unique, minted as `${prefix}-${uuid}`. No
+// Node, board, task, reward, and scribble ids are globally unique, minted as `${prefix}-${uuid}`. No
 // counters: nothing needs to resume past loaded data, so a random id can never collide.
 const mintId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
 
@@ -61,6 +70,10 @@ function resolveHash(hash: string, boards: Record<string, Board>): { boardId: st
     return boardId ? { boardId, nodeId: hash } : null
 }
 
+// The top-level view: the roadmap board, the Tasks list, the Rewards shop, the Sync screen, or the
+// Scribbles wall/editor.
+type Section = "roadmap" | "tasks" | "rewards" | "sync" | "scribbles"
+
 // The tab + node to open on first render, seeded from the URL hash if it points at a known board/node,
 // else the first board with nothing selected (the canvas fits the whole tree).
 type Boot = {
@@ -69,7 +82,7 @@ type Boot = {
     tasks: Task[]
     rewards: Reward[]
     banked: Banked
-    notes: Note[]
+    scribbles: Scribble[]
     activeId: string
     selectedId: string | null
     hadHash: boolean
@@ -83,8 +96,8 @@ function computeBoot(): Boot {
     // before these views simply had none, and loads empty rather than re-seeding.
     const rawTasks = loaded?.tasks ?? SEED_TASKS
     const rawRewards = loaded?.rewards ?? SEED_REWARDS
-    // Draw notes start empty (no tutorial seed); an existing save loads whatever it had.
-    const notes = loaded?.notes ?? []
+    // Scribbles start empty (no tutorial seed); an existing save loads whatever it had.
+    const scribbles = loaded?.scribbles ?? []
     // Fold any task/reward already past its 14-day window into the banked totals and drop it, so storage
     // stays small across reloads while the balance (banked + live) is unchanged.
     const { tasks, rewards, banked } = compact(
@@ -93,13 +106,37 @@ function computeBoot(): Boot {
         loaded?.banked ?? { earned: 0, spent: 0 },
         Date.now()
     )
-    const base = { boards, order, tasks, rewards, banked, notes }
+    const base = { boards, order, tasks, rewards, banked, scribbles }
 
     const resolved = resolveHash(window.location.hash.slice(1), boards)
     if (resolved) return { ...base, activeId: resolved.boardId, selectedId: resolved.nodeId, hadHash: true }
     // No hash: open the first board with nothing selected (the canvas fits the whole tree by default).
     return { ...base, activeId: order[0] ?? "", selectedId: null, hadHash: false }
 }
+
+// Dismiss-on-outside allowlists for the three detail cards, module-level so each array keeps one stable
+// reference across renders (useDismissOnOutside takes it as an effect dependency).
+const NODE_DISMISS_SELECTORS = [
+    "[data-detail-card]",
+    ".react-flow__node",
+    ".react-flow__controls",
+    "[data-tabbar]",
+    '[role="alertdialog"]'
+]
+const TASK_DISMISS_SELECTORS = [
+    "[data-task-detail-card]",
+    "[data-task-tile]",
+    "[data-add-task-trigger]",
+    "[data-tabbar]",
+    '[role="alertdialog"]'
+]
+const REWARD_DISMISS_SELECTORS = [
+    "[data-reward-detail-card]",
+    "[data-reward-id]",
+    "[data-add-reward-trigger]",
+    "[data-tabbar]",
+    '[role="alertdialog"]'
+]
 
 export function App() {
     // Each tab is a Board (its own roadmap). All boards are equal; `order` fixes tab order, `activeId`
@@ -112,13 +149,6 @@ export function App() {
     const sfx = useSfx()
     const [{ boards, order }, dispatch] = useReducer(boardsReducer, { boards: boot.boards, order: boot.order })
     const [activeId, setActiveId] = useState(boot.activeId)
-    // `selectedId` is the intent (null once dismissed); `displayId` is what the card shows and trails
-    // `selectedId` on dismissal so the exit animation can play before the card unmounts.
-    const [selectedId, setSelectedId] = useState<string | null>(boot.selectedId)
-    const [displayId, setDisplayId] = useState<string | null>(boot.selectedId)
-    // A node just added via the detail card: its card opens in edit mode so the name is editable at
-    // once. Cleared the moment that card mounts, so re-selecting the node later opens the read view.
-    const [editOnAddId, setEditOnAddId] = useState<string | null>(null)
     // An attach in flight: the id of the node being re-hung (it carries its whole subtree). Reached two
     // ways -- the "Detach" gesture (which PERSISTS the edge removal first, so the branch is already a
     // parked orphan while armed) and the "Attach" gesture on an already-parked orphan. Purely transient
@@ -140,36 +170,32 @@ export function App() {
     // Gold earned/spent by tasks and rewards pruned past their 14-day window (folded in at load by
     // compact()). Added to the live sums so the balance is unchanged by that compaction.
     const [banked, setBanked] = useState<Banked>(boot.banked)
-    // The Draw wall: standalone Excalidraw notes. `editingNoteId` picks the note open in the full editor;
-    // null shows the masonry grid of all notes.
-    const [notes, setNotes] = useState<Note[]>(boot.notes)
-    const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+    // The Scribbles wall: standalone Excalidraw scribbles. `editingScribbleId` picks the scribble open in
+    // the full editor; null shows the masonry grid of all scribbles.
+    const [scribbles, setScribbles] = useState<Scribble[]>(boot.scribbles)
+    const [editingScribbleId, setEditingScribbleId] = useState<string | null>(null)
     // The just-added scribble, ringed briefly on the wall so a new card is easy to spot.
-    const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null)
-    const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync" | "excalidraw">("roadmap")
-    // Link mode: set while the Draw wall is being used to attach a scribble back to a milestone. Holds the
-    // target (board + node) the picked or freshly-drawn scribble links to. Entered from a node card's "Add
-    // scribble"; cleared on leaving the Draw view. null outside link mode = the wall behaves normally.
+    const [highlightScribbleId, setHighlightScribbleId] = useState<string | null>(null)
+    const [section, setSection] = useState<Section>("roadmap")
+    // The roadmap node's detail card -- selection / display / edit-on-add lifecycle, closing outright
+    // when the roadmap section isn't on screen (see useDetailCard; the task and reward cards below share
+    // the exact same shape). Only this card boots pre-selected, from a URL hash.
+    const nodeCard = useDetailCard("roadmap", section, boot.selectedId)
+    const { selectedId, displayId, editOnAddId, closing } = nodeCard
+    // The Tasks list's detail card -- same lifecycle as the node card above, scoped to the Tasks view.
+    const taskCard = useDetailCard("tasks", section)
+    const { selectedId: selectedTaskId, displayId: displayTaskId, editOnAddId: editOnAddTaskId, closing: taskClosing } = taskCard
+    // The Rewards shelf's detail card -- same lifecycle again, scoped to the Rewards view.
+    const rewardCard = useDetailCard("rewards", section)
+    const { selectedId: selectedRewardId, displayId: displayRewardId, editOnAddId: editOnAddRewardId, closing: rewardClosing } = rewardCard
+    // Link mode: set while the Scribbles wall is being used to attach a scribble back to a node. Holds
+    // the target (board + node) the picked or freshly-drawn scribble links to. Entered from a node card's
+    // "Add scribble"; cleared on leaving the Scribbles view. null outside link mode = the wall behaves
+    // normally.
     const [linkTarget, setLinkTarget] = useState<{ boardId: string; nodeId: string } | null>(null)
-    // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
-    // id the card actually shows -- `displayTaskId` trails `selectedTaskId` on dismissal so the exit
-    // animation can play before the card unmounts (mirrors selectedId / displayId for nodes).
-    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-    const [displayTaskId, setDisplayTaskId] = useState<string | null>(null)
-    // A task just added: its detail card opens in edit mode so the name is editable at once. Cleared the
-    // moment that card mounts, so re-selecting the task later opens the read view.
-    const [editOnAddTaskId, setEditOnAddTaskId] = useState<string | null>(null)
     // The section on screen at first load appears instantly; every section entered afterward plays the
     // SectionTransition fade + rise. Flipped off just after the initial mount (below).
     const firstSectionRef = useRef(true)
-    // The reward whose detail card is open (the intent, null once dismissed), and the id the card
-    // actually shows -- `displayRewardId` trails `selectedRewardId` on dismissal so the exit animation
-    // plays before the card unmounts (mirrors selectedTaskId / displayTaskId).
-    const [selectedRewardId, setSelectedRewardId] = useState<string | null>(null)
-    const [displayRewardId, setDisplayRewardId] = useState<string | null>(null)
-    // A reward just created from the shelf's + tile: its card opens in edit mode. Cleared once that card
-    // mounts, so re-selecting the reward later opens the read view.
-    const [editOnAddRewardId, setEditOnAddRewardId] = useState<string | null>(null)
     // A node to pan the canvas onto; the nonce (re)triggers centering on URL navigation.
     const [focusId, setFocusId] = useState(boot.hadHash ? (boot.selectedId ?? "") : "")
     const [focusNonce, setFocusNonce] = useState(boot.hadHash ? 1 : 0)
@@ -214,150 +240,49 @@ export function App() {
         sfx.fanfare()
     }, [active, activeId, sfx])
 
-    useEffect(() => {
-        if (selectedId !== null) setDisplayId(selectedId)
-    }, [selectedId])
-
-    // Consume the edit-on-add flag once the target node's card has mounted (edit state has latched), so a
-    // later re-select of that same node opens the read view instead.
-    useEffect(() => {
-        if (editOnAddId !== null && displayId === editOnAddId) setEditOnAddId(null)
-    }, [editOnAddId, displayId])
-
-    useEffect(() => {
-        if (selectedTaskId !== null) setDisplayTaskId(selectedTaskId)
-    }, [selectedTaskId])
-
-    // Consume the edit-on-add flag once the added task's card has mounted (edit state has latched), so a
-    // later re-select of that task opens the read view instead.
-    useEffect(() => {
-        if (editOnAddTaskId !== null && displayTaskId === editOnAddTaskId) setEditOnAddTaskId(null)
-    }, [editOnAddTaskId, displayTaskId])
-
-    useEffect(() => {
-        if (selectedRewardId !== null) setDisplayRewardId(selectedRewardId)
-    }, [selectedRewardId])
-
-    // Consume the edit-on-add flag once the new reward's card has mounted (edit state has latched), so a
-    // later re-select of that reward opens the read view instead.
-    useEffect(() => {
-        if (editOnAddRewardId !== null && displayRewardId === editOnAddRewardId) setEditOnAddRewardId(null)
-    }, [editOnAddRewardId, displayRewardId])
-
     // Initial mount is done: from here on, a section change remounts SectionTransition (keyed by
     // section) and plays its entrance.
     useEffect(() => {
         firstSectionRef.current = false
     }, [])
 
-    // Leaving the Rewards view closes any open reward detail card outright.
+    // Leaving the Scribbles view drops back to the wall and ends any link-mode session, so re-entering
+    // never reopens a stale editor or resumes a stale link.
     useEffect(() => {
-        if (section !== "rewards") {
-            setSelectedRewardId(null)
-            setDisplayRewardId(null)
-        }
-    }, [section])
-
-    // Leaving the Tasks view closes any open task detail card outright (both the intent and the
-    // trailing display id), so re-entering doesn't flash a stale card mid-exit.
-    useEffect(() => {
-        if (section !== "tasks") {
-            setSelectedTaskId(null)
-            setDisplayTaskId(null)
-        }
-    }, [section])
-
-    // Leaving the Draw view drops back to the wall and ends any link-mode session, so re-entering never
-    // reopens a stale editor or resumes a stale link.
-    useEffect(() => {
-        if (section !== "excalidraw") {
-            setEditingNoteId(null)
+        if (section !== "scribbles") {
+            setEditingScribbleId(null)
             setLinkTarget(null)
         }
     }, [section])
 
     // Fade the new-scribble highlight ring shortly after it's added.
     useEffect(() => {
-        if (highlightNoteId === null) return
-        const timer = setTimeout(() => setHighlightNoteId(null), 1600)
+        if (highlightScribbleId === null) return
+        const timer = setTimeout(() => setHighlightScribbleId(null), 1600)
         return () => clearTimeout(timer)
-    }, [highlightNoteId])
+    }, [highlightScribbleId])
 
-    // Dismiss the task detail card on Escape or a click outside it, but not on a task tile (which
-    // selects) or the tab bar. Mirrors the node card / add-reward dismissal.
-    useEffect(() => {
-        if (selectedTaskId === null) return
-        const onPointerDown = (event: PointerEvent) => {
-            const target = event.target as Element | null
-            if (
-                target?.closest("[data-task-detail-card]") ||
-                target?.closest("[data-task-tile]") ||
-                target?.closest("[data-add-task-trigger]") ||
-                target?.closest("[data-tabbar]") ||
-                target?.closest('[role="alertdialog"]')
-            ) {
-                return
-            }
-            setSelectedTaskId(null)
-        }
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setSelectedTaskId(null)
-        }
-        document.addEventListener("pointerdown", onPointerDown)
-        document.addEventListener("keydown", onKeyDown)
-        return () => {
-            document.removeEventListener("pointerdown", onPointerDown)
-            document.removeEventListener("keydown", onKeyDown)
-        }
-    }, [selectedTaskId])
-
-    // Dismiss the reward detail card on Escape or a click outside it, but not on a reward tile (which
-    // selects), the + trigger (which opens the add card), or the tab bar. Mirrors the task card.
-    useEffect(() => {
-        if (selectedRewardId === null) return
-        const onPointerDown = (event: PointerEvent) => {
-            const target = event.target as Element | null
-            if (
-                target?.closest("[data-reward-detail-card]") ||
-                target?.closest("[data-reward-id]") ||
-                target?.closest("[data-add-reward-trigger]") ||
-                target?.closest("[data-tabbar]") ||
-                target?.closest('[role="alertdialog"]')
-            ) {
-                return
-            }
-            setSelectedRewardId(null)
-        }
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setSelectedRewardId(null)
-        }
-        document.addEventListener("pointerdown", onPointerDown)
-        document.addEventListener("keydown", onKeyDown)
-        return () => {
-            document.removeEventListener("pointerdown", onPointerDown)
-            document.removeEventListener("keydown", onKeyDown)
-        }
-    }, [selectedRewardId])
-
-    // Clicking the empty board (not the card, a node, the canvas controls, or the tab bar) dismisses.
-    useEffect(() => {
-        if (selectedId === null) return
-        const onPointerDown = (event: PointerEvent) => {
-            const target = event.target as Element | null
-            if (
-                target?.closest("[data-detail-card]") ||
-                target?.closest(".react-flow__node") ||
-                target?.closest(".react-flow__controls") ||
-                target?.closest("[data-tabbar]") ||
-                target?.closest('[role="alertdialog"]')
-            ) {
-                return
-            }
-            setSelectedId(null)
-        }
-        document.addEventListener("pointerdown", onPointerDown)
-        return () => document.removeEventListener("pointerdown", onPointerDown)
-    }, [selectedId])
+    // Dismiss a detail card on Escape or a click outside it (but not on its own tile / add-trigger, the
+    // tab bar, or a confirm dialog). The roadmap node, the Tasks card, and the Rewards card all share the
+    // same wiring here -- just a different allowlist per card (see useDismissOnOutside).
+    useDismissOnOutside({
+        active: selectedId !== null,
+        selectors: NODE_DISMISS_SELECTORS,
+        escape: true,
+        onDismiss: nodeCard.close
+    })
+    useDismissOnOutside({
+        active: selectedTaskId !== null,
+        selectors: TASK_DISMISS_SELECTORS,
+        escape: true,
+        onDismiss: taskCard.close
+    })
+    useDismissOnOutside({
+        active: selectedRewardId !== null,
+        selectors: REWARD_DISMISS_SELECTORS,
+        escape: true,
+        onDismiss: rewardCard.close
+    })
 
     // Mirror the selected node into the URL hash (shareable), keyed by the node's own id: a minted id is
     // already `node-<uuid>`, so the hash is `#node-<uuid>` (no doubled prefix). Replaces, never pushes.
@@ -375,7 +300,7 @@ export function App() {
         if (!resolved) return
         setSection("roadmap")
         setActiveId(resolved.boardId)
-        setSelectedId(resolved.nodeId)
+        nodeCard.select(resolved.nodeId)
         setFocusId(resolved.nodeId)
         setFocusNonce((n) => n + 1)
     }, [boards])
@@ -388,13 +313,13 @@ export function App() {
     // Autosave the app's data (not the open tab) 400ms after the last change, so a drag — which fires
     // moveNode rapidly — coalesces into a single write.
     useEffect(() => {
-        const timer = setTimeout(() => saveState({ boards, boardOrder: order, tasks, rewards, banked, notes }), 400)
+        const timer = setTimeout(() => saveState({ boards, boardOrder: order, tasks, rewards, banked, scribbles }), 400)
         return () => clearTimeout(timer)
-    }, [boards, order, tasks, rewards, banked, notes])
+    }, [boards, order, tasks, rewards, banked, scribbles])
 
     // Select a node and pan the canvas onto it; the URL hash follows the selection.
     const focusNode = useCallback((id: string) => {
-        setSelectedId(id)
+        nodeCard.select(id)
         setFocusId(id)
         setFocusNonce((n) => n + 1)
     }, [])
@@ -403,7 +328,7 @@ export function App() {
     const selectFromCanvas = useCallback(
         (id: string) => {
             sfx.tick()
-            setSelectedId(id)
+            nodeCard.select(id)
         },
         [sfx]
     )
@@ -416,8 +341,7 @@ export function App() {
     const addTaskItem = useCallback(() => {
         const id = mintId("task")
         setTasks((prev) => addTask(prev, id, DEFAULT_TASK_NAME))
-        setSelectedTaskId(id)
-        setEditOnAddTaskId(id)
+        taskCard.openForAdd(id)
     }, [])
     const toggleTask = useCallback(
         (id: string) => {
@@ -435,7 +359,7 @@ export function App() {
     )
     // Open a task's detail card, and edit its name / reward in place. Deleting from the card removes the
     // task and closes the card.
-    const selectTask = useCallback((id: string) => setSelectedTaskId(id), [])
+    const selectTask = useCallback((id: string) => taskCard.select(id), [])
     const editTaskItem = useCallback(
         (id: string, patch: { text?: string; reward?: number }) => setTasks((prev) => edit(prev, id, patch)),
         []
@@ -447,7 +371,7 @@ export function App() {
             const task = tasks.find((t) => t.id === id)
             if (task && task.done) setBanked((b) => ({ ...b, earned: b.earned + task.reward }))
             setTasks((prev) => remove(prev, id))
-            setSelectedTaskId(null)
+            taskCard.close()
         },
         [tasks]
     )
@@ -456,84 +380,87 @@ export function App() {
     // touch the active board. Redeeming is a one-off buy: it stamps the reward's `redeemedAt` (when the
     // balance covers the price), which spends the gold and starts the 14-day shelf window.
     const openRewards = useCallback(() => setSection("rewards"), [])
-    // The Draw wall. Opening it always lands on the grid (never straight into a note); a new note opens
-    // its blank canvas at once. Renames and scene edits patch the one flat notes list (never a board).
-    const openExcalidraw = useCallback(() => {
-        setEditingNoteId(null)
-        setSection("excalidraw")
+    // The Scribbles wall. Opening it always lands on the grid (never straight into a scribble); a new
+    // scribble opens its blank canvas at once. Renames and scene edits patch the one flat scribbles list
+    // (never a board).
+    const openScribbles = useCallback(() => {
+        setEditingScribbleId(null)
+        setSection("scribbles")
     }, [])
-    // End a link-mode session (see startLinkScribble) and return to the milestone it began from -- its
+    // End a link-mode session (see startLinkScribble) and return to the node it began from -- its
     // board active, that node selected -- whether the scribble was picked, freshly drawn, or cancelled.
     const returnToLinkTarget = useCallback(() => {
         if (!linkTarget) return
         setActiveId(linkTarget.boardId)
-        setSelectedId(linkTarget.nodeId)
+        nodeCard.select(linkTarget.nodeId)
         setLinkTarget(null)
         setSection("roadmap")
     }, [linkTarget])
     // Click a wall card: normally opens it in the editor. In link mode it instead attaches that existing
-    // scribble to the target milestone and returns there (no editor) -- the "pick existing" half of the flow.
-    const openNote = useCallback(
+    // scribble to the target node and returns there (no editor) -- the "pick existing" half of the flow.
+    const openScribble = useCallback(
         (id: string) => {
             if (linkTarget) {
-                dispatch({ type: "linkNote", boardId: linkTarget.boardId, id: linkTarget.nodeId, noteId: id })
+                dispatch({ type: "linkScribble", boardId: linkTarget.boardId, id: linkTarget.nodeId, scribbleId: id })
                 returnToLinkTarget()
                 return
             }
-            setEditingNoteId(id)
+            setEditingScribbleId(id)
         },
         [linkTarget, returnToLinkTarget]
     )
     // The editor's Back: normally returns to the wall. In link mode (a just-drawn new scribble) it returns
-    // to the milestone the scribble was attached to instead.
-    const backToNotes = useCallback(() => {
+    // to the node the scribble was attached to instead.
+    const backToScribbles = useCallback(() => {
         if (linkTarget) {
             returnToLinkTarget()
             return
         }
-        setEditingNoteId(null)
+        setEditingScribbleId(null)
     }, [linkTarget, returnToLinkTarget])
     // The wall's + : mint an empty scribble (newest first) and drop straight into its blank canvas, so a
     // new scribble is one click from the editor. In link mode it also attaches the fresh scribble to the
-    // target milestone before opening, so the editor's Back returns there. Still ringed on the wall for a
-    // quick back-out. The section is already the Draw view (the + only renders there).
-    const addNoteItem = useCallback(() => {
-        const id = mintId("note")
-        setNotes((prev) => addNote(prev, id, Date.now()))
-        if (linkTarget) dispatch({ type: "linkNote", boardId: linkTarget.boardId, id: linkTarget.nodeId, noteId: id })
-        setEditingNoteId(id)
-        setHighlightNoteId(id)
+    // target node before opening, so the editor's Back returns there. Still ringed on the wall for a
+    // quick back-out. The section is already the Scribbles view (the + only renders there).
+    const addScribble = useCallback(() => {
+        const id = mintId("scribble")
+        setScribbles((prev) => addScribbleToList(prev, id, Date.now()))
+        if (linkTarget) dispatch({ type: "linkScribble", boardId: linkTarget.boardId, id: linkTarget.nodeId, scribbleId: id })
+        setEditingScribbleId(id)
+        setHighlightScribbleId(id)
     }, [linkTarget])
-    const renameNoteItem = useCallback((id: string, title: string) => setNotes((prev) => renameNote(prev, id, title)), [])
-    const updateNoteSceneItem = useCallback(
-        (id: string, scene: Note["scene"]) => setNotes((prev) => updateNoteScene(prev, id, scene, Date.now())),
+    const renameScribble = useCallback(
+        (id: string, title: string) => setScribbles((prev) => renameScribbleInList(prev, id, title)),
         []
     )
-    const deleteNoteItem = useCallback((id: string) => {
-        setNotes((prev) => removeNote(prev, id))
-        // Sweep the deleted scribble off every node that linked it, so no milestone keeps a dangling
-        // reference (the render-time filter in `linkedNotes` guards imported / synced data too).
-        dispatch({ type: "pruneNote", noteId: id })
-        setEditingNoteId((current) => (current === id ? null : current))
+    const updateScribbleScene = useCallback(
+        (id: string, scene: Scribble["scene"]) => setScribbles((prev) => updateScribbleSceneInList(prev, id, scene, Date.now())),
+        []
+    )
+    const deleteScribble = useCallback((id: string) => {
+        setScribbles((prev) => removeScribble(prev, id))
+        // Sweep the deleted scribble off every node that linked it, so no node keeps a dangling
+        // reference (the render-time filter in `linkedScribbles` guards imported / synced data too).
+        dispatch({ type: "pruneScribble", scribbleId: id })
+        setEditingScribbleId((current) => (current === id ? null : current))
     }, [])
-    // Open a scribble linked to a milestone: jump to the Draw view AND straight into that note's canvas.
-    // A node-card chip (and a just-minted scribble) both route here; `openNote` alone can't, since it
-    // doesn't switch section, so this pairs the section switch with the open.
-    const openNoteFromNode = useCallback((noteId: string) => {
-        setSection("excalidraw")
-        setEditingNoteId(noteId)
+    // Open a scribble linked to a node: jump to the Scribbles view AND straight into that scribble's
+    // canvas. A node-card chip (and a just-minted scribble) both route here; `openScribble` alone can't,
+    // since it doesn't switch section, so this pairs the section switch with the open.
+    const openScribbleFromNode = useCallback((scribbleId: string) => {
+        setSection("scribbles")
+        setEditingScribbleId(scribbleId)
     }, [])
     // The shelf's + tile creates a default reward on the spot, selects it, and opens its card in edit
     // mode so the name/price are editable at once (mirrors adding a task or a node).
     const addRewardDefault = useCallback(() => {
         const id = mintId("reward")
         setRewards((prev) => addReward(prev, id, DEFAULT_REWARD_NAME, DEFAULT_REWARD_PRICE))
-        setSelectedRewardId(id)
-        setEditOnAddRewardId(id)
+        rewardCard.openForAdd(id)
     }, [])
     // Open a reward's detail card, and edit its name / price / replenish in place. Deleting from the card
     // removes the reward and closes the card.
-    const selectReward = useCallback((id: string) => setSelectedRewardId(id), [])
+    const selectReward = useCallback((id: string) => rewardCard.select(id), [])
     const editRewardItem = useCallback(
         (id: string, patch: { name?: string; price?: number; replenish?: boolean }) =>
             setRewards((prev) => editReward(prev, id, patch)),
@@ -546,14 +473,15 @@ export function App() {
             const reward = rewards.find((r) => r.id === id)
             if (reward && reward.redeemedAt !== undefined) setBanked((b) => ({ ...b, spent: b.spent + reward.price }))
             setRewards((prev) => removeReward(prev, id))
-            setSelectedRewardId(null)
+            rewardCard.close()
         },
         [rewards]
     )
     // Un-redeem a reward: clears its redeemedAt, so the spend drops out and the gold returns.
     const unredeemRewardItem = useCallback((id: string) => setRewards((prev) => unredeem(prev, id)), [])
-    // Mint an id up front for a possible replenished copy; redeem uses it only when the reward restocks
-    // (an unused id just leaves a harmless gap in the sequence).
+    // Mint an id up front for a possible replenished copy; redeem uses it only when the reward restocks.
+    // Ids are random UUIDs (no counters), so a minted-but-unused id is simply discarded, not a gap left
+    // in some sequence.
     const redeemReward = useCallback(
         (id: string) => {
             // A coin ka-ching, but only when the buy will actually go through (mirrors redeem()'s guard).
@@ -606,7 +534,7 @@ export function App() {
         dispatch({ type: "deleteNode", boardId: activeId, id: selectedId })
         // Move selection to the parent so the card stays valid, but DON'T focusNode it -- centering would
         // jump the viewport. Deleting keeps the current pan / zoom.
-        setSelectedId(parent)
+        nodeCard.select(parent)
     }, [selectedId, active, activeId])
 
     // Edit the selected node's name/description/reward in place.
@@ -657,7 +585,7 @@ export function App() {
         if (selectedId === null) return
         const childId = mintId("node")
         dispatch({ type: "addChild", boardId: activeId, parentId: selectedId, childId })
-        setEditOnAddId(childId)
+        nodeCard.armEditOnAdd(childId)
         focusNode(childId)
     }, [selectedId, activeId, focusNode])
 
@@ -668,7 +596,7 @@ export function App() {
         if (selectedId === null) return
         const newId = mintId("node")
         dispatch({ type: "addParent", boardId: activeId, targetId: selectedId, newId })
-        setEditOnAddId(newId)
+        nodeCard.armEditOnAdd(newId)
         focusNode(newId)
     }, [selectedId, activeId, focusNode])
 
@@ -688,7 +616,7 @@ export function App() {
         if (parentOf(selectedId, active.edges) === null) return // root / already-parentless: nothing to detach
         dispatch({ type: "detach", boardId: activeId, id: selectedId })
         setReparenting({ nodeId: selectedId })
-        setSelectedId(null)
+        nodeCard.close()
     }, [selectedId, active, activeId])
 
     // Attach (re-home) the selected node: it's already a parked orphan (detached earlier), so this just
@@ -697,7 +625,7 @@ export function App() {
     const attachSelected = useCallback(() => {
         if (selectedId === null) return
         setReparenting({ nodeId: selectedId })
-        setSelectedId(null)
+        nodeCard.close()
     }, [selectedId])
 
     // Attach the reparenting node under a clicked target. Valid = a node in this board that is reachable
@@ -803,23 +731,23 @@ export function App() {
         [selectedId, activeId]
     )
 
-    // Scribbles on the selected milestone. Unlink drops one from the node (the chip's × in edit mode).
-    // Add scribble opens the Draw wall in "link mode" bound to this node: picking an existing scribble
-    // links it (openNote), a new one links + opens the editor (addNoteItem), and either way the wall
+    // Scribbles on the selected node. Unlink drops one from the node (the chip's × in edit mode).
+    // Add scribble opens the Scribbles wall in "link mode" bound to this node: picking an existing scribble
+    // links it (openScribble), a new one links + opens the editor (addScribble), and either way the wall
     // returns here (returnToLinkTarget). Both key on the selected node (a no-op while nothing's selected);
     // the card offers them only on a regular / root node.
-    const unlinkNote = useCallback(
-        (noteId: string) => {
+    const unlinkScribble = useCallback(
+        (scribbleId: string) => {
             if (selectedId === null) return
-            dispatch({ type: "unlinkNote", boardId: activeId, id: selectedId, noteId })
+            dispatch({ type: "unlinkScribble", boardId: activeId, id: selectedId, scribbleId })
         },
         [selectedId, activeId]
     )
     const startLinkScribble = useCallback(() => {
         if (selectedId === null) return
         setLinkTarget({ boardId: activeId, nodeId: selectedId })
-        setEditingNoteId(null)
-        setSection("excalidraw")
+        setEditingScribbleId(null)
+        setSection("scribbles")
     }, [selectedId, activeId])
 
     // Switch to another tab, selecting its root node so the card shows something valid immediately.
@@ -827,7 +755,7 @@ export function App() {
         (id: string) => {
             setSection("roadmap")
             setActiveId(id)
-            setSelectedId(boards[id]?.rootId ?? null)
+            nodeCard.select(boards[id]?.rootId ?? null)
         },
         [boards]
     )
@@ -848,7 +776,7 @@ export function App() {
         dispatch({ type: "addBoard", boardId, rootId, name: "New Quest" })
         setSection("roadmap")
         setActiveId(boardId)
-        setEditOnAddId(rootId)
+        nodeCard.armEditOnAdd(rootId)
         focusNode(rootId)
     }, [focusNode])
 
@@ -868,10 +796,10 @@ export function App() {
                 const neighbour = nextOrder[Math.min(index, nextOrder.length - 1)]
                 if (neighbour) {
                     setActiveId(neighbour)
-                    setSelectedId(boards[neighbour]?.rootId ?? null)
+                    nodeCard.select(boards[neighbour]?.rootId ?? null)
                 } else {
                     setActiveId("")
-                    setSelectedId(null)
+                    nodeCard.select(null)
                 }
             }
         },
@@ -880,8 +808,8 @@ export function App() {
 
     // Serialize the app's data (not the open tab) for the Export button to download.
     const handleExport = useCallback(
-        () => serialize({ boards, boardOrder: order, tasks, rewards, banked, notes }),
-        [boards, order, tasks, rewards, banked, notes]
+        () => serialize({ boards, boardOrder: order, tasks, rewards, banked, scribbles }),
+        [boards, order, tasks, rewards, banked, scribbles]
     )
 
     // Replace the whole app from a loaded state -- an imported file or a roadmap synced down from another
@@ -891,21 +819,23 @@ export function App() {
         setTasks(loaded.tasks)
         setRewards(loaded.rewards)
         setBanked(loaded.banked)
-        setNotes(loaded.notes)
-        setEditingNoteId(null)
+        setScribbles(loaded.scribbles)
+        setEditingScribbleId(null)
         setSection("roadmap")
         const nextActive = loaded.boardOrder[0] ?? ""
         setActiveId(nextActive)
-        setSelectedId(loaded.boards[nextActive]?.rootId ?? null)
+        nodeCard.select(loaded.boards[nextActive]?.rootId ?? null)
     }, [])
 
-    // Replace the whole app from an imported file. Invalid input is rejected with an alert and changes
-    // nothing; a valid file is applied like any loaded state.
+    // Replace the whole app from an imported file. Invalid input is rejected with a themed confirm dialog
+    // (below, near the render's other one-off dialogs) and changes nothing; a valid file is applied like
+    // any loaded state.
+    const [importError, setImportError] = useState(false)
     const handleImport = useCallback(
         (json: string) => {
             const loaded = deserialize(json)
             if (!loaded) {
-                alert("Could not import: the file is not a valid questline export.")
+                setImportError(true)
                 return
             }
             applyLoaded(loaded)
@@ -916,8 +846,8 @@ export function App() {
     // Cross-device sync: opt-in, end-to-end encrypted, and inert unless VITE_SYNC_URL is set at build.
     // It reads the same slices the autosave persists and applies an incoming roadmap through applyLoaded.
     const syncSlices = useMemo<PersistedSlices>(
-        () => ({ boards, boardOrder: order, tasks, rewards, banked, notes }),
-        [boards, order, tasks, rewards, banked, notes]
+        () => ({ boards, boardOrder: order, tasks, rewards, banked, scribbles }),
+        [boards, order, tasks, rewards, banked, scribbles]
     )
     const sync = useSync(syncSlices, applyLoaded)
 
@@ -943,16 +873,13 @@ export function App() {
     // survives dismissal long enough to animate out (looked up in the full list, so a done task within
     // its TTL still resolves). Absent once its task is deleted, which unmounts the card immediately.
     const displayedTask = displayTaskId !== null ? tasks.find((task) => task.id === displayTaskId) : undefined
-    const taskClosing = selectedTaskId === null && displayTaskId !== null
 
     // The reward backing the open reward detail card, keyed off the trailing displayRewardId (looked up
     // in the full list so a redeemed one within its TTL still resolves). Absent once deleted, unmounting
     // the card immediately.
     const displayedReward =
         displayRewardId !== null ? rewards.find((reward) => reward.id === displayRewardId) : undefined
-    const rewardClosing = selectedRewardId === null && displayRewardId !== null
 
-    const closing = selectedId === null && displayId !== null
     // The node backing the open detail card. Kind is positional: the root node is the one whose id is
     // the board's rootId; a linked node carries the targetBoardId key; otherwise it's a regular node.
     // Deleting the root removes the whole board; any other node removes its own subtree.
@@ -972,20 +899,20 @@ export function App() {
     // or a board that already links back to this one) -- a cyclic link leaves both boards uncompletable.
     const linkedBoardOptions = isLinked ? tabs.filter((tab) => !linkWouldCycle(boards, activeId, tab.id)) : []
 
-    // Scribbles linked to the shown node, resolved to live notes -- dangling ids (a scribble deleted from
-    // the wall) drop out here, the render-time half of the guard pruneNote handles on delete. Only a
-    // regular / root node carries scribbles; a linked node never does.
-    const shownNoteIds = shown && !isLinked ? (shown.noteIds ?? []) : []
-    const linkedNotes = shownNoteIds
-        .map((id) => notes.find((note) => note.id === id))
-        .filter((note): note is Note => note !== undefined)
-        .map((note) => ({ id: note.id, title: note.title }))
-    // In link mode, the wall's banner names the milestone the picked / new scribble will attach to.
+    // Scribbles linked to the shown node, resolved to live scribbles -- dangling ids (a scribble deleted
+    // from the wall) drop out here, the render-time half of the guard pruneScribble handles on delete.
+    // Only a regular / root node carries scribbles; a linked node never does.
+    const shownScribbleIds = shown && !isLinked ? (shown.scribbleIds ?? []) : []
+    const linkedScribbles = shownScribbleIds
+        .map((id) => scribbles.find((scribble) => scribble.id === id))
+        .filter((scribble): scribble is Scribble => scribble !== undefined)
+        .map((scribble) => ({ id: scribble.id, title: scribble.title }))
+    // In link mode, the wall's banner names the node the picked / new scribble will attach to.
     const linkTargetName = linkTarget ? (boards[linkTarget.boardId]?.nodes[linkTarget.nodeId]?.name ?? "") : ""
 
-    // The Draw note open in the editor (null → show the wall). A deleted id resolves to undefined, which
+    // The scribble open in the editor (null → show the wall). A deleted id resolves to undefined, which
     // falls back to the wall.
-    const editingNote = editingNoteId !== null ? notes.find((note) => note.id === editingNoteId) : undefined
+    const editingScribble = editingScribbleId !== null ? scribbles.find((scribble) => scribble.id === editingScribbleId) : undefined
 
     return (
         <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#f6edd6]">
@@ -1001,8 +928,8 @@ export function App() {
                         tasksActive={section === "tasks"}
                         onOpenRewards={openRewards}
                         rewardsActive={section === "rewards"}
-                        onOpenExcalidraw={openExcalidraw}
-                        excalidrawActive={section === "excalidraw"}
+                        onOpenScribbles={openScribbles}
+                        scribblesActive={section === "scribbles"}
                     />
                 }
                 trailing={
@@ -1046,7 +973,7 @@ export function App() {
                                     onEdit={(patch) => editTaskItem(displayedTask.id, patch)}
                                     onDelete={() => deleteTaskItem(displayedTask.id)}
                                     initialEditing={displayedTask.id === editOnAddTaskId}
-                                    onExited={() => setDisplayTaskId(null)}
+                                    onExited={taskCard.clearDisplay}
                                 />
                             </aside>
                         )}
@@ -1076,7 +1003,7 @@ export function App() {
                                     onDelete={() => deleteRewardItem(displayedReward.id)}
                                     onUnredeem={() => unredeemRewardItem(displayedReward.id)}
                                     initialEditing={displayedReward.id === editOnAddRewardId}
-                                    onExited={() => setDisplayRewardId(null)}
+                                    onExited={rewardCard.clearDisplay}
                                 />
                             </aside>
                         ) : null}
@@ -1085,7 +1012,7 @@ export function App() {
                     <div className="themed-scroll absolute inset-0 z-10 overflow-auto">
                         <SyncBoard sync={sync} />
                     </div>
-                ) : section === "excalidraw" ? (
+                ) : section === "scribbles" ? (
                     <Suspense
                         fallback={
                             <div className="absolute inset-0 z-10 grid place-items-center text-[15px] italic text-[#a2916c]">
@@ -1093,23 +1020,23 @@ export function App() {
                             </div>
                         }
                     >
-                        {editingNote ? (
-                            <ExcalidrawBoard
-                                key={editingNote.id}
-                                note={editingNote}
-                                onChange={(scene) => updateNoteSceneItem(editingNote.id, scene)}
-                                onRename={(title) => renameNoteItem(editingNote.id, title)}
-                                onBack={backToNotes}
-                                onDelete={() => deleteNoteItem(editingNote.id)}
+                        {editingScribble ? (
+                            <ScribbleEditor
+                                key={editingScribble.id}
+                                scribble={editingScribble}
+                                onChange={(scene) => updateScribbleScene(editingScribble.id, scene)}
+                                onRename={(title) => renameScribble(editingScribble.id, title)}
+                                onBack={backToScribbles}
+                                onDelete={() => deleteScribble(editingScribble.id)}
                             />
                         ) : (
                             <div className="themed-scroll absolute inset-0 z-10 overflow-auto">
-                                <DrawBoard
-                                    notes={notes}
-                                    onOpen={openNote}
-                                    onAdd={addNoteItem}
-                                    onRename={renameNoteItem}
-                                    highlightId={highlightNoteId}
+                                <ScribblesBoard
+                                    scribbles={scribbles}
+                                    onOpen={openScribble}
+                                    onAdd={addScribble}
+                                    onRename={renameScribble}
+                                    highlightId={highlightScribbleId}
                                     linkMode={linkTarget !== null}
                                     linkTargetName={linkTargetName}
                                     onCancelLink={returnToLinkTarget}
@@ -1170,9 +1097,9 @@ export function App() {
                                     targetBoardId={shown.targetBoardId ?? null}
                                     onSetLinkedTarget={setLinkedTarget}
                                     onGoToBoard={goToBoard}
-                                    linkedNotes={linkedNotes}
-                                    onOpenNote={openNoteFromNode}
-                                    onUnlinkNote={isLinked ? undefined : unlinkNote}
+                                    linkedScribbles={linkedScribbles}
+                                    onOpenScribble={openScribbleFromNode}
+                                    onUnlinkScribble={isLinked ? undefined : unlinkScribble}
                                     onAddScribble={isLinked ? undefined : startLinkScribble}
                                     closing={closing}
                                     onToggle={toggleTodo}
@@ -1192,7 +1119,7 @@ export function App() {
                                     deleteKind={deleteKind}
                                     descendantCount={deleteDescendantCount}
                                     initialEditing={shown.id === editOnAddId}
-                                    onExited={() => setDisplayId(null)}
+                                    onExited={nodeCard.clearDisplay}
                                 />
                             </aside>
                         )}
@@ -1214,6 +1141,16 @@ export function App() {
                 onConfirm={() => setOversizedDismissed(true)}
                 onOpenChange={(open) => {
                     if (!open) setOversizedDismissed(true)
+                }}
+            />
+            <ConfirmDialog
+                open={importError}
+                title="Could not import"
+                message={<>That file isn't a valid Questline export, so nothing was changed.</>}
+                confirmLabel="Got it"
+                onConfirm={() => setImportError(false)}
+                onOpenChange={(open) => {
+                    if (!open) setImportError(false)
                 }}
             />
         </div>

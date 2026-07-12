@@ -44,7 +44,7 @@ export function Pencil(props: IconProps) {
     )
 }
 
-// Scribble: a pencil over a baseline -- the Draw note glyph, matching DrawBoard's empty-state mark.
+// Scribble: a pencil over a baseline -- the scribble glyph, matching ScribblesBoard's empty-state mark.
 export function Scribble(props: IconProps) {
     return (
         <Icon {...props}>

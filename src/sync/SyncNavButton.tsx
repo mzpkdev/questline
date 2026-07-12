@@ -4,7 +4,7 @@
 
 import { ioButtonClass } from "../IoButtons"
 
-// Theme gold (the goal / reward accent), shown when sync is on.
+// Theme gold (the reward/gold accent), shown when sync is on.
 const GOLD = "#e6c458"
 
 export function SyncNavButton({ on, onOpen }: { on: boolean; onOpen: () => void }) {

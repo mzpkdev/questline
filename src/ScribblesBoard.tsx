@@ -1,17 +1,17 @@
-// The Draw view: a masonry wall of the user's Excalidraw notes, one card per drawing, plus a dashed
-// tile to start a new one. Deliberately bare — no search, grouping, or filters. Each card previews the
-// actual sketch (a static SVG exported headless from the scene) at its own aspect ratio, so the wall
+// The Scribbles view: a masonry wall of the user's Excalidraw scribbles, one card per drawing, plus a
+// dashed tile to start a new one. Deliberately bare — no search, grouping, or filters. Each card previews
+// the actual sketch (a static SVG exported headless from the scene) at its own aspect ratio, so the wall
 // staggers into a real masonry via CSS multi-column. Clicking a card opens it full-screen in
-// ExcalidrawBoard; the title renames inline; the × removes it. Styling matches RewardsBoard's shelf
+// ScribbleEditor; the title renames inline; the × removes it. Styling matches RewardsBoard's shelf
 // (the parchment + gold double-gradient card frame).
 //
 // This module imports @excalidraw/excalidraw (for the thumbnail export), so App lazy-loads it — the
-// heavy canvas bundle ships only once the Draw tab is opened, never on first paint.
+// heavy canvas bundle ships only once the Scribbles tab is opened, never on first paint.
 
 import { exportToSvg, restore } from "@excalidraw/excalidraw"
 import { useEffect, useState } from "react"
 import { Plus } from "./icons"
-import type { Note, NoteScene } from "./notes"
+import type { Scribble, ScribbleScene } from "./scribbles"
 
 // The card frame: the same double-gradient border trick as a reward tile (a cream padding-box fill
 // beneath a gold border-box frame).
@@ -28,13 +28,14 @@ const CARD_SHADOW =
 const shortDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 
 // --- Thumbnail rendering -------------------------------------------------------------------------
-// A note's scene is exported to a standalone SVG once and memoised by `${id}:${updatedAt}`, so the
-// costly export runs only when a drawing actually changes (updatedAt bumps). Only one entry per note is
-// kept: a fresh render evicts the note's older one, so the cache can't grow without bound as a note is
-// edited. Returns the SVG's markup (not the node) so React can inject it and remounts stay cheap.
+// A scribble's scene is exported to a standalone SVG once and memoised by `${id}:${updatedAt}`, so the
+// costly export runs only when a drawing actually changes (updatedAt bumps). Only one entry per scribble
+// is kept: a fresh render evicts the scribble's older one, so the cache can't grow without bound as a
+// scribble is edited. Returns the SVG's markup (not the node) so React can inject it and remounts stay
+// cheap.
 const thumbCache = new Map<string, Promise<string | null>>()
 
-async function renderThumb(scene: NoteScene): Promise<string | null> {
+async function renderThumb(scene: ScribbleScene): Promise<string | null> {
     // restore() rehydrates the stored scene into typed elements exportToSvg accepts.
     const restored = restore({ elements: scene.elements, appState: scene.appState, files: scene.files } as never, null, null)
     const elements = restored.elements.filter((element) => !element.isDeleted)
@@ -58,24 +59,24 @@ async function renderThumb(scene: NoteScene): Promise<string | null> {
     return svg.outerHTML
 }
 
-function thumbFor(note: Note): Promise<string | null> {
-    const key = `${note.id}:${note.updatedAt}`
+function thumbFor(scribble: Scribble): Promise<string | null> {
+    const key = `${scribble.id}:${scribble.updatedAt}`
     const cached = thumbCache.get(key)
     if (cached) return cached
-    for (const existing of thumbCache.keys()) if (existing.startsWith(`${note.id}:`)) thumbCache.delete(existing)
-    const pending = renderThumb(note.scene).catch(() => null)
+    for (const existing of thumbCache.keys()) if (existing.startsWith(`${scribble.id}:`)) thumbCache.delete(existing)
+    const pending = renderThumb(scribble.scene).catch(() => null)
     thumbCache.set(key, pending)
     return pending
 }
 
-function NoteThumbnail({ note }: { note: Note }) {
+function ScribbleThumbnail({ scribble }: { scribble: Scribble }) {
     const [markup, setMarkup] = useState<string | null>(null)
     const [ready, setReady] = useState(false)
 
     useEffect(() => {
         let cancelled = false
         setReady(false)
-        thumbFor(note).then((svg) => {
+        thumbFor(scribble).then((svg) => {
             if (cancelled) return
             setMarkup(svg)
             setReady(true)
@@ -83,8 +84,8 @@ function NoteThumbnail({ note }: { note: Note }) {
         return () => {
             cancelled = true
         }
-        // Keyed on the scene version, not the note object (which is a fresh reference on any rename).
-    }, [note.id, note.updatedAt])
+        // Keyed on the scene version, not the scribble object (which is a fresh reference on any rename).
+    }, [scribble.id, scribble.updatedAt])
 
     if (!ready) return <div className="h-[132px] animate-[pulse2_1.4s_ease-in-out_infinite] bg-[#efe6cc]" />
     if (!markup) {
@@ -115,43 +116,43 @@ function NoteThumbnail({ note }: { note: Note }) {
 const TITLE_INPUT =
     "w-full min-w-0 rounded-md border border-[#d8c48f] bg-[#fffdf5] px-1.5 py-0.5 font-display text-[13px] font-semibold text-[#4a3410] focus:border-[#b8892b] focus:shadow-[0_0_0_2px_rgba(230,196,88,0.35)] focus:outline-none"
 
-function NoteCard({
-    note,
+function ScribbleCard({
+    scribble,
     onOpen,
     onRename,
     highlighted
 }: {
-    note: Note
+    scribble: Scribble
     onOpen: (id: string) => void
     onRename: (id: string, title: string) => void
     highlighted?: boolean
 }) {
     const [editing, setEditing] = useState(false)
-    const [draft, setDraft] = useState(note.title)
+    const [draft, setDraft] = useState(scribble.title)
 
     const commit = () => {
-        onRename(note.id, draft)
+        onRename(scribble.id, draft)
         setEditing(false)
     }
 
     return (
         <div
-            data-note-id={note.id}
-            onClick={() => onOpen(note.id)}
+            data-scribble-id={scribble.id}
+            onClick={() => onOpen(scribble.id)}
             className={`group relative mb-4 flex break-inside-avoid cursor-pointer flex-col gap-2 rounded-[15px] p-2.5 transition-[box-shadow] duration-150 ease-out animate-[itemIn_0.25s_ease] ${CARD_SHADOW} ${
                 highlighted ? "ring-2 ring-[#e6c458] ring-offset-1 ring-offset-[#f6edd6]" : ""
             }`}
             style={CARD_STYLE}
         >
             <div className="overflow-hidden rounded-[10px]">
-                <NoteThumbnail note={note} />
+                <ScribbleThumbnail scribble={scribble} />
             </div>
             <div className="flex items-center justify-between gap-2 px-0.5">
                 {editing ? (
                     // biome-ignore lint/a11y/noAutofocus: opening the inline rename should take focus
                     <input
                         autoFocus
-                        aria-label="Note title"
+                        aria-label="Scribble title"
                         className={TITLE_INPUT}
                         value={draft}
                         maxLength={60}
@@ -166,32 +167,32 @@ function NoteCard({
                 ) : (
                     <button
                         type="button"
-                        aria-label={`Rename ${note.title}`}
+                        aria-label={`Rename ${scribble.title}`}
                         title="Click to rename"
                         onClick={(event) => {
                             event.stopPropagation()
-                            setDraft(note.title)
+                            setDraft(scribble.title)
                             setEditing(true)
                         }}
                         className="min-w-0 truncate bg-transparent text-left font-display text-[13.5px] font-semibold text-[#4a3410] transition-colors duration-150 ease-out hover:text-[#8a641d]"
                     >
-                        {note.title}
+                        {scribble.title}
                     </button>
                 )}
-                <time className="flex-none font-display text-[11px] text-[#a2916c]">{shortDate(note.updatedAt)}</time>
+                <time className="flex-none font-display text-[11px] text-[#a2916c]">{shortDate(scribble.updatedAt)}</time>
             </div>
         </div>
     )
 }
 
-type DrawBoardProps = {
-    notes: Note[]
+type ScribblesBoardProps = {
+    scribbles: Scribble[]
     onOpen: (id: string) => void
     onAdd: () => void
     onRename: (id: string, title: string) => void
     // The just-added scribble id, ringed briefly on the wall.
     highlightId?: string | null
-    // Link mode: the wall was opened from a milestone's "Add scribble" to attach one back to it. Swaps the
+    // Link mode: the wall was opened from a node's "Add scribble" to attach one back to it. Swaps the
     // header for a banner naming the target (with Cancel); the click wiring is unchanged (App routes onOpen
     // to link the picked card and onAdd to mint + link a fresh one), so this only tells the user the mode.
     linkMode?: boolean
@@ -199,7 +200,7 @@ type DrawBoardProps = {
     onCancelLink?: () => void
 }
 
-export function DrawBoard({ notes, onOpen, onAdd, onRename, highlightId, linkMode = false, linkTargetName, onCancelLink }: DrawBoardProps) {
+export function ScribblesBoard({ scribbles, onOpen, onAdd, onRename, highlightId, linkMode = false, linkTargetName, onCancelLink }: ScribblesBoardProps) {
     return (
         <div className="mx-auto w-[95%] max-w-[1400px] px-1 py-10">
             {linkMode ? (
@@ -232,7 +233,7 @@ export function DrawBoard({ notes, onOpen, onAdd, onRename, highlightId, linkMod
             <div className="columns-2 gap-4 sm:columns-3 lg:columns-4 xl:columns-5">
                 <button
                     type="button"
-                    data-add-note-trigger=""
+                    data-add-scribble-trigger=""
                     aria-label="Add Scribble"
                     title="Add Scribble"
                     onClick={onAdd}
@@ -240,13 +241,13 @@ export function DrawBoard({ notes, onOpen, onAdd, onRename, highlightId, linkMod
                 >
                     <Plus size={22} />
                 </button>
-                {notes.map((note) => (
-                    <NoteCard
-                        key={note.id}
-                        note={note}
+                {scribbles.map((scribble) => (
+                    <ScribbleCard
+                        key={scribble.id}
+                        scribble={scribble}
                         onOpen={onOpen}
                         onRename={onRename}
-                        highlighted={note.id === highlightId}
+                        highlighted={scribble.id === highlightId}
                     />
                 ))}
             </div>

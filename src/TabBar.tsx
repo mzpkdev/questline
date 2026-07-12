@@ -12,7 +12,7 @@ import {
     useRef,
     useState
 } from "react"
-import { PlusIcon } from "./PlusIcon"
+import { Plus } from "./icons"
 
 // How long a press must hold before it opens the inline rename (touch has no double-click).
 const LONG_PRESS_MS = 500
@@ -166,7 +166,7 @@ export function TabBar(props: TabBarProps) {
                     title="New Quest"
                     onClick={props.onAddBoard}
                 >
-                    <PlusIcon size={13} />
+                    <Plus size={13} />
                     New Quest
                 </button>
             )}

@@ -2,7 +2,6 @@ import { DEFAULT_NODE_REWARD, type Edge, isLinkedNode, type Node } from "./nodes
 import {
     addBoard,
     addChild,
-    addLinkedNode,
     type Board,
     type Boards,
     convertToLinkedNode,
@@ -18,18 +17,18 @@ import {
     editNode,
     insertParent,
     linkedNodeName,
-    linkNote,
+    linkScribble,
     linkWouldCycle,
     moveNode,
     newBoard,
-    pruneNote,
+    pruneScribble,
     removeBoard,
     reparent,
     seedBoard,
     setLinkedTarget,
     toggleTodo,
     uncompleteNode,
-    unlinkNote,
+    unlinkScribble,
     UNLINKED_LABEL
 } from "./board"
 
@@ -134,7 +133,7 @@ describe("insertParent", () => {
     it("splices a regular node above a linked target, dropping its subtree a tier and keeping it linked", () => {
         // A linked node under finish-node (tier 2 -> the link lands at tier 3), pointed at another board
         // and carrying a child of its own, so the subtree shift is observable.
-        const linked = setLinkedTarget(addLinkedNode(seedBoard(), "finish-node", "link-x"), "link-x", "other-board")
+        const linked = setLinkedTarget(convertToLinkedNode(addChild(seedBoard(), "finish-node", "link-x"), "link-x"), "link-x", "other-board")
         const withChild = addChild(linked, "link-x", "link-child")
         expect(isLinkedNode(withChild.nodes["link-x"] as Node)).toBe(true)
 
@@ -315,34 +314,6 @@ describe("detach", () => {
     })
 })
 
-describe("addLinkedNode", () => {
-    it("attaches an unlinked linked node child (targetBoardId null, no reward/checklist)", () => {
-        const next = addLinkedNode(seedBoard(), "finish-node", "node-link")
-        const link = next.nodes["node-link"]
-        expect(link).toBeDefined()
-        // Kind is positional: the targetBoardId key is present, and starts null (unlinked).
-        expect(isLinkedNode(link as Node)).toBe(true)
-        expect(link?.targetBoardId).toBeNull()
-        // No reward / description of its own; positioned a tier below its parent, with the edge.
-        expect(link?.reward).toBeUndefined()
-        expect(link?.description).toBeUndefined()
-        expect(link?.tier).toBe(3)
-        expect(next.edges).toContainEqual(["finish-node", "node-link"])
-    })
-
-    it("un-completes the parent (and ancestors) when the fresh linked child is incomplete", () => {
-        const board = completeNode(seedBoard(), "plan-goal", true, () => false)
-        expect(board.mastered.has("plan-goal")).toBe(true)
-        const next = addLinkedNode(board, "plan-goal", "node-link")
-        expect(next.mastered.has("plan-goal")).toBe(false)
-    })
-
-    it("is a no-op (same reference) for an unknown parent", () => {
-        const board = seedBoard()
-        expect(addLinkedNode(board, "nope", "node-link")).toBe(board)
-    })
-})
-
 describe("convertToLinkedNode", () => {
     it("reshapes a regular node into an unlinked linked node, dropping checklist / reward / mastery", () => {
         // break-steps is a mastered leaf with a checklist, under plan-goal.
@@ -371,14 +342,14 @@ describe("convertToLinkedNode", () => {
         const board = seedBoard()
         expect(convertToLinkedNode(board, board.rootId)).toBe(board)
         expect(convertToLinkedNode(board, "does-not-exist")).toBe(board)
-        const withLinked = addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "lk")
+        const withLinked = convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "lk"), "lk")
         expect(convertToLinkedNode(withLinked, "lk")).toBe(withLinked)
     })
 })
 
 describe("convertToRegularNode", () => {
     // A board with one (unlinked) linked node under its root.
-    const withLinked = (): Board => addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "lk")
+    const withLinked = (): Board => convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "lk"), "lk")
 
     it("drops the targetBoardId key and gives a regular-node shape, keeping position and edge", () => {
         const next = convertToRegularNode(withLinked(), "lk")
@@ -424,7 +395,7 @@ describe("convertToRegularNode", () => {
 
 describe("setLinkedTarget", () => {
     // A board holding one linked node (unlinked) under its root.
-    const withLink = (): Board => addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "link")
+    const withLink = (): Board => convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "link"), "link")
 
     it("points a linked node at a board, and clears it back to unlinked with null", () => {
         const linked = setLinkedTarget(withLink(), "link", "board-x")
@@ -448,8 +419,8 @@ describe("setLinkedTarget", () => {
 describe("linkWouldCycle", () => {
     // Board A links to B; B and C each carry one (still unlinked) linked node.
     const boardsWithLinks = (): Boards => ({
-        a: setLinkedTarget(addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link", "b"),
-        b: addLinkedNode(newBoard("b", "b-root", "B"), "b-root", "b-link"),
+        a: setLinkedTarget(convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link"), "a-link", "b"),
+        b: convertToLinkedNode(addChild(newBoard("b", "b-root", "B"), "b-root", "b-link"), "b-link"),
         c: newBoard("c", "c-root", "C")
     })
 
@@ -473,8 +444,8 @@ describe("linkWouldCycle", () => {
 describe("boardsReducer setLinkedTarget cycle guard", () => {
     const linkedState = (): BoardsState => ({
         boards: {
-            a: setLinkedTarget(addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link", "b"),
-            b: addLinkedNode(newBoard("b", "b-root", "B"), "b-root", "b-link"),
+            a: setLinkedTarget(convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link"), "a-link", "b"),
+            b: convertToLinkedNode(addChild(newBoard("b", "b-root", "B"), "b-root", "b-link"), "b-link"),
             c: newBoard("c", "c-root", "C")
         },
         order: ["a", "b", "c"]
@@ -529,71 +500,71 @@ describe("editNode / moveNode", () => {
     })
 })
 
-describe("linkNote", () => {
+describe("linkScribble", () => {
     it("appends a scribble id, minting the list on the first link (a new board)", () => {
         const board = seedBoard()
-        const next = linkNote(board, "plan-goal", "note-1")
+        const next = linkScribble(board, "plan-goal", "note-1")
         expect(next).not.toBe(board) // a NEW board, the seed untouched
-        expect(next.nodes["plan-goal"]?.noteIds).toEqual(["note-1"])
+        expect(next.nodes["plan-goal"]?.scribbleIds).toEqual(["note-1"])
     })
 
     it("appends further ids without dropping the earlier ones", () => {
-        const next = linkNote(linkNote(seedBoard(), "plan-goal", "note-1"), "plan-goal", "note-2")
-        expect(next.nodes["plan-goal"]?.noteIds).toEqual(["note-1", "note-2"])
+        const next = linkScribble(linkScribble(seedBoard(), "plan-goal", "note-1"), "plan-goal", "note-2")
+        expect(next.nodes["plan-goal"]?.scribbleIds).toEqual(["note-1", "note-2"])
     })
 
-    it("links the root node too (a milestone can carry scribbles)", () => {
+    it("links the root node too (a node can carry scribbles)", () => {
         const board = seedBoard()
-        const next = linkNote(board, board.rootId, "note-1")
-        expect(next.nodes["learn"]?.noteIds).toEqual(["note-1"])
+        const next = linkScribble(board, board.rootId, "note-1")
+        expect(next.nodes["learn"]?.scribbleIds).toEqual(["note-1"])
     })
 
-    it("is a no-op (same reference) for an unknown id, a linked node, or an already-linked note", () => {
+    it("is a no-op (same reference) for an unknown id, a linked node, or an already-linked scribble", () => {
         const board = seedBoard()
-        expect(linkNote(board, "does-not-exist", "note-1")).toBe(board) // unknown id
+        expect(linkScribble(board, "does-not-exist", "note-1")).toBe(board) // unknown id
         // A linked node carries a board pointer, not scribbles, so it is refused.
-        const withLinked = addLinkedNode(seedBoard(), "learn", "lnk")
-        expect(linkNote(withLinked, "lnk", "note-1")).toBe(withLinked)
-        // Re-linking the same note never duplicates it.
-        const linked = linkNote(board, "plan-goal", "note-1")
-        expect(linkNote(linked, "plan-goal", "note-1")).toBe(linked)
+        const withLinked = convertToLinkedNode(addChild(seedBoard(), "learn", "lnk"), "lnk")
+        expect(linkScribble(withLinked, "lnk", "note-1")).toBe(withLinked)
+        // Re-linking the same scribble never duplicates it.
+        const linked = linkScribble(board, "plan-goal", "note-1")
+        expect(linkScribble(linked, "plan-goal", "note-1")).toBe(linked)
     })
 })
 
-describe("unlinkNote", () => {
+describe("unlinkScribble", () => {
     it("removes a scribble id, leaving an emptied list as []", () => {
-        const board = linkNote(seedBoard(), "plan-goal", "note-1")
-        const next = unlinkNote(board, "plan-goal", "note-1")
-        expect(next.nodes["plan-goal"]?.noteIds).toEqual([])
+        const board = linkScribble(seedBoard(), "plan-goal", "note-1")
+        const next = unlinkScribble(board, "plan-goal", "note-1")
+        expect(next.nodes["plan-goal"]?.scribbleIds).toEqual([])
     })
 
     it("drops only the named id, keeping the rest", () => {
-        const board = linkNote(linkNote(seedBoard(), "plan-goal", "note-1"), "plan-goal", "note-2")
-        const next = unlinkNote(board, "plan-goal", "note-1")
-        expect(next.nodes["plan-goal"]?.noteIds).toEqual(["note-2"])
+        const board = linkScribble(linkScribble(seedBoard(), "plan-goal", "note-1"), "plan-goal", "note-2")
+        const next = unlinkScribble(board, "plan-goal", "note-1")
+        expect(next.nodes["plan-goal"]?.scribbleIds).toEqual(["note-2"])
     })
 
-    it("is a no-op (same reference) for an unknown id or a note that wasn't linked", () => {
-        const board = linkNote(seedBoard(), "plan-goal", "note-1")
-        expect(unlinkNote(board, "does-not-exist", "note-1")).toBe(board) // unknown id
-        expect(unlinkNote(board, "plan-goal", "note-x")).toBe(board) // that note isn't linked here
+    it("is a no-op (same reference) for an unknown id or a scribble that wasn't linked", () => {
+        const board = linkScribble(seedBoard(), "plan-goal", "note-1")
+        expect(unlinkScribble(board, "does-not-exist", "note-1")).toBe(board) // unknown id
+        expect(unlinkScribble(board, "plan-goal", "note-x")).toBe(board) // that scribble isn't linked here
         const fresh = seedBoard()
-        expect(unlinkNote(fresh, "track-progress", "note-1")).toBe(fresh) // node carries no scribbles at all
+        expect(unlinkScribble(fresh, "track-progress", "note-1")).toBe(fresh) // node carries no scribbles at all
     })
 })
 
-describe("pruneNote", () => {
+describe("pruneScribble", () => {
     it("sweeps a scribble id off every node that linked it", () => {
         // Two nodes both link the same scribble; pruning clears it from each.
-        const board = linkNote(linkNote(seedBoard(), "plan-goal", "note-1"), "track-progress", "note-1")
-        const next = pruneNote(board, "note-1")
-        expect(next.nodes["plan-goal"]?.noteIds).toEqual([])
-        expect(next.nodes["track-progress"]?.noteIds).toEqual([])
+        const board = linkScribble(linkScribble(seedBoard(), "plan-goal", "note-1"), "track-progress", "note-1")
+        const next = pruneScribble(board, "note-1")
+        expect(next.nodes["plan-goal"]?.scribbleIds).toEqual([])
+        expect(next.nodes["track-progress"]?.scribbleIds).toEqual([])
     })
 
     it("is a no-op (same reference) when no node linked it", () => {
-        const board = linkNote(seedBoard(), "plan-goal", "note-1")
-        expect(pruneNote(board, "note-x")).toBe(board)
+        const board = linkScribble(seedBoard(), "plan-goal", "note-1")
+        expect(pruneScribble(board, "note-x")).toBe(board)
     })
 })
 
@@ -686,7 +657,8 @@ describe("boardGold", () => {
 describe("completeNode / uncompleteNode across boards (linked children)", () => {
     // A board whose root's only child is a linked node pointing at "target": the root is gated by that
     // link, which masters exactly when boardComplete("target") is true.
-    const withLinkedChild = (): Board => setLinkedTarget(addLinkedNode(newBoard("x", "x-root", "X"), "x-root", "x-link"), "x-link", "target")
+    const withLinkedChild = (): Board =>
+        setLinkedTarget(convertToLinkedNode(addChild(newBoard("x", "x-root", "X"), "x-root", "x-link"), "x-link"), "x-link", "target")
 
     it("keeps the root locked while its linked child's target board is incomplete", () => {
         const b = withLinkedChild()
@@ -707,7 +679,7 @@ describe("completeNode / uncompleteNode across boards (linked children)", () => 
     it("un-completing under a linked ancestor never drops an ancestor above the link", () => {
         // P (root) -> L (linked) -> C. Mark P and C complete by hand; a linked node is never in the set,
         // so the up-cascade from C breaks at L and P survives.
-        let b = addChild(addLinkedNode(newBoard("x", "P", "P"), "P", "L"), "L", "C")
+        let b = addChild(convertToLinkedNode(addChild(newBoard("x", "P", "P"), "P", "L"), "L"), "L", "C")
         b = setLinkedTarget(b, "L", "target")
         b = { ...b, mastered: new Set(["P", "C"]) }
         const next = uncompleteNode(b, "C")
@@ -764,10 +736,10 @@ describe("removeBoard", () => {
     it("unlinks every linked node pointing at the deleted board, across all survivors, keeping subtrees", () => {
         // Two survivors each carry a linked node aimed at the doomed board `t`; a child hangs under one
         // of those linked nodes to prove the subtree stays put.
-        let a = addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link")
+        let a = convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link")
         a = setLinkedTarget(a, "a-link", "t")
         a = addChild(a, "a-link", "a-link-child")
-        let b = addLinkedNode(newBoard("b", "b-root", "B"), "b-root", "b-link")
+        let b = convertToLinkedNode(addChild(newBoard("b", "b-root", "B"), "b-root", "b-link"), "b-link")
         b = setLinkedTarget(b, "b-link", "t")
         const t = newBoard("t", "t-root", "Target")
         const state: BoardsState = { boards: { a, b, t }, order: ["a", "b", "t"] }
@@ -782,7 +754,7 @@ describe("removeBoard", () => {
     })
 
     it("leaves a survivor's reference stable when none of its linked nodes pointed at the deleted board", () => {
-        let a = addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link")
+        let a = convertToLinkedNode(addChild(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link")
         a = setLinkedTarget(a, "a-link", "other") // points elsewhere, not at the doomed board
         const b = newBoard("b", "b-root", "B")
         const state: BoardsState = { boards: { a, b }, order: ["a", "b"] }
@@ -814,8 +786,9 @@ describe("boardsReducer", () => {
         expect(next.boards.seed?.edges).toContainEqual(["track-progress", "finish-node"])
     })
 
-    it("routes addLinkedNode then setLinkedTarget through their ops", () => {
-        let s = boardsReducer(state(), { type: "addLinkedNode", boardId: "seed", parentId: "learn", childId: "link" })
+    it("routes addChild + convertToLinked, then setLinkedTarget, through their ops", () => {
+        let s = boardsReducer(state(), { type: "addChild", boardId: "seed", parentId: "learn", childId: "link" })
+        s = boardsReducer(s, { type: "convertToLinked", boardId: "seed", id: "link" })
         expect(isLinkedNode(s.boards.seed?.nodes.link as Node)).toBe(true)
         expect(s.boards.seed?.nodes.link?.targetBoardId).toBeNull()
 
@@ -823,35 +796,35 @@ describe("boardsReducer", () => {
         expect(s.boards.seed?.nodes.link?.targetBoardId).toBe("board-x")
     })
 
-    it("routes linkNote then unlinkNote through their ops, updating the right board", () => {
-        let s = boardsReducer(state(), { type: "linkNote", boardId: "seed", id: "plan-goal", noteId: "note-1" })
-        expect(s.boards.seed?.nodes["plan-goal"]?.noteIds).toEqual(["note-1"])
+    it("routes linkScribble then unlinkScribble through their ops, updating the right board", () => {
+        let s = boardsReducer(state(), { type: "linkScribble", boardId: "seed", id: "plan-goal", scribbleId: "note-1" })
+        expect(s.boards.seed?.nodes["plan-goal"]?.scribbleIds).toEqual(["note-1"])
 
-        s = boardsReducer(s, { type: "unlinkNote", boardId: "seed", id: "plan-goal", noteId: "note-1" })
-        expect(s.boards.seed?.nodes["plan-goal"]?.noteIds).toEqual([])
+        s = boardsReducer(s, { type: "unlinkScribble", boardId: "seed", id: "plan-goal", scribbleId: "note-1" })
+        expect(s.boards.seed?.nodes["plan-goal"]?.scribbleIds).toEqual([])
     })
 
-    it("keeps the whole state reference stable on a no-op linkNote / unlinkNote", () => {
+    it("keeps the whole state reference stable on a no-op linkScribble / unlinkScribble", () => {
         const s = state()
-        // linkNote on an unknown node is a no-op inside the op, so the reducer returns state as-is.
-        expect(boardsReducer(s, { type: "linkNote", boardId: "seed", id: "ghost", noteId: "note-1" })).toBe(s)
-        // Unlinking a note that was never linked is a no-op too.
-        expect(boardsReducer(s, { type: "unlinkNote", boardId: "seed", id: "plan-goal", noteId: "note-1" })).toBe(s)
+        // linkScribble on an unknown node is a no-op inside the op, so the reducer returns state as-is.
+        expect(boardsReducer(s, { type: "linkScribble", boardId: "seed", id: "ghost", scribbleId: "note-1" })).toBe(s)
+        // Unlinking a scribble that was never linked is a no-op too.
+        expect(boardsReducer(s, { type: "unlinkScribble", boardId: "seed", id: "plan-goal", scribbleId: "note-1" })).toBe(s)
     })
 
-    it("sweeps a pruned scribble off nodes across every board (pruneNote is map-level)", () => {
-        // Two boards each link note-1 on a node; a single pruneNote clears it map-wide (like removeBoard).
-        const a = linkNote(newBoard("a", "a-root", "A"), "a-root", "note-1")
-        const b = linkNote(newBoard("b", "b-root", "B"), "b-root", "note-1")
+    it("sweeps a pruned scribble off nodes across every board (pruneScribble is map-level)", () => {
+        // Two boards each link note-1 on a node; a single pruneScribble clears it map-wide (like removeBoard).
+        const a = linkScribble(newBoard("a", "a-root", "A"), "a-root", "note-1")
+        const b = linkScribble(newBoard("b", "b-root", "B"), "b-root", "note-1")
         const s: BoardsState = { boards: { a, b }, order: ["a", "b"] }
-        const next = boardsReducer(s, { type: "pruneNote", noteId: "note-1" })
-        expect(next.boards.a?.nodes["a-root"]?.noteIds).toEqual([])
-        expect(next.boards.b?.nodes["b-root"]?.noteIds).toEqual([])
+        const next = boardsReducer(s, { type: "pruneScribble", scribbleId: "note-1" })
+        expect(next.boards.a?.nodes["a-root"]?.scribbleIds).toEqual([])
+        expect(next.boards.b?.nodes["b-root"]?.scribbleIds).toEqual([])
     })
 
-    it("returns the same state reference when a pruneNote sweeps nothing", () => {
+    it("returns the same state reference when a pruneScribble sweeps nothing", () => {
         const s: BoardsState = { boards: { seed: seedBoard() }, order: ["seed"] }
-        expect(boardsReducer(s, { type: "pruneNote", noteId: "note-x" })).toBe(s)
+        expect(boardsReducer(s, { type: "pruneScribble", scribbleId: "note-x" })).toBe(s)
     })
 
     it("keeps the whole state reference stable on a no-op single-board action", () => {

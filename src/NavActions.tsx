@@ -27,10 +27,10 @@ type NavActionsProps = {
     onOpenRewards?: () => void
     // Highlights the Rewards chip (active-tab look) while its view is showing.
     rewardsActive?: boolean
-    // Opens the Excalidraw (Draw) canvas view.
-    onOpenExcalidraw?: () => void
-    // Highlights the Draw chip (active-tab look) while its view is showing.
-    excalidrawActive?: boolean
+    // Opens the Scribbles canvas view.
+    onOpenScribbles?: () => void
+    // Highlights the Scribbles chip (active-tab look) while its view is showing.
+    scribblesActive?: boolean
 }
 
 export function NavActions({
@@ -38,12 +38,12 @@ export function NavActions({
     tasksActive = false,
     onOpenRewards,
     rewardsActive = false,
-    onOpenExcalidraw,
-    excalidrawActive = false
+    onOpenScribbles,
+    scribblesActive = false
 }: NavActionsProps) {
     const tasksClass = `${chipBase} ${tasksActive ? activeChip : inactiveChip} gap-1.5`
     const rewardsClass = `${chipBase} ${rewardsActive ? activeChip : inactiveChip} gap-1.5`
-    const excalidrawClass = `${chipBase} ${excalidrawActive ? activeChip : inactiveChip} gap-1.5`
+    const scribblesClass = `${chipBase} ${scribblesActive ? activeChip : inactiveChip} gap-1.5`
     return (
         <>
             <button
@@ -82,11 +82,11 @@ export function NavActions({
             </button>
             <button
                 type="button"
-                className={excalidrawClass}
-                style={excalidrawActive ? activeShadow : undefined}
+                className={scribblesClass}
+                style={scribblesActive ? activeShadow : undefined}
                 title="Scribbles"
-                aria-pressed={excalidrawActive}
-                onClick={onOpenExcalidraw}
+                aria-pressed={scribblesActive}
+                onClick={onOpenScribbles}
             >
                 {/* A pencil (lucide pencil). */}
                 <svg {...iconProps}>

@@ -1,6 +1,6 @@
 import { createSfx } from "./sfx"
 
-const EFFECTS = ["blip", "pop", "success", "error", "tick", "coin", "fanfare"] as const
+const EFFECTS = ["blip", "success", "tick", "coin", "fanfare"] as const
 
 describe("createSfx", () => {
     it("returns a frozen kit exposing every effect plus the lifecycle controls", () => {

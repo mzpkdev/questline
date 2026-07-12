@@ -2,7 +2,7 @@
 // computed from the `mastered` set and the parent/child structure, exactly as the
 // mockup did. Kept free of React / React Flow so it can be unit-tested directly.
 
-import { type Edge, isLinkedNode, type Node, type NodeState, NODES } from "./nodes"
+import { type Edge, isLinkedNode, type Node, type NodeState } from "./nodes"
 
 export const STATE_LABEL: Record<NodeState, string> = {
     mastered: "Complete",
@@ -10,9 +10,6 @@ export const STATE_LABEL: Record<NodeState, string> = {
     locked: "Planned",
     detached: "Detached"
 }
-
-// Look up a node in the bundled seed graph (used by fixtures / tests).
-export const byId = (id: string): Node | undefined => NODES.find((n) => n.id === id)
 
 // child nodes drawn beneath `id`
 export const childrenOf = (id: string, edges: Edge[]): string[] =>

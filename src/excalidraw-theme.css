@@ -66,7 +66,7 @@
     --scrollbar-thumb-hover: #b8892b;
 }
 
-/* Hide the Library button: notes are self-contained sketches, no shared component library. */
+/* Hide the Library button: scribbles are self-contained sketches, no shared component library. */
 .excalidraw .sidebar-trigger {
     display: none;
 }

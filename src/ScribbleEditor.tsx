@@ -1,15 +1,15 @@
-// The Excalidraw editor for a single Draw note: opened from a card on the DrawBoard wall. It mounts
-// the stock editor with the parchment/gold reskin (excalidraw-theme.css), seeds it from the note's
-// saved scene, and streams edits back to App (debounced) so the note persists into questline state
+// The Excalidraw editor for a single scribble: opened from a card on the ScribblesBoard wall. It mounts
+// the stock editor with the parchment/gold reskin (excalidraw-theme.css), seeds it from the scribble's
+// saved scene, and streams edits back to App (debounced) so the scribble persists into questline state
 // like everything else. A header bar above the canvas holds the editable name and a Back-to-scribbles
-// button. App lazy-loads this module (with DrawBoard) so Excalidraw's weight only ships on open.
+// button. App lazy-loads this module (with ScribblesBoard) so Excalidraw's weight only ships on open.
 
 import "@excalidraw/excalidraw/index.css"
 import "./excalidraw-theme.css"
 import { Excalidraw, getSceneVersion, MainMenu, restore, serializeAsJSON } from "@excalidraw/excalidraw"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ConfirmDialog } from "./ConfirmDialog"
-import { DEFAULT_NOTE_TITLE, type Note, type NoteScene } from "./notes"
+import { DEFAULT_SCRIBBLE_TITLE, type Scribble, type ScribbleScene } from "./scribbles"
 
 // A trash glyph for the delete menu item.
 function TrashIcon() {
@@ -29,52 +29,53 @@ function BackChevron() {
     )
 }
 
-// Drop the image tool (roadmaps + notes stay vector-only; keeps synced blobs small). Stable object.
+// Drop the image tool (roadmaps + scribbles stay vector-only; keeps synced blobs small). Stable object.
 const UI_OPTIONS = { tools: { image: false } }
 // Coalesce the rapid onChange stream (fires on every pointer move while drawing) into one save.
 const SAVE_DEBOUNCE_MS = 500
-// The canvas starts on parchment when a note has no saved background of its own.
+// The canvas starts on parchment when a scribble has no saved background of its own.
 const PARCHMENT = "#f6edd6"
 
-type ExcalidrawBoardProps = {
-    note: Note
-    onChange: (scene: NoteScene) => void
+type ScribbleEditorProps = {
+    scribble: Scribble
+    onChange: (scene: ScribbleScene) => void
     onRename: (title: string) => void
     onBack: () => void
     onDelete: () => void
 }
 
-export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: ExcalidrawBoardProps) {
+export function ScribbleEditor({ scribble, onChange, onRename, onBack, onDelete }: ScribbleEditorProps) {
     const [confirmDelete, setConfirmDelete] = useState(false)
-    // The scribble's name, editable in the header bar. A local draft (seeded once per note -- App keys
-    // this component by note id, so a different note remounts and re-seeds) so keystrokes don't churn the
-    // notes list; it commits on blur / Enter. A blank falls back to the default, and the draft snaps to
-    // that fallback so the field never shows an empty name the store rejected.
-    const [title, setTitle] = useState(note.title)
+    // The scribble's name, editable in the header bar. A local draft (seeded once per scribble -- App
+    // keys this component by scribble id, so a different scribble remounts and re-seeds) so keystrokes
+    // don't churn the scribbles list; it commits on blur / Enter. A blank falls back to the default, and
+    // the draft snaps to that fallback so the field never shows an empty name the store rejected.
+    const [title, setTitle] = useState(scribble.title)
     const commitTitle = () => {
-        const next = title.trim() || DEFAULT_NOTE_TITLE
+        const next = title.trim() || DEFAULT_SCRIBBLE_TITLE
         setTitle(next)
         onRename(next)
     }
 
-    // Seed the editor from the note's saved scene. Read once per mounted note (App keys this component
-    // by note id, so a different note remounts and re-seeds); it must not reset as the user draws.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when a different note opens
+    // Seed the editor from the scribble's saved scene. Read once per mounted scribble (App keys this
+    // component by scribble id, so a different scribble remounts and re-seeds); it must not reset as the
+    // user draws.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when a different scribble opens
     const initialData = useMemo(() => {
         const restored = restore(
-            { elements: note.scene.elements, appState: note.scene.appState, files: note.scene.files } as never,
+            { elements: scribble.scene.elements, appState: scribble.scene.appState, files: scribble.scene.files } as never,
             null,
             null
         )
-        // The parchment canvas is a theme default, not per-note data: force it on every note (as the
-        // original single-canvas board did), so restore()'s default white never leaks through.
+        // The parchment canvas is a theme default, not per-scribble data: force it on every scribble (as
+        // the original single-canvas board did), so restore()'s default white never leaks through.
         return {
             elements: restored.elements,
             appState: { ...restored.appState, viewBackgroundColor: PARCHMENT },
             files: restored.files,
             scrollToContent: true
         }
-    }, [note.id])
+    }, [scribble.id])
 
     // Keep the latest onChange reachable from the stable Excalidraw handler without re-registering it.
     const onChangeRef = useRef(onChange)
@@ -84,7 +85,7 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
     // debounce timer, and the scene waiting to be written.
     const lastVersion = useRef<number | null>(null)
     const timer = useRef<number | null>(null)
-    const pending = useRef<NoteScene | null>(null)
+    const pending = useRef<ScribbleScene | null>(null)
 
     const flush = useCallback(() => {
         if (timer.current !== null) {
@@ -101,7 +102,7 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
         (elements: readonly { isDeleted?: boolean }[], appState: unknown, files: unknown) => {
             const version = getSceneVersion(elements as never)
             // The first emit is Excalidraw echoing the initial data on mount — record it and skip, so
-            // opening a note never rewrites it. Later emits with the same version are appState/selection
+            // opening a scribble never rewrites it. Later emits with the same version are appState/selection
             // noise we don't persist.
             if (lastVersion.current === null) {
                 lastVersion.current = version
@@ -121,7 +122,7 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
         [flush]
     )
 
-    // Persist any pending edit when the editor unmounts (leaving for the wall or switching notes).
+    // Persist any pending edit when the editor unmounts (leaving for the wall or switching scribbles).
     useEffect(() => flush, [flush])
 
     const back = () => {
@@ -149,7 +150,7 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
                     aria-label="Scribble name"
                     value={title}
                     maxLength={60}
-                    placeholder={DEFAULT_NOTE_TITLE}
+                    placeholder={DEFAULT_SCRIBBLE_TITLE}
                     onChange={(event) => setTitle(event.target.value)}
                     onBlur={commitTitle}
                     onKeyDown={(event) => {
@@ -182,7 +183,7 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
                 title="Delete this scribble?"
                 message={
                     <>
-                        Delete <strong className="font-semibold text-[#4a3410]">{note.title}</strong>? This can't be
+                        Delete <strong className="font-semibold text-[#4a3410]">{scribble.title}</strong>? This can't be
                         undone.
                     </>
                 }

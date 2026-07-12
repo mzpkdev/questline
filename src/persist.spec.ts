@@ -14,7 +14,7 @@ const slices = () => ({
         { id: "reward-2", name: "Weekend trip", price: 40 }
     ],
     banked: { earned: 0, spent: 0 },
-    notes: []
+    scribbles: []
 })
 
 describe("persist", () => {
@@ -27,7 +27,7 @@ describe("persist", () => {
         const mastered = back?.boards.seed?.mastered
         expect(mastered).toBeInstanceOf(Set)
         expect(mastered?.has("break-steps")).toBe(true)
-        // The seed board stores its nodes under `nodes` (v4), keyed by id.
+        // The seed board stores its nodes under `nodes` (v5), keyed by id.
         expect(back?.boards.seed?.nodes.learn?.name).toBe("Learn Questline")
     })
 
@@ -47,37 +47,39 @@ describe("persist", () => {
         expect(deserialize(serialize(withCompletedAt))?.tasks[0]?.completedAt).toBe(1_700_000_000_000)
     })
 
-    it("round-trips Draw notes, scene and all", () => {
-        const withNotes = {
+    it("round-trips scribbles, scene and all", () => {
+        const withScribbles = {
             ...slices(),
-            notes: [{ id: "note-1", title: "Sketch", scene: { elements: [{ id: "a" }], appState: {}, files: {} }, updatedAt: 42 }]
+            scribbles: [{ id: "note-1", title: "Sketch", scene: { elements: [{ id: "a" }], appState: {}, files: {} }, updatedAt: 42 }]
         }
-        expect(deserialize(serialize(withNotes))?.notes).toEqual(withNotes.notes)
+        expect(deserialize(serialize(withScribbles))?.scribbles).toEqual(withScribbles.scribbles)
     })
 
-    it("defaults a missing notes list to empty (a pre-notes save)", () => {
-        const legacy = JSON.parse(serialize(slices()))
-        delete legacy.notes
-        expect(deserialize(JSON.stringify(legacy))?.notes).toEqual([])
+    it("rejects a file missing the required scribbles list (no pre-scribbles fallback)", () => {
+        // v5 requires scribbles like every other slice: a file without it is rejected wholesale, not
+        // defaulted to empty.
+        const missing = JSON.parse(serialize(slices()))
+        delete missing.scribbles
+        expect(deserialize(JSON.stringify(missing))).toBeNull()
     })
 
-    it("rejects a malformed note", () => {
+    it("rejects a malformed scribble", () => {
         const valid = JSON.parse(serialize(slices()))
-        // A note missing its scene is malformed and rejects the whole file.
-        expect(deserialize(JSON.stringify({ ...valid, notes: [{ id: "note-1", title: "x", updatedAt: 1 }] }))).toBeNull()
+        // A scribble missing its scene is malformed and rejects the whole file.
+        expect(deserialize(JSON.stringify({ ...valid, scribbles: [{ id: "note-1", title: "x", updatedAt: 1 }] }))).toBeNull()
     })
 
     it("stamps the current version", () => {
         expect(JSON.parse(serialize(slices())).version).toBe(PERSIST_VERSION)
-        expect(PERSIST_VERSION).toBe(4)
-        expect(STORAGE_KEY).toBe("questline:v4")
+        expect(PERSIST_VERSION).toBe(5)
+        expect(STORAGE_KEY).toBe("questline:v5")
     })
 
     it("round-trips banked totals and rejects a file missing them", () => {
         const withBanked = { ...slices(), banked: { earned: 12, spent: 5 } }
         expect(deserialize(serialize(withBanked))?.banked).toEqual({ earned: 12, spent: 5 })
 
-        // v4 requires banked: a file without it is rejected wholesale, not defaulted.
+        // v5 requires banked: a file without it is rejected wholesale, not defaulted.
         const missing = JSON.parse(serialize(slices()))
         delete missing.banked
         expect(deserialize(JSON.stringify(missing))).toBeNull()
@@ -85,11 +87,21 @@ describe("persist", () => {
 
     it("rejects non-JSON, a prior version, and malformed shapes as null (no migration, no salvage)", () => {
         expect(deserialize("not json")).toBeNull()
-        // A prior-version file (v3) is ignored wholesale, even when otherwise well-shaped.
+        // A prior-version file (v3) is rejected outright -- no migration, even when otherwise well-shaped.
         expect(
-            deserialize(JSON.stringify({ version: 3, boards: {}, boardOrder: [], tasks: [], rewards: [], banked: { earned: 0, spent: 0 } }))
+            deserialize(
+                JSON.stringify({
+                    version: 3,
+                    boards: {},
+                    boardOrder: [],
+                    tasks: [],
+                    rewards: [],
+                    banked: { earned: 0, spent: 0 },
+                    scribbles: []
+                })
+            )
         ).toBeNull()
-        // A malformed board rejects the whole file.
+        // A malformed board rejects the whole file (otherwise a fully-shaped, valid v5 payload).
         expect(
             deserialize(
                 JSON.stringify({
@@ -98,7 +110,8 @@ describe("persist", () => {
                     boardOrder: [],
                     tasks: [],
                     rewards: [],
-                    banked: { earned: 0, spent: 0 }
+                    banked: { earned: 0, spent: 0 },
+                    scribbles: []
                 })
             )
         ).toBeNull()
@@ -116,7 +129,7 @@ describe("persist", () => {
         expect(deserialize(JSON.stringify(valid))).toBeNull()
     })
 
-    it("accepts an optional targetBoardId on a node (the v4 linked-node shape)", () => {
+    it("accepts an optional targetBoardId on a node (the v5 linked-node shape)", () => {
         const valid = JSON.parse(serialize(slices()))
         // Present-but-null and a board id are both valid; a wrong type rejects.
         valid.boards.seed.nodes.learn.targetBoardId = null
@@ -127,25 +140,25 @@ describe("persist", () => {
         expect(deserialize(JSON.stringify(valid))).toBeNull()
     })
 
-    it("round-trips a node's linked scribble ids (noteIds) intact", () => {
+    it("round-trips a node's linked scribble ids (scribbleIds) intact", () => {
         const valid = JSON.parse(serialize(slices()))
-        valid.boards.seed.nodes.learn.noteIds = ["note-1", "note-2"]
-        expect(deserialize(JSON.stringify(valid))?.boards.seed?.nodes.learn?.noteIds).toEqual(["note-1", "note-2"])
+        valid.boards.seed.nodes.learn.scribbleIds = ["note-1", "note-2"]
+        expect(deserialize(JSON.stringify(valid))?.boards.seed?.nodes.learn?.scribbleIds).toEqual(["note-1", "note-2"])
     })
 
-    it("still deserializes a node with no noteIds field (optional)", () => {
-        // The seed nodes carry no noteIds; the file loads fine and leaves the field absent.
+    it("still deserializes a node with no scribbleIds field (optional)", () => {
+        // The seed nodes carry no scribbleIds; the file loads fine and leaves the field absent.
         const back = deserialize(serialize(slices()))
         expect(back).not.toBeNull()
-        expect(back?.boards.seed?.nodes.learn?.noteIds).toBeUndefined()
+        expect(back?.boards.seed?.nodes.learn?.scribbleIds).toBeUndefined()
     })
 
-    it("rejects a node whose noteIds is not a string[]", () => {
+    it("rejects a node whose scribbleIds is not a string[]", () => {
         const valid = JSON.parse(serialize(slices()))
         // A numeric entry, then a bare string in place of the array: each rejects the whole file (no salvage).
-        valid.boards.seed.nodes.learn.noteIds = [1]
+        valid.boards.seed.nodes.learn.scribbleIds = [1]
         expect(deserialize(JSON.stringify(valid))).toBeNull()
-        valid.boards.seed.nodes.learn.noteIds = "x"
+        valid.boards.seed.nodes.learn.scribbleIds = "x"
         expect(deserialize(JSON.stringify(valid))).toBeNull()
     })
 
