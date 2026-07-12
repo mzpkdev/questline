@@ -136,7 +136,10 @@ const TODO_EDIT_CLASS = `min-w-0 flex-1 rounded-[7px] border border-[#d8c48f] bg
 const SELECT_CLASS = `w-full rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-2 font-display text-[15px] text-[#4a3410] ${FIELD_FOCUS}`
 const EDIT_BTN_TRANSITION = "transition-colors duration-150 ease-out"
 const TODO_DEL_CLASS = `grid h-6 w-6 flex-none appearance-none place-items-center rounded-[7px] border border-transparent bg-transparent text-[17px] leading-none text-[#b3a074] opacity-[.42] transition-[opacity,color,background-color,transform] duration-150 ease-out hover:opacity-100 hover:bg-[#f4ead0]/70 hover:text-[#8a6b28] active:scale-95`
-const TODO_ADD_CLASS = `mt-2.5 grid h-8 w-8 place-items-center self-start rounded-lg border-[1.5px] border-dashed border-[#cdb373] text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
+const TODO_ADD_CLASS = `mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border-[1.5px] border-dashed border-[#cdb373] px-3 py-1.5 font-display text-[11px] uppercase tracking-wide text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
+// Delete action button (edit mode): a full-width danger bar, red outline on parchment with colour-only
+// hover, matching the tab-remove affordance (#a5482a). Sits below the icon grid, separate from it.
+const DELETE_BTN_CLASS = `${ACTION_CLASS} mt-2.5 flex items-center justify-center gap-2 border-[1.5px] border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] ${EDIT_BTN_TRANSITION} hover:bg-[#a5482a]/10`
 // Edit-mode action buttons are icon-only squares laid out in a grid: a dashed gold secondary look for
 // the structural adds / unconnect, and a danger-red variant for delete (matching the tab-remove
 // affordance #a5482a). Icon-only, so each carries an aria-label + title tooltip for its action. Lives
@@ -317,8 +320,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     // Add parent for regular AND linked nodes, since insertParent splices a node above either). Detach
     // (Unlink) and Attach (Link) are mutually exclusive: App wires Detach for a non-root node still on
     // the tree and Attach for a parked orphan, so the root offers neither and a node offers exactly one.
-    // Delete (danger red) opens a confirm first. The parent-up / child-down arrows read as the top-down
-    // tree's above / below.
+    // The parent-up / child-down arrows read as the top-down tree's above / below. Delete is a separate
+    // full-width button below the grid (deleteButton), not a grid cell.
     const actionGrid = (
         <div className="grid grid-cols-4 gap-2">
             {onAddParent && (
@@ -344,17 +347,22 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                     <Link size={18} />
                 </ActionIcon>
             )}
-            {onDelete && (
-                <ActionIcon
-                    label={deleteKind === "board" ? "Delete board" : "Delete node"}
-                    danger
-                    onClick={() => setConfirmOpen(true)}
-                >
-                    <Trash2 size={18} />
-                </ActionIcon>
-            )}
         </div>
     )
+
+    // Delete: a full-width danger button (its confirm dialog is below). Visible copy is "Delete"; the
+    // aria-label keeps the specific "Delete node" / "Delete board" so screen readers name the target.
+    const deleteButton = onDelete ? (
+        <button
+            type="button"
+            aria-label={deleteKind === "board" ? "Delete board" : "Delete node"}
+            className={DELETE_BTN_CLASS}
+            onClick={() => setConfirmOpen(true)}
+        >
+            <Trash2 size={16} />
+            Delete
+        </button>
+    ) : null
 
     // The delete confirm dialog (edit mode); its trigger is the danger cell in actionGrid above. Copy
     // follows deleteKind. Rendered only when a delete handler is wired.
@@ -433,6 +441,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                             </select>
                         </div>
                         {actionGrid}
+                        {deleteButton}
                         {confirmDialog}
                     </>
                 ) : (
@@ -578,18 +587,20 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                             </ul>
                             <button
                                 type="button"
-                                aria-label="Add item"
-                                title="Add item"
+                                aria-label="Add Item"
+                                title="Add Item"
                                 className={TODO_ADD_CLASS}
                                 onClick={onAddTodo}
                             >
-                                <Plus size={16} />
+                                <Plus size={14} />
+                                Add Item
                             </button>
                         </div>
                     )}
 
                     {actionGrid}
 
+                    {deleteButton}
                     {confirmDialog}
                 </>
             ) : (

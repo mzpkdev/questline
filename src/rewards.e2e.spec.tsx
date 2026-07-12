@@ -92,7 +92,7 @@ async function completeFinishNode() {
 async function earnViaTask(text: string, reward = 1) {
     openTasksView()
     // The + tile adds a default task and opens its card in edit mode; name it (and set the reward), dismiss.
-    fireEvent.click(await screen.findByRole("button", { name: "Add task" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Add Task" }))
     const card = await screen.findByTestId("task-detail-card")
     fireEvent.change(within(card).getByLabelText("Task name"), { target: { value: text } })
     if (reward !== 1) {
@@ -863,7 +863,7 @@ describe("Rewards & gold (e2e)", () => {
         // touching gold: bounce out to the Tasks view and back.
         async function rerenderShop() {
             openTasksView()
-            await screen.findByRole("button", { name: "Add task" })
+            await screen.findByRole("button", { name: "Add Task" })
             openShop()
             await screen.findByTestId("purse")
         }
@@ -1093,7 +1093,7 @@ describe("Rewards & gold (e2e)", () => {
 
             // Bounce through Tasks and the roadmap; the purse reads the same each time we return.
             openTasksView()
-            await screen.findByRole("button", { name: "Add task" })
+            await screen.findByRole("button", { name: "Add Task" })
             openShop()
             expect(balance()).toBe(6)
 

@@ -180,12 +180,13 @@ export function TasksBoard({ items, onAdd, onToggle, onReorder, onSelect, select
             <button
                 type="button"
                 data-add-task-trigger=""
-                aria-label="Add task"
-                title="Add task"
+                aria-label="Add Task"
+                title="Add Task"
                 onClick={onAdd}
                 className="mb-[11px] flex w-full items-center justify-center gap-2 rounded-[13px] border-2 border-dashed border-[#cdb373] bg-transparent py-3.5 font-display text-[12.5px] font-semibold uppercase tracking-[1px] text-[#b79a52] opacity-70 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
             >
-                <Plus size={22} />
+                <Plus size={17} />
+                Add Task
             </button>
 
             {items.length > 0 ? (

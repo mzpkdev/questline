@@ -694,7 +694,7 @@ describe("App", () => {
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
             // The + tile adds a default task and opens its card in edit mode; name it, then dismiss.
-            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add Task" }))
             await screen.findByTestId("task-detail-card")
             fireEvent.change(screen.getByLabelText("Task name"), { target: { value: "Slay the bog wyrm" } })
             fireEvent.keyDown(document, { key: "Escape" })
@@ -719,7 +719,7 @@ describe("App", () => {
             openTasks()
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
-            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add Task" }))
             await screen.findByTestId("task-detail-card")
             fireEvent.change(screen.getByLabelText("Task name"), { target: { value: "Guard the caravan" } })
             fireEvent.keyDown(document, { key: "Escape" })
@@ -738,7 +738,7 @@ describe("App", () => {
             await screen.findByText("Tick a task to complete it and earn gold to spend on rewards.")
 
             // The + tile adds a default task and opens its card in edit mode, so Delete task is right there.
-            fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+            fireEvent.click(screen.getByRole("button", { name: "Add Task" }))
             fireEvent.click(await screen.findByRole("button", { name: "Delete task" }))
             fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
 

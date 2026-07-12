@@ -60,7 +60,7 @@ describe("TasksBoard", () => {
     it("adds a task from the dashed add tile", () => {
         const onAdd = vi.fn()
         renderBoard({ onAdd })
-        fireEvent.click(screen.getByRole("button", { name: "Add task" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add Task" }))
         expect(onAdd).toHaveBeenCalled()
     })
 
