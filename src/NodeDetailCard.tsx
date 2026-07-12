@@ -1,4 +1,4 @@
-import { Check, Link, Link2, Pencil, Plus, SquareArrowDown, SquareArrowUp, Trash2, Unlink, X } from "lucide-react"
+import { AddChild, AddParent, Check, Circle, Link, Link2, Pencil, Plus, Trash2, Unlink, X } from "./icons"
 import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
@@ -42,8 +42,13 @@ export type NodeDetailCardProps = {
     onAddTodo?: () => void
     onAddChild?: () => void
     onAddParent?: () => void
-    // Attach an (unlinked) linked node as a child. Offered on every node kind.
-    onAddLinkedNode?: () => void
+    // Convert this node in place into a linked node. A confirm modal gates it (its checklist / reward
+    // are dropped); App wires it only for a non-root, non-linked node.
+    onConvertToLinked?: () => void
+    // Convert this linked node back into a regular node (drops its board link, gains a default name /
+    // reward). App wires it only for a linked node -- the counterpart to onConvertToLinked, and never
+    // both at once. No confirm (a linked node has nothing to lose). Edit mode only.
+    onConvertToRegular?: () => void
     // Detach this node (with its whole subtree) from its parent and arm reparent mode ("Detach").
     // Offered on every node EXCEPT the root -- App passes it only for a non-root node that still hangs on
     // the tree. Edit mode only.
@@ -247,7 +252,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onAddTodo,
         onAddChild,
         onAddParent,
-        onAddLinkedNode,
+        onConvertToLinked,
+        onConvertToRegular,
         onDetach,
         onAttach,
         onDelete,
@@ -258,6 +264,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     } = props
     const [editing, setEditing] = useState(initialEditing)
     const [confirmOpen, setConfirmOpen] = useState(false)
+    const [convertConfirmOpen, setConvertConfirmOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const titleRef = useRef<HTMLInputElement>(null)
     const selectRef = useRef<HTMLSelectElement>(null)
@@ -326,15 +333,20 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         <div className="grid grid-cols-4 gap-2">
             {onAddParent && (
                 <ActionIcon label="Add parent node" onClick={onAddParent}>
-                    <SquareArrowUp size={18} />
+                    <AddParent size={18} />
                 </ActionIcon>
             )}
             <ActionIcon label="Add child node" onClick={onAddChild}>
-                <SquareArrowDown size={18} />
+                <AddChild size={18} />
             </ActionIcon>
-            {onAddLinkedNode && (
-                <ActionIcon label="Add linked node" onClick={onAddLinkedNode}>
+            {onConvertToLinked && (
+                <ActionIcon label="Convert to linked node" onClick={() => setConvertConfirmOpen(true)}>
                     <Link2 size={18} />
+                </ActionIcon>
+            )}
+            {onConvertToRegular && (
+                <ActionIcon label="Convert to regular node" onClick={onConvertToRegular}>
+                    <Circle size={18} />
                 </ActionIcon>
             )}
             {onDetach && (
@@ -402,6 +414,30 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         />
     ) : null
 
+    // The convert-to-linked confirm (edit mode); its trigger is the Link2 cell in actionGrid. Dropping
+    // the checklist / reward is destructive, so it confirms first. Rendered only when convert is offered.
+    const convertDialog = onConvertToLinked ? (
+        <ConfirmDialog
+            open={convertConfirmOpen}
+            title="Turn into a linked node?"
+            message={
+                <>
+                    Turn <strong className="font-semibold text-[#4a3410]">{displayName}</strong> into a linked node
+                    pointing at another board? Its checklist and reward are removed, and you pick the target board
+                    next. Its sub-nodes stay.
+                </>
+            }
+            confirmLabel="Convert"
+            onConfirm={() => {
+                setConvertConfirmOpen(false)
+                onConvertToLinked()
+            }}
+            onOpenChange={(open) => {
+                if (!open) setConvertConfirmOpen(false)
+            }}
+        />
+    ) : null
+
     // A linked node: no checklist / reward / description. Read mode's action is Go to Board (disabled
     // while unlinked); edit mode swaps that for the board dropdown plus the add / delete affordances.
     if (isLinked) {
@@ -443,6 +479,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         {actionGrid}
                         {deleteButton}
                         {confirmDialog}
+                        {convertDialog}
                     </>
                 ) : (
                     <>
@@ -602,6 +639,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
 
                     {deleteButton}
                     {confirmDialog}
+                    {convertDialog}
                 </>
             ) : (
                 <>

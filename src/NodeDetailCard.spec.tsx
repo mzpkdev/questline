@@ -297,10 +297,10 @@ describe("NodeDetailCard", () => {
             expect(onAddTodo).toHaveBeenCalledTimes(1)
         })
 
-        it("adds a child node and a linked node", async () => {
+        it("adds a child node and converts to a linked node (after confirm)", async () => {
             const user = userEvent.setup()
             const onAddChild = vi.fn()
-            const onAddLinkedNode = vi.fn()
+            const onConvertToLinked = vi.fn()
 
             render(
                 <NodeDetailCard
@@ -309,15 +309,17 @@ describe("NodeDetailCard", () => {
                     todos={[]}
                     isRoot={false}
                     onAddChild={onAddChild}
-                    onAddLinkedNode={onAddLinkedNode}
+                    onConvertToLinked={onConvertToLinked}
                 />
             )
             await user.click(screen.getByRole("button", { name: "Edit" }))
             await user.click(screen.getByRole("button", { name: "Add child node" }))
             expect(onAddChild).toHaveBeenCalledTimes(1)
 
-            await user.click(screen.getByRole("button", { name: "Add linked node" }))
-            expect(onAddLinkedNode).toHaveBeenCalledTimes(1)
+            // Convert opens a confirm modal first; only confirming fires the handler.
+            await user.click(screen.getByRole("button", { name: "Convert to linked node" }))
+            await user.click(await screen.findByRole("button", { name: "Convert" }))
+            expect(onConvertToLinked).toHaveBeenCalledTimes(1)
         })
 
         it("adds a parent node from the root node's edit mode", async () => {
@@ -553,11 +555,11 @@ describe("NodeDetailCard", () => {
             expect(screen.queryByRole("button", { name: "Go to Board" })).not.toBeInTheDocument()
         })
 
-        it("offers add parent / child / linked node and delete, but no Go to Board (edit mode)", async () => {
+        it("offers add parent / child, delete, and convert to regular, but no convert-to-linked or Go to Board (edit mode)", async () => {
             const user = userEvent.setup()
             const onAddParent = vi.fn()
             const onAddChild = vi.fn()
-            const onAddLinkedNode = vi.fn()
+            const onConvertToRegular = vi.fn()
             render(
                 <NodeDetailCard
                     node={linkedFixture("board-x")}
@@ -569,7 +571,7 @@ describe("NodeDetailCard", () => {
                     targetBoardId="board-x"
                     onAddParent={onAddParent}
                     onAddChild={onAddChild}
-                    onAddLinkedNode={onAddLinkedNode}
+                    onConvertToRegular={onConvertToRegular}
                     onGoToBoard={vi.fn()}
                     onDelete={vi.fn()}
                     initialEditing
@@ -581,9 +583,12 @@ describe("NodeDetailCard", () => {
             expect(onAddParent).toHaveBeenCalledTimes(1)
             await user.click(screen.getByRole("button", { name: "Add child node" }))
             expect(onAddChild).toHaveBeenCalledTimes(1)
-            await user.click(screen.getByRole("button", { name: "Add linked node" }))
-            expect(onAddLinkedNode).toHaveBeenCalledTimes(1)
             expect(screen.getByRole("button", { name: "Delete node" })).toBeInTheDocument()
+            // A linked node offers Convert to regular node (its inverse), fired directly (no confirm)...
+            await user.click(screen.getByRole("button", { name: "Convert to regular node" }))
+            expect(onConvertToRegular).toHaveBeenCalledTimes(1)
+            // ...but never Convert to linked node (it is already linked).
+            expect(screen.queryByRole("button", { name: "Convert to linked node" })).toBeNull()
             // Go to Board is a read-mode navigation action: edit mode omits it even with onGoToBoard wired.
             expect(screen.queryByRole("button", { name: "Go to Board" })).not.toBeInTheDocument()
         })

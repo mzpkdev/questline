@@ -374,8 +374,9 @@ describe("App", () => {
     })
 
     context("linked nodes", () => {
-        // Create a second board "New Quest" (B), return to the seed board (A), add a linked node under
-        // finish-node, and point it at B. Returns the linked node's (random) id from the URL hash.
+        // Create a second board "New Quest" (B), return to the seed board (A), convert finish-node in
+        // place into a linked node, and point it at B. Returns finish-node's id (selection is unchanged
+        // by the convert, so it stays the linked node).
         async function linkSeedNodeToNewBoard(): Promise<string> {
             fireEvent.click(screen.getByRole("button", { name: "Add board" }))
             await screen.findByDisplayValue("New Quest") // B's root card, edit mode
@@ -385,7 +386,9 @@ describe("App", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+            // Convert finish-node into a linked node (confirm first), then pick its target board.
+            fireEvent.click(screen.getByRole("button", { name: "Convert to linked node" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Convert" }))
 
             const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
             const option = within(dropdown).getByRole("option", { name: "New Quest" }) as HTMLOptionElement
@@ -393,23 +396,39 @@ describe("App", () => {
             return selectedNodeId()
         }
 
-        it("attaches a linked node, selects it, and opens its card in edit mode", async () => {
+        it("converts a node into a linked node in place, keeping its card in edit mode", async () => {
             render(<App />)
             const leaf = await waitForNode("finish-node")
 
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+            fireEvent.click(screen.getByRole("button", { name: "Convert to linked node" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Convert" }))
 
-            // The new linked node becomes the selection (a random #node-<uuid> in the url)...
-            await waitFor(() => expect(window.location.hash).toMatch(/^#node-/))
-            const id = selectedNodeId()
-            // ...it's a real linked node on the tree (data-linked-node, not a node card)...
-            await waitFor(() => expect(linkedNode(id)).not.toBeNull())
-            expect(nodeRoot(id)).toBeNull()
-            // ...and its card opened in edit mode, showing the board dropdown.
+            // finish-node is now a real linked node on the tree (data-linked-node, not a node card)...
+            await waitFor(() => expect(linkedNode("finish-node")).not.toBeNull())
+            expect(nodeRoot("finish-node")).toBeNull()
+            // ...and its card flipped to the linked edit layout, showing the board dropdown.
             expect(screen.getByRole("combobox", { name: "Link to board" })).toBeInTheDocument()
+        })
+
+        it("refills a node's data when converted back from linked in the same session", async () => {
+            render(<App />)
+            const leaf = await waitForNode("finish-node")
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+
+            // Convert to linked (confirm): the node's stored name goes blank (a linked name is derived).
+            fireEvent.click(screen.getByRole("button", { name: "Convert to linked node" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Convert" }))
+            await waitFor(() => expect(linkedNode("finish-node")).not.toBeNull())
+
+            // Convert back: the session snapshot refills its original name, not the "New Node" default.
+            fireEvent.click(screen.getByRole("button", { name: "Convert to regular node" }))
+            await waitFor(() => expect(nodeRoot("finish-node")?.textContent).toContain("Finish a node"))
+            expect(nodeRoot("finish-node")?.textContent).not.toContain("New Node")
         })
 
         it("has an empty dropdown and a disabled Go to Board when there is no other board", async () => {
@@ -419,7 +438,8 @@ describe("App", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+            fireEvent.click(screen.getByRole("button", { name: "Convert to linked node" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Convert" }))
 
             const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
             // Only the placeholder option (the seed board itself is excluded, and it's the only board).
@@ -482,8 +502,8 @@ describe("App", () => {
             render(<App />)
             await waitForNode("learn")
 
-            // Aim finish-node's new linked node L at board B (still incomplete); L's card stays in
-            // edit mode, so add a regular child C under it.
+            // Convert finish-node into a linked node L aimed at board B (still incomplete); its card
+            // stays in edit mode, so add a regular child C under it.
             await linkSeedNodeToNewBoard()
             fireEvent.click(screen.getByRole("button", { name: "Add child node" }))
             await waitFor(() => expect(window.location.hash).toMatch(/^#node-/))

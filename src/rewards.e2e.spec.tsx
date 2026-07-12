@@ -189,7 +189,7 @@ describe("Rewards & gold (e2e)", () => {
             render(<App />)
             await waitForNode("learn")
 
-            // Add board B (root reward 5), then on the seed board aim a linked node at it.
+            // Add board B (root reward 5), then on the seed board convert finish-node into a linked node aimed at it.
             fireEvent.click(screen.getByRole("button", { name: "Add board" }))
             await screen.findByDisplayValue("New Quest")
             openSampleTab() // back to the seed board A
@@ -197,7 +197,8 @@ describe("Rewards & gold (e2e)", () => {
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+            fireEvent.click(screen.getByRole("button", { name: "Convert to linked node" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Convert" }))
             const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
             const option = within(dropdown).getByRole("option", { name: "New Quest" }) as HTMLOptionElement
             fireEvent.change(dropdown, { target: { value: option.value } })

@@ -10,7 +10,7 @@
 
 import { exportToSvg, restore } from "@excalidraw/excalidraw"
 import { useEffect, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus } from "./icons"
 import type { Note, NoteScene } from "./notes"
 
 // The card frame: the same double-gradient border trick as a reward tile (a cream padding-box fill

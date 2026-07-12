@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
-import { Plus } from "lucide-react"
+import { Plus } from "./icons"
 import type { Reward } from "./rewards"
 import { prefersReducedMotion } from "./nodeMotion"
 

@@ -21,7 +21,7 @@ import {
     verticalListSortingStrategy
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Plus } from "lucide-react"
+import { Plus } from "./icons"
 import type { CSSProperties } from "react"
 import type { Task } from "./tasks"
 import { useCheckPop } from "./nodeMotion"

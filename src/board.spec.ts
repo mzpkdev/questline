@@ -1,9 +1,11 @@
-import { type Edge, isLinkedNode, type Node } from "./nodes"
+import { DEFAULT_NODE_REWARD, type Edge, isLinkedNode, type Node } from "./nodes"
 import {
     addBoard,
     addChild,
     addLinkedNode,
     type Board,
+    convertToLinkedNode,
+    convertToRegularNode,
     boardComplete,
     boardCompleter,
     boardGold,
@@ -333,6 +335,85 @@ describe("addLinkedNode", () => {
     it("is a no-op (same reference) for an unknown parent", () => {
         const board = seedBoard()
         expect(addLinkedNode(board, "nope", "node-link")).toBe(board)
+    })
+})
+
+describe("convertToLinkedNode", () => {
+    it("reshapes a regular node into an unlinked linked node, dropping checklist / reward / mastery", () => {
+        // break-steps is a mastered leaf with a checklist, under plan-goal.
+        const before = seedBoard()
+        const next = convertToLinkedNode(before, "break-steps")
+        const node = next.nodes["break-steps"] as Node
+        expect(isLinkedNode(node)).toBe(true)
+        expect(node.targetBoardId).toBeNull()
+        expect(node.reward).toBeUndefined()
+        expect(next.todos["break-steps"]).toBeUndefined()
+        expect(next.mastered.has("break-steps")).toBe(false)
+        // Position and the incoming edge stay: it's the same node, relinked in kind.
+        expect(node.x).toBe(before.nodes["break-steps"]?.x)
+        expect(next.edges).toContainEqual(["plan-goal", "break-steps"])
+    })
+
+    it("keeps the subtree, converting only the node's kind", () => {
+        // track-progress carries a child (finish-node); converting keeps the child and its edge.
+        const next = convertToLinkedNode(seedBoard(), "track-progress")
+        expect(isLinkedNode(next.nodes["track-progress"] as Node)).toBe(true)
+        expect(next.nodes["finish-node"]).toBeDefined()
+        expect(next.edges).toContainEqual(["track-progress", "finish-node"])
+    })
+
+    it("is a no-op (same reference) for the root, a linked node, or an unknown id", () => {
+        const board = seedBoard()
+        expect(convertToLinkedNode(board, board.rootId)).toBe(board)
+        expect(convertToLinkedNode(board, "does-not-exist")).toBe(board)
+        const withLinked = addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "lk")
+        expect(convertToLinkedNode(withLinked, "lk")).toBe(withLinked)
+    })
+})
+
+describe("convertToRegularNode", () => {
+    // A board with one (unlinked) linked node under its root.
+    const withLinked = (): Board => addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "lk")
+
+    it("drops the targetBoardId key and gives a regular-node shape, keeping position and edge", () => {
+        const next = convertToRegularNode(withLinked(), "lk")
+        const node = next.nodes["lk"] as Node
+        expect(isLinkedNode(node)).toBe(false)
+        expect("targetBoardId" in node).toBe(false)
+        expect(node.reward).toBe(DEFAULT_NODE_REWARD)
+        expect(node.name).toBe("New Node") // a linked node's stored name is blank; convert supplies a default
+        expect(next.edges).toContainEqual(["a-root", "lk"])
+    })
+
+    it("is a no-op (same reference) for a regular node or an unknown id", () => {
+        const board = seedBoard()
+        expect(convertToRegularNode(board, "break-steps")).toBe(board) // already regular
+        expect(convertToRegularNode(board, "does-not-exist")).toBe(board)
+    })
+
+    it("round-trips with convertToLinkedNode (regular -> linked -> regular)", () => {
+        const linked = convertToLinkedNode(seedBoard(), "break-steps")
+        expect(isLinkedNode(linked.nodes["break-steps"] as Node)).toBe(true)
+        const back = convertToRegularNode(linked, "break-steps")
+        expect(isLinkedNode(back.nodes["break-steps"] as Node)).toBe(false)
+        expect(back.nodes["break-steps"]?.reward).toBe(DEFAULT_NODE_REWARD)
+    })
+
+    it("refills name / description / reward / checklist from a restore snapshot", () => {
+        const linked = convertToLinkedNode(seedBoard(), "break-steps")
+        const restore = {
+            name: "Break it down",
+            description: "the steps",
+            reward: 9,
+            todos: [{ text: "step one", done: true }]
+        }
+        const next = convertToRegularNode(linked, "break-steps", restore)
+        const node = next.nodes["break-steps"] as Node
+        expect(isLinkedNode(node)).toBe(false)
+        expect(node.name).toBe("Break it down")
+        expect(node.description).toBe("the steps")
+        expect(node.reward).toBe(9)
+        expect(next.todos["break-steps"]).toEqual([{ text: "step one", done: true }])
     })
 })
 

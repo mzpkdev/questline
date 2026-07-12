@@ -20,7 +20,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@excalidraw/excalidraw": "^0.18.1",
     "@xyflow/react": "^12.11.2",
-    "lucide-react": "^1.24.0",
     "lz-string": "^1.5.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

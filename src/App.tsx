@@ -30,7 +30,7 @@ import { isLinkedNode, type Node } from "./nodes"
 import { NavActions } from "./NavActions"
 import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, type PersistedSlices, saveState, serialize } from "./persist"
-import { type Board, boardCompleter, boardsReducer, linkedNodeName, seedBoard } from "./board"
+import { type Board, boardCompleter, boardsReducer, linkedNodeName, type NodeRestore, seedBoard } from "./board"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -127,6 +127,10 @@ export function App() {
     // and disabled ("detached") until re-attached. One at a time -- arming dismisses the card, and while
     // armed a node click attaches instead of selecting, so no second node's card is reachable.
     const [reparenting, setReparenting] = useState<{ nodeId: string } | null>(null)
+    // A node's pre-linked data, kept per node id so converting it back from linked this session refills
+    // its old name / description / reward / checklist. A ref (no re-render), transient, never persisted:
+    // a reload starts fresh, and convert-back then falls to the blank default.
+    const prevNodeData = useRef(new Map<string, NodeRestore>())
     // The app-level Tasks checklist (one flat list shared across every tab) and which top-level
     // section is on screen: the roadmap board, the Tasks list, or the Rewards shop.
     const [tasks, setTasks] = useState<Task[]>(boot.tasks)
@@ -703,15 +707,37 @@ export function App() {
         setReparenting(null)
     }, [activeId, section])
 
-    // Add an (unlinked) linked node under the selected node, then select it and open its card in edit
-    // mode with the board dropdown -- the same open-in-edit-on-create flow as adding a child node.
-    const addLinkedNode = useCallback(() => {
+    // Convert the selected node in place into an (unlinked) linked node (its checklist / reward are
+    // dropped -- the card confirms first). Selection stays on the node, whose card flips to the linked
+    // layout so its target board can be picked from the dropdown.
+    const convertToLinked = useCallback(() => {
+        if (selectedId === null || !active) return
+        // Snapshot the node's pre-linked data (name / description / reward / checklist) so a convert-back
+        // this session refills it instead of the blank default. Transient (a ref), never persisted.
+        const node = active.nodes[selectedId]
+        if (node) {
+            prevNodeData.current.set(selectedId, {
+                name: node.name,
+                description: node.description,
+                reward: node.reward,
+                todos: active.todos[selectedId] ?? []
+            })
+        }
+        dispatch({ type: "convertToLinked", boardId: activeId, id: selectedId })
+    }, [selectedId, active, activeId])
+
+    // Convert the selected linked node back into a regular node. If it was turned linked this session,
+    // the stashed snapshot refills its old data; otherwise it gets the blank default. Selection stays;
+    // its card flips back to the regular layout. Not destructive, so no confirm.
+    const convertToRegular = useCallback(() => {
         if (selectedId === null) return
-        const childId = mintId("node")
-        dispatch({ type: "addLinkedNode", boardId: activeId, parentId: selectedId, childId })
-        setEditOnAddId(childId)
-        focusNode(childId)
-    }, [selectedId, activeId, focusNode])
+        dispatch({
+            type: "convertToRegular",
+            boardId: activeId,
+            id: selectedId,
+            restore: prevNodeData.current.get(selectedId)
+        })
+    }, [selectedId, activeId])
 
     // Point the selected linked node at a board (or clear it back to unlinked with null).
     const setLinkedTarget = useCallback(
@@ -1063,7 +1089,8 @@ export function App() {
                                     onAddTodo={addTodo}
                                     onAddChild={addChild}
                                     onAddParent={addParent}
-                                    onAddLinkedNode={addLinkedNode}
+                                    onConvertToLinked={isRoot || isLinked ? undefined : convertToLinked}
+                                    onConvertToRegular={isLinked ? convertToRegular : undefined}
                                     onDetach={isRoot || !shownHasParent ? undefined : detachSelected}
                                     onAttach={isRoot || shownHasParent ? undefined : attachSelected}
                                     onDelete={onDeleteShown}

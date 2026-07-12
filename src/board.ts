@@ -15,6 +15,7 @@ import {
     DEFAULT_ROOT_REWARD,
     EDGES,
     type Edge,
+    isLinkedNode,
     MASTERED,
     type Node,
     NODES,
@@ -46,6 +47,11 @@ export type BoardsState = { boards: Boards; order: string[] }
 
 // Fields the detail card edits in place on a regular / root node.
 type NodePatch = Partial<Pick<Node, "name" | "description" | "reward">>
+
+// A regular node's pre-linked data, snapshotted by App (transient, never persisted) before a
+// convert-to-linked, and handed back on convert-to-regular so the node refills with its old name /
+// description / reward / checklist instead of the blank default. Same-session only.
+export type NodeRestore = { name: string; description?: string; reward?: number; todos: Todo[] }
 
 // The bundled sample roadmap. Everything is deep-copied so editing a board never mutates the module
 // seeds. A fresh install seeds exactly this one board (no linked nodes).
@@ -302,6 +308,46 @@ export function setLinkedTarget(board: Board, id: string, targetBoardId: string 
     return { ...board, nodes: { ...board.nodes, [id]: { ...current, targetBoardId } } }
 }
 
+// Convert a regular node in place into an (unlinked) linked node: it gains the targetBoardId key (null,
+// awaiting a board pick via setLinkedTarget) and sheds what a linked node has no room for -- its stored
+// name (a linked node's name derives from its target board), description, reward, and checklist. Its
+// position, tier, and subtree (edges) stay untouched. It leaves the completed set and un-completes its
+// ancestors (uncomplete), since a fresh unlinked linked node is not mastered (mirrors adding a child).
+// The root node, an already-linked node, and an unknown id are no-ops (same reference); the destructive
+// drop of checklist / reward is why the UI confirms first.
+export function convertToLinkedNode(board: Board, id: string): Board {
+    const current = board.nodes[id]
+    if (!current || id === board.rootId || isLinkedNode(current)) return board
+    const linked: Node = { id, name: "", x: current.x, y: current.y, tier: current.tier, targetBoardId: null }
+    const todos = { ...board.todos }
+    delete todos[id]
+    return { ...board, nodes: { ...board.nodes, [id]: linked }, todos, mastered: uncomplete(id, board.mastered, board.edges) }
+}
+
+// Convert a linked node back into a regular node: drop the targetBoardId key (so it is no longer a
+// linked node) and give it a regular-node shape. `restore` (a pre-linked snapshot App kept for this
+// session) refills the old name / description / reward / checklist; without it the node gets the blank
+// default (name "New Node", default reward, no checklist). Its position, tier, and subtree stay. It
+// un-completes its ancestors (uncomplete), since a linked node may have been DERIVED-mastered from a
+// complete target board while a restored / fresh regular node is not. A regular / unknown node is a
+// no-op (same reference).
+export function convertToRegularNode(board: Board, id: string, restore?: NodeRestore): Board {
+    const current = board.nodes[id]
+    if (!current || !isLinkedNode(current)) return board
+    const regular: Node = {
+        id: current.id,
+        name: restore?.name || "New Node",
+        x: current.x,
+        y: current.y,
+        tier: current.tier,
+        reward: restore?.reward ?? DEFAULT_NODE_REWARD
+    }
+    if (restore?.description !== undefined) regular.description = restore.description
+    const nodes = { ...board.nodes, [id]: regular }
+    const todos = restore && restore.todos.length > 0 ? { ...board.todos, [id]: restore.todos.map((t) => ({ ...t })) } : board.todos
+    return { ...board, nodes, todos, mastered: uncomplete(id, board.mastered, board.edges) }
+}
+
 // Edit a node's name / description / reward in place. Unknown id is a no-op (same reference).
 export function editNode(board: Board, id: string, patch: NodePatch): Board {
     const current = board.nodes[id]
@@ -412,6 +458,8 @@ export type BoardsAction =
     | { type: "addChild"; boardId: string; parentId: string; childId: string }
     | { type: "addLinkedNode"; boardId: string; parentId: string; childId: string }
     | { type: "setLinkedTarget"; boardId: string; id: string; targetBoardId: string | null }
+    | { type: "convertToLinked"; boardId: string; id: string }
+    | { type: "convertToRegular"; boardId: string; id: string; restore?: NodeRestore }
     | { type: "addParent"; boardId: string; targetId: string; newId: string }
     | { type: "reparent"; boardId: string; nodeId: string; newParentId: string }
     | { type: "detach"; boardId: string; id: string }
@@ -456,6 +504,10 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
             return updateBoard(state, action.boardId, (b) => addLinkedNode(b, action.parentId, action.childId))
         case "setLinkedTarget":
             return updateBoard(state, action.boardId, (b) => setLinkedTarget(b, action.id, action.targetBoardId))
+        case "convertToLinked":
+            return updateBoard(state, action.boardId, (b) => convertToLinkedNode(b, action.id))
+        case "convertToRegular":
+            return updateBoard(state, action.boardId, (b) => convertToRegularNode(b, action.id, action.restore))
         case "addParent":
             return updateBoard(state, action.boardId, (b) => insertParent(b, action.targetId, action.newId))
         case "reparent":

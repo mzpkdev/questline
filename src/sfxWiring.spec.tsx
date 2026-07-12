@@ -119,7 +119,7 @@ describe("sfx wiring", () => {
         const dataState = (id: string) => document.querySelector(`[data-id="${id}"][data-state]`)?.getAttribute("data-state")
         await waitFor(() => expect(document.querySelector('[data-id="learn"][data-state]')).not.toBeNull())
 
-        // Add board B, then on the seed board aim a linked node L at B and hang a regular child C under it.
+        // Add board B, then on the seed board convert finish-node into a linked node L aimed at B and hang a child C under it.
         fireEvent.click(screen.getByRole("button", { name: "Add board" }))
         await screen.findByDisplayValue("New Quest")
         fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to A
@@ -131,7 +131,8 @@ describe("sfx wiring", () => {
         fireEvent.click(leaf)
         await screen.findByRole("heading", { name: /finish a node/i })
         fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-        fireEvent.click(screen.getByRole("button", { name: "Add linked node" }))
+        fireEvent.click(screen.getByRole("button", { name: "Convert to linked node" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Convert" }))
         const dropdown = await screen.findByRole("combobox", { name: "Link to board" })
         const option = within(dropdown).getByRole("option", { name: "New Quest" }) as HTMLOptionElement
         fireEvent.change(dropdown, { target: { value: option.value } })
