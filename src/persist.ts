@@ -189,7 +189,8 @@ function isNode(value: unknown): value is Node {
         typeof n.tier === "number" &&
         (n.description === undefined || typeof n.description === "string") &&
         (n.reward === undefined || typeof n.reward === "number") &&
-        (n.targetBoardId === undefined || n.targetBoardId === null || typeof n.targetBoardId === "string")
+        (n.targetBoardId === undefined || n.targetBoardId === null || typeof n.targetBoardId === "string") &&
+        (n.noteIds === undefined || (Array.isArray(n.noteIds) && n.noteIds.every((v) => typeof v === "string")))
     )
 }
 

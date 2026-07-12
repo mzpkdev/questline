@@ -2,6 +2,43 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { decompressFromUTF16 } from "lz-string"
 import { App } from "./App"
 
+// Excalidraw's ESM entry can't be imported under vitest (a transitive JSON module lacks an import
+// attribute), so App's lazy Draw chunk would fail to load. Stub the package with light React shims --
+// enough for the real DrawBoard / ExcalidrawBoard wrappers to mount -- since these tests exercise App's
+// scribble wiring, not the canvas engine. The mocked editor renders under [data-testid="excalidraw-mock"],
+// and its MainMenu.Item entries (e.g. "Delete scribble") become plain buttons that fire their onSelect.
+vi.mock("@excalidraw/excalidraw", async () => {
+    const React = await import("react")
+    const Item = ({ children, onSelect }: { children?: unknown; onSelect?: () => void }) =>
+        React.createElement("button", { type: "button", onClick: onSelect }, children as never)
+    const MainMenu = Object.assign(
+        ({ children }: { children?: unknown }) => React.createElement(React.Fragment, null, children as never),
+        {
+            Item,
+            Separator: () => null,
+            DefaultItems: {
+                SaveAsImage: () => null,
+                ChangeCanvasBackground: () => null,
+                ClearCanvas: () => null,
+                Help: () => null
+            }
+        }
+    )
+    return {
+        Excalidraw: ({ children }: { children?: unknown }) =>
+            React.createElement("div", { "data-testid": "excalidraw-mock" }, children as never),
+        MainMenu,
+        restore: (d: { elements?: unknown[]; appState?: unknown; files?: unknown }) => ({
+            elements: d?.elements ?? [],
+            appState: d?.appState ?? {},
+            files: d?.files ?? {}
+        }),
+        exportToSvg: async () => document.createElementNS("http://www.w3.org/2000/svg", "svg"),
+        getSceneVersion: () => 0,
+        serializeAsJSON: () => "{}"
+    }
+})
+
 // React Flow wraps each custom node in its own div that also carries data-id; our node's
 // root is the one that also has data-state, so we target [data-id][data-state]. Clicks use
 // fireEvent (not userEvent) to avoid React Flow's d3-zoom mousedown path crashing under jsdom.
@@ -519,6 +556,89 @@ describe("App", () => {
             // Back on the seed board, L masters (derived from B), so C unlocks by the normal rule.
             fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
             await waitFor(() => expect(nodeRoot(childId)?.getAttribute("data-state")).toBe("available"))
+        })
+    })
+
+    context("scribbles (linking Draw notes to milestones)", () => {
+        // Create one scribble on the Draw wall (the "Scribbles" nav chip), return to the roadmap, and
+        // attach it to finish-node from its edit card. Leaves finish-node selected, its card in edit mode
+        // showing the "Scribble" chip. (A fresh scribble takes the default title "Scribble".)
+        async function linkAScribbleToFinishNode() {
+            fireEvent.click(screen.getByRole("button", { name: "Scribbles" })) // open the Draw view
+            fireEvent.click(await screen.findByRole("button", { name: "Add Scribble" }))
+            await screen.findByRole("button", { name: "Rename Scribble" }) // the new note card on the wall
+
+            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to the roadmap
+            const leaf = await waitForNode("finish-node")
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+
+            const select = await screen.findByRole("combobox", { name: "Attach a scribble" })
+            const option = within(select).getByRole("option", { name: "Scribble" }) as HTMLOptionElement
+            fireEvent.change(select, { target: { value: option.value } })
+        }
+
+        it("attaches a scribble to a node from the edit card's dropdown", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            await linkAScribbleToFinishNode()
+
+            // The node's card now shows a chip for the linked scribble.
+            expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
+        })
+
+        it("opens the Excalidraw editor for a scribble when its chip is clicked", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            await linkAScribbleToFinishNode()
+            fireEvent.click(await screen.findByRole("button", { name: "Scribble" }))
+
+            // The Draw editor for that note is shown; the roadmap board is gone behind it.
+            expect(await screen.findByTestId("excalidraw-mock")).toBeInTheDocument()
+            await waitFor(() => expect(nodeRoot("finish-node")).toBeNull())
+        })
+
+        it("mints a fresh scribble and opens it from the New scribble button", async () => {
+            render(<App />)
+            const leaf = await waitForNode("finish-node")
+
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+            fireEvent.click(screen.getByRole("button", { name: "New scribble" }))
+
+            // The editor opens straight on the fresh note...
+            expect(await screen.findByTestId("excalidraw-mock")).toBeInTheDocument()
+
+            // ...and the note now exists linked to the node: back on the roadmap its chip is there.
+            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
+            const leaf2 = await waitForNode("finish-node")
+            fireEvent.click(leaf2)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
+        })
+
+        it("prunes the chip off a node when its scribble is deleted", async () => {
+            render(<App />)
+            await waitForNode("finish-node")
+
+            await linkAScribbleToFinishNode()
+
+            // Open the linked scribble, then delete it from the editor's menu (confirming).
+            fireEvent.click(await screen.findByRole("button", { name: "Scribble" }))
+            await screen.findByTestId("excalidraw-mock")
+            fireEvent.click(screen.getByRole("button", { name: "Delete scribble" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
+
+            // Back on the roadmap, re-select the node: the link was swept, so no chip remains.
+            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
+            const leaf = await waitForNode("finish-node")
+            fireEvent.click(leaf)
+            await screen.findByRole("heading", { name: /finish a node/i })
+            await waitFor(() => expect(screen.queryByRole("button", { name: "Scribble" })).toBeNull())
         })
     })
 

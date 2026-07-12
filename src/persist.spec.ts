@@ -127,6 +127,28 @@ describe("persist", () => {
         expect(deserialize(JSON.stringify(valid))).toBeNull()
     })
 
+    it("round-trips a node's linked scribble ids (noteIds) intact", () => {
+        const valid = JSON.parse(serialize(slices()))
+        valid.boards.seed.nodes.learn.noteIds = ["note-1", "note-2"]
+        expect(deserialize(JSON.stringify(valid))?.boards.seed?.nodes.learn?.noteIds).toEqual(["note-1", "note-2"])
+    })
+
+    it("still deserializes a node with no noteIds field (optional)", () => {
+        // The seed nodes carry no noteIds; the file loads fine and leaves the field absent.
+        const back = deserialize(serialize(slices()))
+        expect(back).not.toBeNull()
+        expect(back?.boards.seed?.nodes.learn?.noteIds).toBeUndefined()
+    })
+
+    it("rejects a node whose noteIds is not a string[]", () => {
+        const valid = JSON.parse(serialize(slices()))
+        // A numeric entry, then a bare string in place of the array: each rejects the whole file (no salvage).
+        valid.boards.seed.nodes.learn.noteIds = [1]
+        expect(deserialize(JSON.stringify(valid))).toBeNull()
+        valid.boards.seed.nodes.learn.noteIds = "x"
+        expect(deserialize(JSON.stringify(valid))).toBeNull()
+    })
+
     it("saves to and loads from localStorage", () => {
         expect(loadState()).toBeNull()
         saveState(slices())

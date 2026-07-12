@@ -18,15 +18,18 @@ import {
     editNode,
     insertParent,
     linkedNodeName,
+    linkNote,
     linkWouldCycle,
     moveNode,
     newBoard,
+    pruneNote,
     removeBoard,
     reparent,
     seedBoard,
     setLinkedTarget,
     toggleTodo,
     uncompleteNode,
+    unlinkNote,
     UNLINKED_LABEL
 } from "./board"
 
@@ -526,6 +529,74 @@ describe("editNode / moveNode", () => {
     })
 })
 
+describe("linkNote", () => {
+    it("appends a scribble id, minting the list on the first link (a new board)", () => {
+        const board = seedBoard()
+        const next = linkNote(board, "plan-goal", "note-1")
+        expect(next).not.toBe(board) // a NEW board, the seed untouched
+        expect(next.nodes["plan-goal"]?.noteIds).toEqual(["note-1"])
+    })
+
+    it("appends further ids without dropping the earlier ones", () => {
+        const next = linkNote(linkNote(seedBoard(), "plan-goal", "note-1"), "plan-goal", "note-2")
+        expect(next.nodes["plan-goal"]?.noteIds).toEqual(["note-1", "note-2"])
+    })
+
+    it("links the root node too (a milestone can carry scribbles)", () => {
+        const board = seedBoard()
+        const next = linkNote(board, board.rootId, "note-1")
+        expect(next.nodes["learn"]?.noteIds).toEqual(["note-1"])
+    })
+
+    it("is a no-op (same reference) for an unknown id, a linked node, or an already-linked note", () => {
+        const board = seedBoard()
+        expect(linkNote(board, "does-not-exist", "note-1")).toBe(board) // unknown id
+        // A linked node carries a board pointer, not scribbles, so it is refused.
+        const withLinked = addLinkedNode(seedBoard(), "learn", "lnk")
+        expect(linkNote(withLinked, "lnk", "note-1")).toBe(withLinked)
+        // Re-linking the same note never duplicates it.
+        const linked = linkNote(board, "plan-goal", "note-1")
+        expect(linkNote(linked, "plan-goal", "note-1")).toBe(linked)
+    })
+})
+
+describe("unlinkNote", () => {
+    it("removes a scribble id, leaving an emptied list as []", () => {
+        const board = linkNote(seedBoard(), "plan-goal", "note-1")
+        const next = unlinkNote(board, "plan-goal", "note-1")
+        expect(next.nodes["plan-goal"]?.noteIds).toEqual([])
+    })
+
+    it("drops only the named id, keeping the rest", () => {
+        const board = linkNote(linkNote(seedBoard(), "plan-goal", "note-1"), "plan-goal", "note-2")
+        const next = unlinkNote(board, "plan-goal", "note-1")
+        expect(next.nodes["plan-goal"]?.noteIds).toEqual(["note-2"])
+    })
+
+    it("is a no-op (same reference) for an unknown id or a note that wasn't linked", () => {
+        const board = linkNote(seedBoard(), "plan-goal", "note-1")
+        expect(unlinkNote(board, "does-not-exist", "note-1")).toBe(board) // unknown id
+        expect(unlinkNote(board, "plan-goal", "note-x")).toBe(board) // that note isn't linked here
+        const fresh = seedBoard()
+        expect(unlinkNote(fresh, "track-progress", "note-1")).toBe(fresh) // node carries no scribbles at all
+    })
+})
+
+describe("pruneNote", () => {
+    it("sweeps a scribble id off every node that linked it", () => {
+        // Two nodes both link the same scribble; pruning clears it from each.
+        const board = linkNote(linkNote(seedBoard(), "plan-goal", "note-1"), "track-progress", "note-1")
+        const next = pruneNote(board, "note-1")
+        expect(next.nodes["plan-goal"]?.noteIds).toEqual([])
+        expect(next.nodes["track-progress"]?.noteIds).toEqual([])
+    })
+
+    it("is a no-op (same reference) when no node linked it", () => {
+        const board = linkNote(seedBoard(), "plan-goal", "note-1")
+        expect(pruneNote(board, "note-x")).toBe(board)
+    })
+})
+
 describe("completeNode / uncompleteNode", () => {
     it("marks an unlocked node with all boxes ticked complete", () => {
         const next = completeNode(seedBoard(), "plan-goal", true, () => false)
@@ -750,6 +821,37 @@ describe("boardsReducer", () => {
 
         s = boardsReducer(s, { type: "setLinkedTarget", boardId: "seed", id: "link", targetBoardId: "board-x" })
         expect(s.boards.seed?.nodes.link?.targetBoardId).toBe("board-x")
+    })
+
+    it("routes linkNote then unlinkNote through their ops, updating the right board", () => {
+        let s = boardsReducer(state(), { type: "linkNote", boardId: "seed", id: "plan-goal", noteId: "note-1" })
+        expect(s.boards.seed?.nodes["plan-goal"]?.noteIds).toEqual(["note-1"])
+
+        s = boardsReducer(s, { type: "unlinkNote", boardId: "seed", id: "plan-goal", noteId: "note-1" })
+        expect(s.boards.seed?.nodes["plan-goal"]?.noteIds).toEqual([])
+    })
+
+    it("keeps the whole state reference stable on a no-op linkNote / unlinkNote", () => {
+        const s = state()
+        // linkNote on an unknown node is a no-op inside the op, so the reducer returns state as-is.
+        expect(boardsReducer(s, { type: "linkNote", boardId: "seed", id: "ghost", noteId: "note-1" })).toBe(s)
+        // Unlinking a note that was never linked is a no-op too.
+        expect(boardsReducer(s, { type: "unlinkNote", boardId: "seed", id: "plan-goal", noteId: "note-1" })).toBe(s)
+    })
+
+    it("sweeps a pruned scribble off nodes across every board (pruneNote is map-level)", () => {
+        // Two boards each link note-1 on a node; a single pruneNote clears it map-wide (like removeBoard).
+        const a = linkNote(newBoard("a", "a-root", "A"), "a-root", "note-1")
+        const b = linkNote(newBoard("b", "b-root", "B"), "b-root", "note-1")
+        const s: BoardsState = { boards: { a, b }, order: ["a", "b"] }
+        const next = boardsReducer(s, { type: "pruneNote", noteId: "note-1" })
+        expect(next.boards.a?.nodes["a-root"]?.noteIds).toEqual([])
+        expect(next.boards.b?.nodes["b-root"]?.noteIds).toEqual([])
+    })
+
+    it("returns the same state reference when a pruneNote sweeps nothing", () => {
+        const s: BoardsState = { boards: { seed: seedBoard() }, order: ["seed"] }
+        expect(boardsReducer(s, { type: "pruneNote", noteId: "note-x" })).toBe(s)
     })
 
     it("keeps the whole state reference stable on a no-op single-board action", () => {

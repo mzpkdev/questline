@@ -443,6 +443,109 @@ describe("NodeDetailCard", () => {
         })
     })
 
+    context("the Scribbles section (read mode)", () => {
+        it("lists a chip per linked scribble and opens one on click", async () => {
+            const user = userEvent.setup()
+            const onOpenNote = vi.fn()
+
+            render(
+                <NodeDetailCard
+                    node={nodeFixture()}
+                    state="available"
+                    todos={[]}
+                    isRoot={false}
+                    linkedNotes={[
+                        { id: "n1", title: "Design Sketch" },
+                        { id: "n2", title: "Wire Flow" }
+                    ]}
+                    onLinkNote={vi.fn()}
+                    onOpenNote={onOpenNote}
+                />
+            )
+
+            expect(screen.getByText("Scribbles")).toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Design Sketch" })).toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Wire Flow" })).toBeInTheDocument()
+
+            // The chip's accessible name is its title text (the "Open ..." title attr is not the a11y name).
+            await user.click(screen.getByRole("button", { name: "Design Sketch" }))
+            expect(onOpenNote).toHaveBeenCalledWith("n1")
+        })
+
+        it("hides the section entirely when nothing is linked", () => {
+            // onLinkNote is wired (App always passes it for a regular node), but with no linked scribbles
+            // read mode shows nothing, so an untouched node's card looks exactly as it did before.
+            render(
+                <NodeDetailCard
+                    node={nodeFixture()}
+                    state="available"
+                    todos={[]}
+                    isRoot={false}
+                    linkedNotes={[]}
+                    onLinkNote={vi.fn()}
+                />
+            )
+
+            expect(screen.queryByText(/scribbles/i)).toBeNull()
+        })
+    })
+
+    context("the Scribbles section (edit mode)", () => {
+        it("attaches an existing scribble from the dropdown and mints a fresh one", async () => {
+            const user = userEvent.setup()
+            const onLinkNote = vi.fn()
+            const onCreateAndLinkNote = vi.fn()
+
+            render(
+                <NodeDetailCard
+                    node={nodeFixture()}
+                    state="available"
+                    todos={[]}
+                    isRoot={false}
+                    linkedNotes={[]}
+                    noteOptions={[
+                        { id: "n1", title: "Design Sketch" },
+                        { id: "n2", title: "Wire Flow" }
+                    ]}
+                    onLinkNote={onLinkNote}
+                    onCreateAndLinkNote={onCreateAndLinkNote}
+                />
+            )
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+
+            const select = screen.getByRole("combobox", { name: "Attach a scribble" })
+            expect(screen.getByRole("option", { name: "Design Sketch" })).toBeInTheDocument()
+            expect(screen.getByRole("option", { name: "Wire Flow" })).toBeInTheDocument()
+
+            await user.selectOptions(select, "n2")
+            expect(onLinkNote).toHaveBeenCalledWith("n2")
+
+            await user.click(screen.getByRole("button", { name: "New scribble" }))
+            expect(onCreateAndLinkNote).toHaveBeenCalledTimes(1)
+        })
+
+        it("unlinks a linked scribble from its chip's unlink control", async () => {
+            const user = userEvent.setup()
+            const onUnlinkNote = vi.fn()
+
+            render(
+                <NodeDetailCard
+                    node={nodeFixture()}
+                    state="available"
+                    todos={[]}
+                    isRoot={false}
+                    linkedNotes={[{ id: "n1", title: "Design Sketch" }]}
+                    onLinkNote={vi.fn()}
+                    onUnlinkNote={onUnlinkNote}
+                />
+            )
+            await user.click(screen.getByRole("button", { name: "Edit" }))
+
+            await user.click(screen.getByRole("button", { name: "Unlink Design Sketch" }))
+            expect(onUnlinkNote).toHaveBeenCalledWith("n1")
+        })
+    })
+
     context("a linked node (isLinked mode)", () => {
         it("shows the mirrored name and Go to Board, and no checklist / reward / description", () => {
             const todos: Todo[] = [{ text: "should not render", done: false }]
@@ -598,6 +701,28 @@ describe("NodeDetailCard", () => {
             expect(screen.queryByRole("button", { name: "Convert to linked node" })).toBeNull()
             // Go to Board is a read-mode navigation action: edit mode omits it even with onGoToBoard wired.
             expect(screen.queryByRole("button", { name: "Go to Board" })).not.toBeInTheDocument()
+        })
+
+        it("renders no Scribbles section even when scribble props are passed (the linked branch returns first)", () => {
+            // A linked node carries a board pointer, not scribbles; its render branch returns before the
+            // Scribbles section, so passing linkedNotes / onLinkNote changes nothing.
+            render(
+                <NodeDetailCard
+                    node={linkedFixture("board-x")}
+                    state="available"
+                    todos={[]}
+                    isRoot={false}
+                    isLinked
+                    linkedName="Target Quest"
+                    targetBoardId="board-x"
+                    linkedNotes={[{ id: "n1", title: "Design Sketch" }]}
+                    onLinkNote={vi.fn()}
+                    onOpenNote={vi.fn()}
+                />
+            )
+
+            expect(screen.queryByText(/scribbles/i)).toBeNull()
+            expect(screen.queryByRole("button", { name: "Design Sketch" })).toBeNull()
         })
     })
 })

@@ -1,4 +1,4 @@
-import { AddChild, AddParent, AttachNode, Check, DeleteNode, DetachNode, LinkNode, Pencil, PlainNode, Plus, X } from "./icons"
+import { AddChild, AddParent, AttachNode, Check, DeleteNode, DetachNode, LinkNode, Pencil, PlainNode, Plus, Scribble, X } from "./icons"
 import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
@@ -32,6 +32,22 @@ export type NodeDetailCardProps = {
     onSetLinkedTarget?: (boardId: string | null) => void
     // Navigate to the linked node's target board. Rendered disabled while the node is unlinked.
     onGoToBoard?: () => void
+    // Scribbles (Draw notes) linked to this node, resolved to id + title -- dangling ids (a deleted
+    // scribble) are filtered out by App before they reach here. Rendered as the Scribbles section on a
+    // regular / root node (a linked node returns earlier, before the section). App wires the scribble
+    // props only for a non-linked node.
+    linkedNotes?: { id: string; title: string }[]
+    // Scribbles NOT yet linked to this node, for the edit-mode attach dropdown.
+    noteOptions?: { id: string; title: string }[]
+    // Open a linked scribble in the Draw editor (App switches to the Draw view and opens it).
+    onOpenNote?: (noteId: string) => void
+    // Link an existing scribble to this node (edit mode, from the dropdown). Its presence gates the whole
+    // Scribbles section, so read mode with nothing linked shows nothing.
+    onLinkNote?: (noteId: string) => void
+    // Unlink a scribble from this node (edit mode, a chip's ×).
+    onUnlinkNote?: (noteId: string) => void
+    // Mint a fresh blank scribble already linked to this node and open it (edit mode, "New scribble").
+    onCreateAndLinkNote?: () => void
     closing?: boolean
     onToggle?: (index: number) => void
     onComplete?: () => void
@@ -153,10 +169,18 @@ const ICON_BTN_BASE =
     "grid aspect-square w-full place-items-center rounded-[11px] border-[1.5px] transition-colors duration-150 ease-out"
 const ICON_BTN_ADD = `${ICON_BTN_BASE} border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] hover:bg-[#f6eccf]`
 const ICON_BTN_DANGER = `${ICON_BTN_BASE} border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] hover:bg-[#a5482a]/10`
-// A primary / call-to-action variant in the app's gold "unlock" palette, with a soft gold glow, to draw
-// the eye to the one action that matters in a state -- Attach on a parked (detached) node.
-const ICON_BTN_PRIMARY = `${ICON_BTN_BASE} border-solid border-[#b8892b] bg-[#e6c458] text-[#3a2a0c] shadow-[0_3px_10px_-4px_rgba(184,137,43,0.85)] hover:bg-[#edc95d]`
+// A primary / call-to-action variant to draw the eye to the one action that matters in a state -- Attach
+// on a parked (detached) node. Shares the others' dashed border, no glow; the solid gold "unlock" fill
+// (vs the add buttons' transparent one) is what still sets it apart.
+const ICON_BTN_PRIMARY = `${ICON_BTN_BASE} border-dashed border-[#cdb373] bg-[#e6c458] text-[#3a2a0c] hover:bg-[#edc95d]`
 const CHECKLIST_HEAD_CLASS = "font-display text-[11px] uppercase tracking-widest text-[#8a6b28]"
+// Scribble chip (the Scribbles section): a parchment pill whose title opens the drawing; edit mode adds
+// an × to unlink. Palette matches the checklist fields.
+const SCRIBBLE_CHIP_CLASS =
+    "flex min-w-0 items-center gap-1.5 rounded-full border border-[#d8c48f] bg-[#fffdf5] py-1 pl-2.5 font-display text-[12.5px] font-semibold text-[#6f5316] transition-colors duration-150 ease-out"
+const SCRIBBLE_OPEN_CLASS = "flex min-w-0 items-center gap-1.5 bg-transparent hover:text-[#8a641d]"
+const SCRIBBLE_UNLINK_CLASS =
+    "grid h-5 w-5 flex-none place-items-center rounded-full text-[#b3a074] transition-colors duration-150 ease-out hover:bg-[#f4ead0] hover:text-[#8a6b28]"
 
 // A single read-mode checklist row. Its box bounces the moment it's ticked (useCheckPop), so checking
 // an item off feels like a stamp; disabled (non-actionable) rows still render but don't toggle.
@@ -247,6 +271,12 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         targetBoardId = null,
         onSetLinkedTarget,
         onGoToBoard,
+        linkedNotes = [],
+        noteOptions = [],
+        onOpenNote,
+        onLinkNote,
+        onUnlinkNote,
+        onCreateAndLinkNote,
         closing,
         onToggle,
         onComplete,
@@ -442,6 +472,89 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                 if (!open) setConvertConfirmOpen(false)
             }}
         />
+    ) : null
+
+    // Scribbles: the Draw notes linked to this milestone. Read mode lists them as chips that open the
+    // drawing; edit mode adds an × to unlink each, a dropdown to attach an existing scribble, and a button
+    // to spin up a fresh one already linked. Shown on a regular / root node (a linked node returns before
+    // it). Gated on onLinkNote; in read mode it stays hidden until at least one scribble is linked, so an
+    // untouched node's card looks exactly as it did.
+    const showScribbles = !!onLinkNote && (editing || linkedNotes.length > 0)
+    const scribbleSection = showScribbles ? (
+        <div className="mb-[15px]">
+            <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Scribbles</span>
+            {linkedNotes.length > 0 && (
+                <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                    {linkedNotes.map((note) => (
+                        <li key={note.id} className="min-w-0">
+                            {editing ? (
+                                <span className={`${SCRIBBLE_CHIP_CLASS} pr-1`}>
+                                    <button
+                                        type="button"
+                                        title={`Open ${note.title}`}
+                                        onClick={() => onOpenNote?.(note.id)}
+                                        className={SCRIBBLE_OPEN_CLASS}
+                                    >
+                                        <Scribble size={13} className="flex-none" />
+                                        <span className="truncate">{note.title}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label={`Unlink ${note.title}`}
+                                        title="Unlink"
+                                        onClick={() => onUnlinkNote?.(note.id)}
+                                        className={SCRIBBLE_UNLINK_CLASS}
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    title={`Open ${note.title}`}
+                                    onClick={() => onOpenNote?.(note.id)}
+                                    className={`${SCRIBBLE_CHIP_CLASS} pr-2.5 hover:text-[#8a641d]`}
+                                >
+                                    <Scribble size={13} className="flex-none" />
+                                    <span className="truncate">{note.title}</span>
+                                </button>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {editing && (
+                <div className="mt-2 flex flex-col gap-1">
+                    {noteOptions.length > 0 && (
+                        <select
+                            aria-label="Attach a scribble"
+                            className={SELECT_CLASS}
+                            value=""
+                            onChange={(event) => {
+                                if (event.target.value) onLinkNote?.(event.target.value)
+                            }}
+                        >
+                            <option value="">Attach a scribble…</option>
+                            {noteOptions.map((note) => (
+                                <option key={note.id} value={note.id}>
+                                    {note.title}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                    <button
+                        type="button"
+                        aria-label="New scribble"
+                        title="New scribble"
+                        className={TODO_ADD_CLASS}
+                        onClick={onCreateAndLinkNote}
+                    >
+                        <Plus size={14} />
+                        New scribble
+                    </button>
+                </div>
+            )}
+        </div>
     ) : null
 
     // A linked node: no checklist / reward / description. Read mode's action is Go to Board (disabled
@@ -641,6 +754,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                         </div>
                     )}
 
+                    {scribbleSection}
+
                     {actionGrid}
 
                     {deleteButton}
@@ -692,6 +807,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                             </ul>
                         </div>
                     )}
+
+                    {scribbleSection}
 
                     <div className="mt-[14px]">
                         {action}

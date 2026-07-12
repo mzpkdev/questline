@@ -470,7 +470,17 @@ export function App() {
     )
     const deleteNoteItem = useCallback((id: string) => {
         setNotes((prev) => removeNote(prev, id))
+        // Sweep the deleted scribble off every node that linked it, so no milestone keeps a dangling
+        // reference (the render-time filter in `linkedNotes` guards imported / synced data too).
+        dispatch({ type: "pruneNote", noteId: id })
         setEditingNoteId((current) => (current === id ? null : current))
+    }, [])
+    // Open a scribble linked to a milestone: jump to the Draw view AND straight into that note's canvas.
+    // A node-card chip (and a just-minted scribble) both route here; `openNote` alone can't, since it
+    // doesn't switch section, so this pairs the section switch with the open.
+    const openNoteFromNode = useCallback((noteId: string) => {
+        setSection("excalidraw")
+        setEditingNoteId(noteId)
     }, [])
     // The shelf's + tile creates a default reward on the spot, selects it, and opens its card in edit
     // mode so the name/price are editable at once (mirrors adding a task or a node).
@@ -752,6 +762,32 @@ export function App() {
         [selectedId, activeId]
     )
 
+    // Scribbles on the selected milestone: link / unlink an existing one, or mint a fresh blank scribble
+    // already linked and jump into it. All three key on the selected node (a no-op while nothing is
+    // selected); the card offers them only on a regular / root node.
+    const linkNote = useCallback(
+        (noteId: string) => {
+            if (selectedId === null) return
+            dispatch({ type: "linkNote", boardId: activeId, id: selectedId, noteId })
+        },
+        [selectedId, activeId]
+    )
+    const unlinkNote = useCallback(
+        (noteId: string) => {
+            if (selectedId === null) return
+            dispatch({ type: "unlinkNote", boardId: activeId, id: selectedId, noteId })
+        },
+        [selectedId, activeId]
+    )
+    const createAndLinkNote = useCallback(() => {
+        if (selectedId === null) return
+        const id = mintId("note")
+        setNotes((prev) => addNote(prev, id, Date.now()))
+        dispatch({ type: "linkNote", boardId: activeId, id: selectedId, noteId: id })
+        setSection("excalidraw")
+        setEditingNoteId(id)
+    }, [selectedId, activeId])
+
     // Switch to another tab, selecting its root node so the card shows something valid immediately.
     const switchBoard = useCallback(
         (id: string) => {
@@ -902,6 +938,20 @@ export function App() {
     // or a board that already links back to this one) -- a cyclic link leaves both boards uncompletable.
     const linkedBoardOptions = isLinked ? tabs.filter((tab) => !linkWouldCycle(boards, activeId, tab.id)) : []
 
+    // Scribbles linked to the shown node, resolved to live notes -- dangling ids (a scribble deleted from
+    // the wall) drop out here, the render-time half of the guard pruneNote handles on delete. Only a
+    // regular / root node carries scribbles; a linked node never does. `noteOptions` is every scribble
+    // NOT yet linked to this node, for the attach dropdown.
+    const shownNoteIds = shown && !isLinked ? (shown.noteIds ?? []) : []
+    const linkedNotes = shownNoteIds
+        .map((id) => notes.find((note) => note.id === id))
+        .filter((note): note is Note => note !== undefined)
+        .map((note) => ({ id: note.id, title: note.title }))
+    const noteOptions =
+        shown && !isLinked
+            ? notes.filter((note) => !shownNoteIds.includes(note.id)).map((note) => ({ id: note.id, title: note.title }))
+            : []
+
     // The Draw note open in the editor (null → show the wall). A deleted id resolves to undefined, which
     // falls back to the wall.
     const editingNote = editingNoteId !== null ? notes.find((note) => note.id === editingNoteId) : undefined
@@ -1017,6 +1067,7 @@ export function App() {
                                 key={editingNote.id}
                                 note={editingNote}
                                 onChange={(scene) => updateNoteSceneItem(editingNote.id, scene)}
+                                onRename={(title) => renameNoteItem(editingNote.id, title)}
                                 onBack={backToNotes}
                                 onDelete={() => deleteNoteItem(editingNote.id)}
                             />
@@ -1085,6 +1136,12 @@ export function App() {
                                     targetBoardId={shown.targetBoardId ?? null}
                                     onSetLinkedTarget={setLinkedTarget}
                                     onGoToBoard={goToBoard}
+                                    linkedNotes={linkedNotes}
+                                    noteOptions={noteOptions}
+                                    onOpenNote={openNoteFromNode}
+                                    onLinkNote={isLinked ? undefined : linkNote}
+                                    onUnlinkNote={isLinked ? undefined : unlinkNote}
+                                    onCreateAndLinkNote={isLinked ? undefined : createAndLinkNote}
                                     closing={closing}
                                     onToggle={toggleTodo}
                                     onComplete={completeSelected}
