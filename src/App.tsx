@@ -147,6 +147,10 @@ export function App() {
     // The just-added scribble, ringed briefly on the wall so a new card is easy to spot.
     const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null)
     const [section, setSection] = useState<"roadmap" | "tasks" | "rewards" | "sync" | "excalidraw">("roadmap")
+    // Link mode: set while the Draw wall is being used to attach a scribble back to a milestone. Holds the
+    // target (board + node) the picked or freshly-drawn scribble links to. Entered from a node card's "Add
+    // scribble"; cleared on leaving the Draw view. null outside link mode = the wall behaves normally.
+    const [linkTarget, setLinkTarget] = useState<{ boardId: string; nodeId: string } | null>(null)
     // The task whose detail card is open in the Tasks view (the intent, null once dismissed), and the
     // id the card actually shows -- `displayTaskId` trails `selectedTaskId` on dismissal so the exit
     // animation can play before the card unmounts (mirrors selectedId / displayId for nodes).
@@ -263,9 +267,13 @@ export function App() {
         }
     }, [section])
 
-    // Leaving the Draw view drops back to the wall, so re-entering never reopens a stale editor.
+    // Leaving the Draw view drops back to the wall and ends any link-mode session, so re-entering never
+    // reopens a stale editor or resumes a stale link.
     useEffect(() => {
-        if (section !== "excalidraw") setEditingNoteId(null)
+        if (section !== "excalidraw") {
+            setEditingNoteId(null)
+            setLinkTarget(null)
+        }
     }, [section])
 
     // Fade the new-scribble highlight ring shortly after it's added.
@@ -454,17 +462,48 @@ export function App() {
         setEditingNoteId(null)
         setSection("excalidraw")
     }, [])
-    const openNote = useCallback((id: string) => setEditingNoteId(id), [])
-    const backToNotes = useCallback(() => setEditingNoteId(null), [])
+    // End a link-mode session (see startLinkScribble) and return to the milestone it began from -- its
+    // board active, that node selected -- whether the scribble was picked, freshly drawn, or cancelled.
+    const returnToLinkTarget = useCallback(() => {
+        if (!linkTarget) return
+        setActiveId(linkTarget.boardId)
+        setSelectedId(linkTarget.nodeId)
+        setLinkTarget(null)
+        setSection("roadmap")
+    }, [linkTarget])
+    // Click a wall card: normally opens it in the editor. In link mode it instead attaches that existing
+    // scribble to the target milestone and returns there (no editor) -- the "pick existing" half of the flow.
+    const openNote = useCallback(
+        (id: string) => {
+            if (linkTarget) {
+                dispatch({ type: "linkNote", boardId: linkTarget.boardId, id: linkTarget.nodeId, noteId: id })
+                returnToLinkTarget()
+                return
+            }
+            setEditingNoteId(id)
+        },
+        [linkTarget, returnToLinkTarget]
+    )
+    // The editor's Back: normally returns to the wall. In link mode (a just-drawn new scribble) it returns
+    // to the milestone the scribble was attached to instead.
+    const backToNotes = useCallback(() => {
+        if (linkTarget) {
+            returnToLinkTarget()
+            return
+        }
+        setEditingNoteId(null)
+    }, [linkTarget, returnToLinkTarget])
     // The wall's + : mint an empty scribble (newest first) and drop straight into its blank canvas, so a
-    // new scribble is one click from the editor. The section is already the Draw view (the + only renders
-    // there), so opening it just sets the editing id. Still ringed on the wall for a quick back-out.
+    // new scribble is one click from the editor. In link mode it also attaches the fresh scribble to the
+    // target milestone before opening, so the editor's Back returns there. Still ringed on the wall for a
+    // quick back-out. The section is already the Draw view (the + only renders there).
     const addNoteItem = useCallback(() => {
         const id = mintId("note")
         setNotes((prev) => addNote(prev, id, Date.now()))
+        if (linkTarget) dispatch({ type: "linkNote", boardId: linkTarget.boardId, id: linkTarget.nodeId, noteId: id })
         setEditingNoteId(id)
         setHighlightNoteId(id)
-    }, [])
+    }, [linkTarget])
     const renameNoteItem = useCallback((id: string, title: string) => setNotes((prev) => renameNote(prev, id, title)), [])
     const updateNoteSceneItem = useCallback(
         (id: string, scene: Note["scene"]) => setNotes((prev) => updateNoteScene(prev, id, scene, Date.now())),
@@ -764,16 +803,11 @@ export function App() {
         [selectedId, activeId]
     )
 
-    // Scribbles on the selected milestone: link / unlink an existing one, or mint a fresh blank scribble
-    // already linked and jump into it. All three key on the selected node (a no-op while nothing is
-    // selected); the card offers them only on a regular / root node.
-    const linkNote = useCallback(
-        (noteId: string) => {
-            if (selectedId === null) return
-            dispatch({ type: "linkNote", boardId: activeId, id: selectedId, noteId })
-        },
-        [selectedId, activeId]
-    )
+    // Scribbles on the selected milestone. Unlink drops one from the node (the chip's × in edit mode).
+    // Add scribble opens the Draw wall in "link mode" bound to this node: picking an existing scribble
+    // links it (openNote), a new one links + opens the editor (addNoteItem), and either way the wall
+    // returns here (returnToLinkTarget). Both key on the selected node (a no-op while nothing's selected);
+    // the card offers them only on a regular / root node.
     const unlinkNote = useCallback(
         (noteId: string) => {
             if (selectedId === null) return
@@ -781,13 +815,11 @@ export function App() {
         },
         [selectedId, activeId]
     )
-    const createAndLinkNote = useCallback(() => {
+    const startLinkScribble = useCallback(() => {
         if (selectedId === null) return
-        const id = mintId("note")
-        setNotes((prev) => addNote(prev, id, Date.now()))
-        dispatch({ type: "linkNote", boardId: activeId, id: selectedId, noteId: id })
+        setLinkTarget({ boardId: activeId, nodeId: selectedId })
+        setEditingNoteId(null)
         setSection("excalidraw")
-        setEditingNoteId(id)
     }, [selectedId, activeId])
 
     // Switch to another tab, selecting its root node so the card shows something valid immediately.
@@ -942,17 +974,14 @@ export function App() {
 
     // Scribbles linked to the shown node, resolved to live notes -- dangling ids (a scribble deleted from
     // the wall) drop out here, the render-time half of the guard pruneNote handles on delete. Only a
-    // regular / root node carries scribbles; a linked node never does. `noteOptions` is every scribble
-    // NOT yet linked to this node, for the attach dropdown.
+    // regular / root node carries scribbles; a linked node never does.
     const shownNoteIds = shown && !isLinked ? (shown.noteIds ?? []) : []
     const linkedNotes = shownNoteIds
         .map((id) => notes.find((note) => note.id === id))
         .filter((note): note is Note => note !== undefined)
         .map((note) => ({ id: note.id, title: note.title }))
-    const noteOptions =
-        shown && !isLinked
-            ? notes.filter((note) => !shownNoteIds.includes(note.id)).map((note) => ({ id: note.id, title: note.title }))
-            : []
+    // In link mode, the wall's banner names the milestone the picked / new scribble will attach to.
+    const linkTargetName = linkTarget ? (boards[linkTarget.boardId]?.nodes[linkTarget.nodeId]?.name ?? "") : ""
 
     // The Draw note open in the editor (null → show the wall). A deleted id resolves to undefined, which
     // falls back to the wall.
@@ -1081,6 +1110,9 @@ export function App() {
                                     onAdd={addNoteItem}
                                     onRename={renameNoteItem}
                                     highlightId={highlightNoteId}
+                                    linkMode={linkTarget !== null}
+                                    linkTargetName={linkTargetName}
+                                    onCancelLink={returnToLinkTarget}
                                 />
                             </div>
                         )}
@@ -1139,11 +1171,9 @@ export function App() {
                                     onSetLinkedTarget={setLinkedTarget}
                                     onGoToBoard={goToBoard}
                                     linkedNotes={linkedNotes}
-                                    noteOptions={noteOptions}
                                     onOpenNote={openNoteFromNode}
-                                    onLinkNote={isLinked ? undefined : linkNote}
                                     onUnlinkNote={isLinked ? undefined : unlinkNote}
-                                    onCreateAndLinkNote={isLinked ? undefined : createAndLinkNote}
+                                    onAddScribble={isLinked ? undefined : startLinkScribble}
                                     closing={closing}
                                     onToggle={toggleTodo}
                                     onComplete={completeSelected}

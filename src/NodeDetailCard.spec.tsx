@@ -458,7 +458,7 @@ describe("NodeDetailCard", () => {
                         { id: "n1", title: "Design Sketch" },
                         { id: "n2", title: "Wire Flow" }
                     ]}
-                    onLinkNote={vi.fn()}
+                    onAddScribble={vi.fn()}
                     onOpenNote={onOpenNote}
                 />
             )
@@ -473,7 +473,7 @@ describe("NodeDetailCard", () => {
         })
 
         it("hides the section entirely when nothing is linked", () => {
-            // onLinkNote is wired (App always passes it for a regular node), but with no linked scribbles
+            // onAddScribble is wired (App always passes it for a regular node), but with no linked scribbles
             // read mode shows nothing, so an untouched node's card looks exactly as it did before.
             render(
                 <NodeDetailCard
@@ -482,7 +482,7 @@ describe("NodeDetailCard", () => {
                     todos={[]}
                     isRoot={false}
                     linkedNotes={[]}
-                    onLinkNote={vi.fn()}
+                    onAddScribble={vi.fn()}
                 />
             )
 
@@ -491,10 +491,9 @@ describe("NodeDetailCard", () => {
     })
 
     context("the Scribbles section (edit mode)", () => {
-        it("attaches an existing scribble from the dropdown and mints a fresh one", async () => {
+        it("opens link mode from the Add scribble button", async () => {
             const user = userEvent.setup()
-            const onLinkNote = vi.fn()
-            const onCreateAndLinkNote = vi.fn()
+            const onAddScribble = vi.fn()
 
             render(
                 <NodeDetailCard
@@ -503,25 +502,13 @@ describe("NodeDetailCard", () => {
                     todos={[]}
                     isRoot={false}
                     linkedNotes={[]}
-                    noteOptions={[
-                        { id: "n1", title: "Design Sketch" },
-                        { id: "n2", title: "Wire Flow" }
-                    ]}
-                    onLinkNote={onLinkNote}
-                    onCreateAndLinkNote={onCreateAndLinkNote}
+                    onAddScribble={onAddScribble}
                 />
             )
             await user.click(screen.getByRole("button", { name: "Edit" }))
 
-            const select = screen.getByRole("combobox", { name: "Attach a scribble" })
-            expect(screen.getByRole("option", { name: "Design Sketch" })).toBeInTheDocument()
-            expect(screen.getByRole("option", { name: "Wire Flow" })).toBeInTheDocument()
-
-            await user.selectOptions(select, "n2")
-            expect(onLinkNote).toHaveBeenCalledWith("n2")
-
-            await user.click(screen.getByRole("button", { name: "New scribble" }))
-            expect(onCreateAndLinkNote).toHaveBeenCalledTimes(1)
+            await user.click(screen.getByRole("button", { name: "Add scribble" }))
+            expect(onAddScribble).toHaveBeenCalledTimes(1)
         })
 
         it("unlinks a linked scribble from its chip's unlink control", async () => {
@@ -535,7 +522,7 @@ describe("NodeDetailCard", () => {
                     todos={[]}
                     isRoot={false}
                     linkedNotes={[{ id: "n1", title: "Design Sketch" }]}
-                    onLinkNote={vi.fn()}
+                    onAddScribble={vi.fn()}
                     onUnlinkNote={onUnlinkNote}
                 />
             )
@@ -705,7 +692,7 @@ describe("NodeDetailCard", () => {
 
         it("renders no Scribbles section even when scribble props are passed (the linked branch returns first)", () => {
             // A linked node carries a board pointer, not scribbles; its render branch returns before the
-            // Scribbles section, so passing linkedNotes / onLinkNote changes nothing.
+            // Scribbles section, so passing linkedNotes / onAddScribble changes nothing.
             render(
                 <NodeDetailCard
                     node={linkedFixture("board-x")}
@@ -716,7 +703,7 @@ describe("NodeDetailCard", () => {
                     linkedName="Target Quest"
                     targetBoardId="board-x"
                     linkedNotes={[{ id: "n1", title: "Design Sketch" }]}
-                    onLinkNote={vi.fn()}
+                    onAddScribble={vi.fn()}
                     onOpenNote={vi.fn()}
                 />
             )

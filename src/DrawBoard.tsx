@@ -191,17 +191,43 @@ type DrawBoardProps = {
     onRename: (id: string, title: string) => void
     // The just-added scribble id, ringed briefly on the wall.
     highlightId?: string | null
+    // Link mode: the wall was opened from a milestone's "Add scribble" to attach one back to it. Swaps the
+    // header for a banner naming the target (with Cancel); the click wiring is unchanged (App routes onOpen
+    // to link the picked card and onAdd to mint + link a fresh one), so this only tells the user the mode.
+    linkMode?: boolean
+    linkTargetName?: string
+    onCancelLink?: () => void
 }
 
-export function DrawBoard({ notes, onOpen, onAdd, onRename, highlightId }: DrawBoardProps) {
+export function DrawBoard({ notes, onOpen, onAdd, onRename, highlightId, linkMode = false, linkTargetName, onCancelLink }: DrawBoardProps) {
     return (
         <div className="mx-auto w-[95%] max-w-[1400px] px-1 py-10">
-            <div className="mb-6">
-                <h2 className="font-decorative text-[21px] font-bold tracking-[0.4px] text-[#4a3410]">Scribbles</h2>
-                <p className="mt-0.5 text-[13.5px] italic text-[#a2916c]">
-                    A wall of your scribbles. Each one is its own canvas: open one to draw, or start a new one.
-                </p>
-            </div>
+            {linkMode ? (
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border-2 border-dashed border-[#cdb373] bg-[#fbf3dd]/70 px-4 py-3">
+                    <div className="min-w-0">
+                        <h2 className="truncate font-decorative text-[19px] font-bold tracking-[0.4px] text-[#4a3410]">
+                            Attach a scribble{linkTargetName ? ` to ${linkTargetName}` : ""}
+                        </h2>
+                        <p className="mt-0.5 text-[13px] italic text-[#a2916c]">
+                            Pick an existing scribble to link it, or start a new one.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCancelLink}
+                        className="flex-none rounded-lg border border-[#8a641d]/30 bg-[#f4ead0] px-3 py-1.5 font-display text-[11.5px] font-semibold tracking-wide text-[#4a3410] shadow-[0_1px_4px_-1px_rgba(120,80,20,0.3)] transition-colors duration-150 ease-out hover:bg-[#efe3c4]"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            ) : (
+                <div className="mb-6">
+                    <h2 className="font-decorative text-[21px] font-bold tracking-[0.4px] text-[#4a3410]">Scribbles</h2>
+                    <p className="mt-0.5 text-[13.5px] italic text-[#a2916c]">
+                        A wall of your scribbles. Each one is its own canvas: open one to draw, or start a new one.
+                    </p>
+                </div>
+            )}
 
             <div className="columns-2 gap-4 sm:columns-3 lg:columns-4 xl:columns-5">
                 <button

@@ -37,17 +37,14 @@ export type NodeDetailCardProps = {
     // regular / root node (a linked node returns earlier, before the section). App wires the scribble
     // props only for a non-linked node.
     linkedNotes?: { id: string; title: string }[]
-    // Scribbles NOT yet linked to this node, for the edit-mode attach dropdown.
-    noteOptions?: { id: string; title: string }[]
     // Open a linked scribble in the Draw editor (App switches to the Draw view and opens it).
     onOpenNote?: (noteId: string) => void
-    // Link an existing scribble to this node (edit mode, from the dropdown). Its presence gates the whole
-    // Scribbles section, so read mode with nothing linked shows nothing.
-    onLinkNote?: (noteId: string) => void
     // Unlink a scribble from this node (edit mode, a chip's ×).
     onUnlinkNote?: (noteId: string) => void
-    // Mint a fresh blank scribble already linked to this node and open it (edit mode, "New scribble").
-    onCreateAndLinkNote?: () => void
+    // Add a scribble to this node (edit mode): opens the Draw wall in link mode, where picking an existing
+    // scribble or starting a new one attaches it back here. Its presence gates the whole Scribbles section,
+    // so read mode with nothing linked shows nothing.
+    onAddScribble?: () => void
     closing?: boolean
     onToggle?: (index: number) => void
     onComplete?: () => void
@@ -272,11 +269,9 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onSetLinkedTarget,
         onGoToBoard,
         linkedNotes = [],
-        noteOptions = [],
         onOpenNote,
-        onLinkNote,
         onUnlinkNote,
-        onCreateAndLinkNote,
+        onAddScribble,
         closing,
         onToggle,
         onComplete,
@@ -475,11 +470,11 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     ) : null
 
     // Scribbles: the Draw notes linked to this milestone. Read mode lists them as chips that open the
-    // drawing; edit mode adds an × to unlink each, a dropdown to attach an existing scribble, and a button
-    // to spin up a fresh one already linked. Shown on a regular / root node (a linked node returns before
-    // it). Gated on onLinkNote; in read mode it stays hidden until at least one scribble is linked, so an
-    // untouched node's card looks exactly as it did.
-    const showScribbles = !!onLinkNote && (editing || linkedNotes.length > 0)
+    // drawing; edit mode adds an × to unlink each and an "Add scribble" button that opens the Draw wall in
+    // link mode (pick an existing scribble or start a new one, either way linked back here). Shown on a
+    // regular / root node (a linked node returns before it). Gated on onAddScribble; in read mode it stays
+    // hidden until at least one scribble is linked, so an untouched node's card looks exactly as it did.
+    const showScribbles = !!onAddScribble && (editing || linkedNotes.length > 0)
     const scribbleSection = showScribbles ? (
         <div className="mb-[15px]">
             <span className={`${CHECKLIST_HEAD_CLASS} mb-[9px] block`}>Scribbles</span>
@@ -524,35 +519,16 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                 </ul>
             )}
             {editing && (
-                <div className="mt-2 flex flex-col gap-1">
-                    {noteOptions.length > 0 && (
-                        <select
-                            aria-label="Attach a scribble"
-                            className={SELECT_CLASS}
-                            value=""
-                            onChange={(event) => {
-                                if (event.target.value) onLinkNote?.(event.target.value)
-                            }}
-                        >
-                            <option value="">Attach a scribble…</option>
-                            {noteOptions.map((note) => (
-                                <option key={note.id} value={note.id}>
-                                    {note.title}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    <button
-                        type="button"
-                        aria-label="New scribble"
-                        title="New scribble"
-                        className={TODO_ADD_CLASS}
-                        onClick={onCreateAndLinkNote}
-                    >
-                        <Plus size={14} />
-                        New scribble
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    aria-label="Add scribble"
+                    title="Add scribble"
+                    className={TODO_ADD_CLASS}
+                    onClick={onAddScribble}
+                >
+                    <Plus size={14} />
+                    Add scribble
+                </button>
             )}
         </div>
     ) : null

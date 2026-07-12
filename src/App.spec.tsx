@@ -560,41 +560,78 @@ describe("App", () => {
     })
 
     context("scribbles (linking Draw notes to milestones)", () => {
-        // Create one scribble from the Draw wall (the "Scribbles" nav chip -> the + tile, which now opens
-        // the fresh scribble straight in the editor), return to the roadmap, and attach it to finish-node
-        // from its edit card. Leaves finish-node selected, its card in edit mode showing the "Scribble"
-        // chip. (A fresh scribble takes the default title "Scribble".)
-        async function linkAScribbleToFinishNode() {
-            fireEvent.click(screen.getByRole("button", { name: "Scribbles" })) // open the Draw view
-            fireEvent.click(await screen.findByRole("button", { name: "Add Scribble" }))
-            await screen.findByTestId("excalidraw-mock") // the + drops straight into the new scribble's canvas
-
-            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to the roadmap
+        // Open finish-node's edit card and press "Add scribble" -> the Draw wall opens in link mode bound
+        // to the node. Leaves the app on the link-mode wall (its Cancel / cards / + tile all in play).
+        async function openLinkModeFromFinishNode() {
             const leaf = await waitForNode("finish-node")
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-
-            const select = await screen.findByRole("combobox", { name: "Attach a scribble" })
-            const option = within(select).getByRole("option", { name: "Scribble" }) as HTMLOptionElement
-            fireEvent.change(select, { target: { value: option.value } })
+            fireEvent.click(screen.getByRole("button", { name: "Add scribble" }))
+            await screen.findByRole("heading", { name: /attach a scribble to finish a node/i })
         }
 
-        it("attaches a scribble to a node from the edit card's dropdown", async () => {
+        // Link mode -> start a new scribble from the + tile: it attaches to finish-node and opens straight
+        // in the editor. Leaves the editor (excalidraw-mock) showing.
+        async function linkNewScribbleToFinishNode() {
+            await openLinkModeFromFinishNode()
+            fireEvent.click(screen.getByRole("button", { name: "Add Scribble" }))
+            await screen.findByTestId("excalidraw-mock")
+        }
+
+        // Create a standalone, unlinked scribble on the wall (Scribbles nav -> + -> editor -> back) so it
+        // exists as a card to pick later. Leaves the app on the (normal) Draw wall.
+        async function createStandaloneScribble() {
+            fireEvent.click(screen.getByRole("button", { name: "Scribbles" }))
+            fireEvent.click(await screen.findByRole("button", { name: "Add Scribble" }))
+            await screen.findByTestId("excalidraw-mock")
+            fireEvent.click(screen.getByRole("button", { name: "Back to scribbles" }))
+            await screen.findByRole("button", { name: "Rename Scribble" })
+        }
+
+        it("links a new scribble to a node from the card's Add scribble button", async () => {
+            render(<App />)
+            await linkNewScribbleToFinishNode()
+
+            // Back from the editor returns to the milestone (not the wall), and the fresh scribble is a chip.
+            fireEvent.click(screen.getByRole("button", { name: "Back to scribbles" }))
+            await screen.findByRole("heading", { name: /finish a node/i })
+            expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
+        })
+
+        it("links an existing scribble to a node by picking it in link mode", async () => {
             render(<App />)
             await waitForNode("finish-node")
+            await createStandaloneScribble()
 
-            await linkAScribbleToFinishNode()
+            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" })) // back to the roadmap
+            await openLinkModeFromFinishNode()
 
-            // The node's card now shows a chip for the linked scribble.
+            // Click the existing card (its container) to link it and return to the node.
+            const rename = await screen.findByRole("button", { name: "Rename Scribble" })
+            fireEvent.click(rename.closest("[data-note-id]") as HTMLElement)
+
+            await screen.findByRole("heading", { name: /finish a node/i })
             expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
+        })
+
+        it("cancels link mode and returns to the node without linking", async () => {
+            render(<App />)
+            await openLinkModeFromFinishNode()
+
+            fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+            // Back on the node card, nothing was attached.
+            await screen.findByRole("heading", { name: /finish a node/i })
+            expect(screen.queryByRole("button", { name: "Scribble" })).toBeNull()
         })
 
         it("opens the Excalidraw editor for a scribble when its chip is clicked", async () => {
             render(<App />)
-            await waitForNode("finish-node")
+            await linkNewScribbleToFinishNode()
+            fireEvent.click(screen.getByRole("button", { name: "Back to scribbles" }))
+            await screen.findByRole("heading", { name: /finish a node/i })
 
-            await linkAScribbleToFinishNode()
             fireEvent.click(await screen.findByRole("button", { name: "Scribble" }))
 
             // The Draw editor for that note is shown; the roadmap board is gone behind it.
@@ -602,35 +639,11 @@ describe("App", () => {
             await waitFor(() => expect(nodeRoot("finish-node")).toBeNull())
         })
 
-        it("mints a fresh scribble and opens it from the New scribble button", async () => {
-            render(<App />)
-            const leaf = await waitForNode("finish-node")
-
-            fireEvent.click(leaf)
-            await screen.findByRole("heading", { name: /finish a node/i })
-            fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "New scribble" }))
-
-            // The editor opens straight on the fresh note...
-            expect(await screen.findByTestId("excalidraw-mock")).toBeInTheDocument()
-
-            // ...and the note now exists linked to the node: back on the roadmap its chip is there.
-            fireEvent.click(screen.getByRole("button", { name: "Learn Questline" }))
-            const leaf2 = await waitForNode("finish-node")
-            fireEvent.click(leaf2)
-            await screen.findByRole("heading", { name: /finish a node/i })
-            expect(await screen.findByRole("button", { name: "Scribble" })).toBeInTheDocument()
-        })
-
         it("prunes the chip off a node when its scribble is deleted", async () => {
             render(<App />)
-            await waitForNode("finish-node")
+            await linkNewScribbleToFinishNode()
 
-            await linkAScribbleToFinishNode()
-
-            // Open the linked scribble, then delete it from the editor's menu (confirming).
-            fireEvent.click(await screen.findByRole("button", { name: "Scribble" }))
-            await screen.findByTestId("excalidraw-mock")
+            // Already in the editor for the freshly-linked scribble: delete it from the menu (confirming).
             fireEvent.click(screen.getByRole("button", { name: "Delete scribble" }))
             fireEvent.click(await screen.findByRole("button", { name: "Delete" }))
 
