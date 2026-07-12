@@ -1,8 +1,8 @@
 // The Excalidraw editor for a single Draw note: opened from a card on the DrawBoard wall. It mounts
 // the stock editor with the parchment/gold reskin (excalidraw-theme.css), seeds it from the note's
 // saved scene, and streams edits back to App (debounced) so the note persists into questline state
-// like everything else. A "Scribbles" button (top-right on desktop, the main menu on mobile) returns
-// to the wall. App lazy-loads this module (with DrawBoard) so Excalidraw's weight only ships on open.
+// like everything else. A header bar above the canvas holds the editable name and a Back-to-scribbles
+// button. App lazy-loads this module (with DrawBoard) so Excalidraw's weight only ships on open.
 
 import "@excalidraw/excalidraw/index.css"
 import "./excalidraw-theme.css"
@@ -20,7 +20,7 @@ function TrashIcon() {
     )
 }
 
-// The back-arrow glyph, shared by the desktop top-right button and the mobile main-menu item.
+// The back-arrow glyph for the header's Back button.
 function BackChevron() {
     return (
         <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -46,7 +46,7 @@ type ExcalidrawBoardProps = {
 
 export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: ExcalidrawBoardProps) {
     const [confirmDelete, setConfirmDelete] = useState(false)
-    // The scribble's name, editable in a top-right pill. A local draft (seeded once per note -- App keys
+    // The scribble's name, editable in the header bar. A local draft (seeded once per note -- App keys
     // this component by note id, so a different note remounts and re-seeds) so keystrokes don't churn the
     // notes list; it commits on blur / Enter. A blank falls back to the default, and the draft snaps to
     // that fallback so the field never shows an empty name the store rejected.
@@ -57,15 +57,6 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
         onRename(next)
     }
 
-    // Excalidraw decides "mobile" by container width (that's the flag renderTopRightUI hands us). Mirror
-    // it into state -- written to a ref inside that render callback, reconciled here -- so the mobile-only
-    // name field in the main menu keys off the EXACT same cutoff as the suppressed desktop pill, with no
-    // width band where neither shows.
-    const [isMobile, setIsMobile] = useState(false)
-    const mobileRef = useRef(false)
-    useEffect(() => {
-        if (mobileRef.current !== isMobile) setIsMobile(mobileRef.current)
-    })
     // Seed the editor from the note's saved scene. Read once per mounted note (App keys this component
     // by note id, so a different note remounts and re-seeds); it must not reset as the user draws.
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when a different note opens
@@ -138,90 +129,54 @@ export function ExcalidrawBoard({ note, onChange, onRename, onBack, onDelete }: 
         onBack()
     }
 
-    // Fills the board surface (a relative, flex-1 parent). Locked to light so the parchment overrides
-    // in excalidraw-theme.css always apply.
+    // A slim header bar (Back + the scribble's name) sits above the canvas, the same on desktop and
+    // mobile, so the name is always visible and never fights Excalidraw's floating toolbars. The canvas
+    // fills the rest, locked to light so the parchment overrides in excalidraw-theme.css always apply.
     return (
-        <div className="absolute inset-0 z-10">
-            <Excalidraw
-                theme="light"
-                initialData={initialData}
-                UIOptions={UI_OPTIONS}
-                onChange={handleChange}
-                // Desktop has room for a top-right button; on mobile it fights Excalidraw's toolbar, so
-                // there the back action lives in the main menu (below) instead.
-                renderTopRightUI={(mobile) => {
-                    // Stash Excalidraw's mobile flag (reconciled into `isMobile` by the effect above), then
-                    // render the top-right cluster on desktop only: on mobile it fights Excalidraw's
-                    // toolbar, so the name moves into the main menu instead (below).
-                    mobileRef.current = mobile
-                    return mobile ? null : (
-                        <div className="flex items-center gap-2">
-                            <input
-                                aria-label="Scribble name"
-                                value={title}
-                                maxLength={60}
-                                placeholder={DEFAULT_NOTE_TITLE}
-                                onChange={(event) => setTitle(event.target.value)}
-                                onBlur={commitTitle}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter") event.currentTarget.blur()
-                                }}
-                                className="w-[170px] rounded-lg border border-[#8a641d]/30 bg-[#f4ead0] px-2.5 py-1.5 font-display text-[12.5px] font-semibold text-[#4a3410] shadow-[0_1px_4px_-1px_rgba(120,80,20,0.3)] transition-colors duration-150 ease-out placeholder:font-normal placeholder:italic placeholder:text-[#a2916c] focus:border-[#b8892b] focus:outline-none focus:ring-2 focus:ring-[#e6c458]/40"
-                            />
-                            <button
-                                type="button"
-                                onClick={back}
-                                title="Back to scribbles"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#8a641d]/30 bg-[#f4ead0] px-3 py-1.5 font-display text-[11.5px] font-semibold tracking-wide text-[#4a3410] shadow-[0_1px_4px_-1px_rgba(120,80,20,0.3)] transition-colors duration-150 ease-out hover:bg-[#efe3c4]"
-                            >
-                                <BackChevron />
-                                Scribbles
-                            </button>
-                        </div>
-                    )
-                }}
-            >
-                <MainMenu>
-                    {isMobile && (
-                        // Mobile: the top-right pill is suppressed, so the name lives here in the menu --
-                        // where Back and Delete already are -- as an editable field. Commits on blur / Enter.
-                        <>
-                            <MainMenu.ItemCustom>
-                                <label className="flex w-full flex-col gap-1 text-left">
-                                    <span className="font-display text-[10px] uppercase tracking-widest text-[#8a6b28]">
-                                        Name
-                                    </span>
-                                    <input
-                                        aria-label="Scribble name"
-                                        value={title}
-                                        maxLength={60}
-                                        placeholder={DEFAULT_NOTE_TITLE}
-                                        onChange={(event) => setTitle(event.target.value)}
-                                        onBlur={commitTitle}
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter") event.currentTarget.blur()
-                                        }}
-                                        className="w-full rounded-md border border-[#d8c48f] bg-[#fffdf5] px-2 py-1.5 font-display text-[13px] font-semibold text-[#4a3410] placeholder:font-normal placeholder:italic placeholder:text-[#a2916c] focus:border-[#b8892b] focus:outline-none focus:ring-2 focus:ring-[#e6c458]/40"
-                                    />
-                                </label>
-                            </MainMenu.ItemCustom>
-                            <MainMenu.Separator />
-                        </>
-                    )}
-                    <MainMenu.Item onSelect={back} icon={<BackChevron />}>
-                        Back to scribbles
-                    </MainMenu.Item>
-                    <MainMenu.Separator />
-                    <MainMenu.DefaultItems.SaveAsImage />
-                    <MainMenu.DefaultItems.ChangeCanvasBackground />
-                    <MainMenu.DefaultItems.ClearCanvas />
-                    <MainMenu.DefaultItems.Help />
-                    <MainMenu.Separator />
-                    <MainMenu.Item onSelect={() => setConfirmDelete(true)} icon={<TrashIcon />} style={{ color: "#a5482a" }}>
-                        Delete scribble
-                    </MainMenu.Item>
-                </MainMenu>
-            </Excalidraw>
+        <div className="absolute inset-0 z-10 flex flex-col">
+            <div className="relative flex h-11 flex-none items-center justify-center border-b border-[#8a641d]/25 bg-[#f4ead0] px-3 shadow-[0_1px_4px_-2px_rgba(120,80,20,0.45)]">
+                <button
+                    type="button"
+                    onClick={back}
+                    title="Back to scribbles"
+                    aria-label="Back to scribbles"
+                    className="absolute left-3 inline-flex items-center gap-1.5 rounded-lg border border-[#8a641d]/30 bg-[#faf2dc] px-2.5 py-1.5 font-display text-[11.5px] font-semibold tracking-wide text-[#4a3410] transition-colors duration-150 ease-out hover:bg-[#efe3c4]"
+                >
+                    <BackChevron />
+                    <span className="hidden sm:inline">Scribbles</span>
+                </button>
+                <input
+                    aria-label="Scribble name"
+                    value={title}
+                    maxLength={60}
+                    placeholder={DEFAULT_NOTE_TITLE}
+                    onChange={(event) => setTitle(event.target.value)}
+                    onBlur={commitTitle}
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur()
+                    }}
+                    className="w-[min(60%,260px)] rounded-lg border border-transparent bg-transparent px-2 py-1 text-center font-display text-[14px] font-semibold text-[#4a3410] transition-colors duration-150 ease-out placeholder:font-normal placeholder:italic placeholder:text-[#a2916c] hover:border-[#8a641d]/20 focus:border-[#b8892b] focus:bg-[#fffdf5] focus:outline-none focus:ring-2 focus:ring-[#e6c458]/40"
+                />
+            </div>
+            <div className="relative flex-1">
+                <Excalidraw
+                    theme="light"
+                    initialData={initialData}
+                    UIOptions={UI_OPTIONS}
+                    onChange={handleChange}
+                >
+                    <MainMenu>
+                        <MainMenu.DefaultItems.SaveAsImage />
+                        <MainMenu.DefaultItems.ChangeCanvasBackground />
+                        <MainMenu.DefaultItems.ClearCanvas />
+                        <MainMenu.DefaultItems.Help />
+                        <MainMenu.Separator />
+                        <MainMenu.Item onSelect={() => setConfirmDelete(true)} icon={<TrashIcon />} style={{ color: "#a5482a" }}>
+                            Delete scribble
+                        </MainMenu.Item>
+                    </MainMenu>
+                </Excalidraw>
+            </div>
             <ConfirmDialog
                 open={confirmDelete}
                 title="Delete this scribble?"
