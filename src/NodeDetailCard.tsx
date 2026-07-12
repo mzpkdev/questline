@@ -1,4 +1,4 @@
-import { AddChild, AddParent, Check, Circle, Link, Link2, Pencil, Plus, Trash2, Unlink, X } from "./icons"
+import { AddChild, AddParent, AttachNode, Check, DeleteNode, DetachNode, LinkNode, Pencil, PlainNode, Plus, X } from "./icons"
 import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
@@ -325,9 +325,10 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     // Structural actions (edit mode): an icon-only grid, one square per action. Add child is always
     // offered; Add parent and Add linked node each render only when their handler is wired (App wires
     // Add parent for regular AND linked nodes, since insertParent splices a node above either). Detach
-    // (Unlink) and Attach (Link) are mutually exclusive: App wires Detach for a non-root node still on
-    // the tree and Attach for a parked orphan, so the root offers neither and a node offers exactly one.
-    // The parent-up / child-down arrows read as the top-down tree's above / below. Delete is a separate
+    // and Attach are mutually exclusive: App wires Detach for a non-root node still on the tree and
+    // Attach for a parked orphan, so the root offers neither and a node offers exactly one. The icons
+    // share one node-primitive language (see src/icons): a rounded-square node plus edges / modifiers.
+    // Delete is a separate
     // full-width button below the grid (deleteButton), not a grid cell.
     const actionGrid = (
         <div className="grid grid-cols-4 gap-2">
@@ -341,22 +342,22 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             </ActionIcon>
             {onConvertToLinked && (
                 <ActionIcon label="Convert to linked node" onClick={() => setConvertConfirmOpen(true)}>
-                    <Link2 size={18} />
+                    <LinkNode size={18} />
                 </ActionIcon>
             )}
             {onConvertToRegular && (
                 <ActionIcon label="Convert to regular node" onClick={onConvertToRegular}>
-                    <Circle size={18} />
+                    <PlainNode size={18} />
                 </ActionIcon>
             )}
             {onDetach && (
                 <ActionIcon label="Detach node" onClick={onDetach}>
-                    <Unlink size={18} />
+                    <DetachNode size={18} />
                 </ActionIcon>
             )}
             {onAttach && (
                 <ActionIcon label="Attach node" onClick={onAttach}>
-                    <Link size={18} />
+                    <AttachNode size={18} />
                 </ActionIcon>
             )}
         </div>
@@ -371,7 +372,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             className={DELETE_BTN_CLASS}
             onClick={() => setConfirmOpen(true)}
         >
-            <Trash2 size={16} />
+            <DeleteNode size={16} />
             Delete
         </button>
     ) : null

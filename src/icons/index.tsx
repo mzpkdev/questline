@@ -1,9 +1,13 @@
-// Local, dependency-free icon set replacing lucide-react. Most glyphs are lucide node data (paths /
-// lines / rects) wrapped in the shared <Icon> (24x24, currentColor stroke), named to match lucide so a
-// consumer only swaps the import path. AddParent / AddChild are custom: a stacked pair of nodes joined
-// by an edge, where the plus marks WHERE the new node lands (on top for a parent, below for a child).
-// Add a glyph here when a new one is needed rather than re-adding the dependency.
+// Local, dependency-free icon set (replaces lucide-react). Two groups share the file:
+//
+//  - Generic UI glyphs (Plus, X, Check, Pencil): lucide node data, wrapped in the shared <Icon>.
+//  - Node-action glyphs (AddParent, AddChild, DetachNode, AttachNode, LinkNode, PlainNode, DeleteNode):
+//    a cohesive custom set for the detail card's edit-mode actions. Every one is built from the same
+//    primitive -- a rounded square standing for a tree node (echoing the node cards) -- plus edges and a
+//    small modifier, so the icon reads as what the action does to the node in the tree.
 import { Icon, type IconProps } from "./Icon"
+
+// --- Generic UI glyphs -------------------------------------------------------------------------------
 
 export function Plus(props: IconProps) {
     return (
@@ -19,14 +23,6 @@ export function X(props: IconProps) {
         <Icon {...props}>
             <path d="M18 6 6 18" />
             <path d="m6 6 12 12" />
-        </Icon>
-    )
-}
-
-export function Circle(props: IconProps) {
-    return (
-        <Icon {...props}>
-            <circle cx="12" cy="12" r="10" />
         </Icon>
     )
 }
@@ -48,72 +44,83 @@ export function Pencil(props: IconProps) {
     )
 }
 
-export function Trash2(props: IconProps) {
-    return (
-        <Icon {...props}>
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-        </Icon>
-    )
-}
+// --- Node-action glyphs (shared rounded-square node primitive) ---------------------------------------
 
-export function Link(props: IconProps) {
-    return (
-        <Icon {...props}>
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-        </Icon>
-    )
-}
-
-export function Link2(props: IconProps) {
-    return (
-        <Icon {...props}>
-            <path d="M9 17H7A5 5 0 0 1 7 7h2" />
-            <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
-            <line x1="8" x2="16" y1="12" y2="12" />
-        </Icon>
-    )
-}
-
-export function Unlink(props: IconProps) {
-    return (
-        <Icon {...props}>
-            <path d="m18.84 12.25 1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71" />
-            <path d="m5.17 11.75-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71" />
-            <line x1="8" x2="8" y1="2" y2="5" />
-            <line x1="2" x2="5" y1="8" y2="8" />
-            <line x1="16" x2="16" y1="19" y2="22" />
-            <line x1="19" x2="22" y1="16" y2="16" />
-        </Icon>
-    )
-}
-
-// Add parent: the new (plus) node sits ABOVE this node, joined by an edge.
+// Add parent: a new (+) node ABOVE this node, joined by an edge.
 export function AddParent(props: IconProps) {
     return (
         <Icon {...props}>
-            <circle cx="12" cy="6" r="4" />
-            <path d="M10 6h4" />
+            <rect x="8" y="2" width="8" height="8" rx="2" />
             <path d="M12 4v4" />
+            <path d="M10 6h4" />
             <path d="M12 10v4" />
-            <circle cx="12" cy="18" r="4" />
+            <rect x="8" y="14" width="8" height="8" rx="2" />
         </Icon>
     )
 }
 
-// Add child: the new (plus) node sits BELOW this node, joined by an edge.
+// Add child: a new (+) node BELOW this node, joined by an edge.
 export function AddChild(props: IconProps) {
     return (
         <Icon {...props}>
-            <circle cx="12" cy="6" r="4" />
+            <rect x="8" y="2" width="8" height="8" rx="2" />
             <path d="M12 10v4" />
-            <circle cx="12" cy="18" r="4" />
-            <path d="M10 18h4" />
+            <rect x="8" y="14" width="8" height="8" rx="2" />
             <path d="M12 16v4" />
+            <path d="M10 18h4" />
+        </Icon>
+    )
+}
+
+// Detach: this node with the edge to its parent SNAPPED (two offset stubs, a gap between).
+export function DetachNode(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M13 3v3" />
+            <path d="M11 10v3" />
+            <rect x="8" y="13" width="8" height="8" rx="2" />
+        </Icon>
+    )
+}
+
+// Attach: this node with an edge running UP into a parent, arrowhead pointing up (re-hanging it).
+export function AttachNode(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M12 13V5" />
+            <path d="M9 8l3-3 3 3" />
+            <rect x="8" y="13" width="8" height="8" rx="2" />
+        </Icon>
+    )
+}
+
+// Convert to linked: this node with an arrow leaving it to another board (an external-link mark).
+export function LinkNode(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x="4" y="13" width="8" height="8" rx="2" />
+            <path d="M13 11 20 4" />
+            <path d="M20 9V4h-5" />
+        </Icon>
+    )
+}
+
+// Convert to regular: a plain node, no modifier.
+export function PlainNode(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x="6" y="6" width="12" height="12" rx="3" />
+        </Icon>
+    )
+}
+
+// Delete: this node crossed out with an X.
+export function DeleteNode(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x="5" y="5" width="14" height="14" rx="3" />
+            <path d="M9.5 9.5l5 5" />
+            <path d="M14.5 9.5l-5 5" />
         </Icon>
     )
 }
