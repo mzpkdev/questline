@@ -73,6 +73,24 @@ type Point = { x: number; y: number }
 // hint) and a hovered target's box (for the drop-target ring) are both measured as one of these.
 type Rect = Point & Size
 
+// The loose reparent band as a slack "noodle" (cubic bezier), like a UE5 / node-graph connection
+// wire, rather than a taut straight line. Each end gets a horizontal tangent that eases the wire out
+// flat and points it toward the target (length tracks the horizontal span, with a floor), and both
+// control points are pulled DOWN by a gravity sag (SVG +y is down) that grows with the wire's length
+// and caps out -- so the band hangs and droops like a loose cable and reshapes live as you drag,
+// instead of holding one fixed arc.
+function curvedBand(start: Point, end: Point): string {
+    const dx = end.x - start.x
+    const len = Math.hypot(dx, end.y - start.y)
+    const tangent = Math.max(Math.abs(dx) * 0.5, 30) * (dx >= 0 ? 1 : -1)
+    const sag = Math.min(len * 0.25, 80)
+    const c1x = start.x + tangent
+    const c1y = start.y + sag
+    const c2x = end.x - tangent
+    const c2y = end.y + sag
+    return `M ${start.x},${start.y} C ${c1x},${c1y} ${c2x},${c2y} ${end.x},${end.y}`
+}
+
 // A board node's fixed draw size by kind/role: the root node card is the larger size; linked and
 // regular non-root cards use the normal size. Single source of truth for the centre<->top-left math
 // below, so every conversion agrees on how big the card it's shifting is.
@@ -436,13 +454,36 @@ export function BoardTree(props: BoardTreeProps) {
                     <Background />
                     <Controls />
                 </ReactFlow>
-                {/* The reparent affordances, drawn over the canvas while armed. pointer-events-none so a
-                    click falls through to the node / pane beneath (that click is what attaches or
-                    cancels). Dotted gold to read as a not-yet-committed link. */}
+                {/* The reparent affordances, drawn while armed. Two layers: the loose noodle sits BELOW
+                    the nodes, the armed / drop-target rings and the hint ABOVE them. All pointer-events-none
+                    so a click falls through to the node / pane beneath (that click attaches or cancels).
+                    Dotted gold to read as a not-yet-committed link. */}
                 {reparentingId && armed && armedCenter && (
                     <>
+                        {/* The loose noodle, pinned to the detached node and trailing the pointer, drawn
+                            UNDER the nodes: a negative z-index paints it over the parchment but beneath
+                            every node card / edge, so it never covers a node. Its dashes march to read as
+                            a live link -- dropped under reduced motion. */}
                         <svg
                             data-testid="reparent-band"
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                            style={{ zIndex: -1 }}
+                        >
+                            <path
+                                d={curvedBand(armedCenter, armed.pointer)}
+                                fill="none"
+                                stroke="#e9b949"
+                                strokeWidth={2.4}
+                                strokeDasharray="2 9"
+                                strokeLinecap="round"
+                                className={reducedMotion ? undefined : "animate-[march_1.8s_linear_infinite]"}
+                            />
+                            <circle cx={armed.pointer.x} cy={armed.pointer.y} r={4} fill="#e9b949" />
+                        </svg>
+                        {/* The rings stay ABOVE the nodes (z-10): the armed highlight and the hover
+                            drop-target ring frame their nodes, so they must not be hidden behind them. */}
+                        <svg
                             aria-hidden="true"
                             className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
                         >
@@ -460,20 +501,6 @@ export function BoardTree(props: BoardTreeProps) {
                                 strokeWidth={3}
                                 style={{ filter: "drop-shadow(0 0 6px rgba(233,185,73,0.7))" }}
                             />
-                            {/* The loose band, pinned to the detached node and trailing the pointer. Its
-                                dashes march to read as a live link -- dropped under reduced motion. */}
-                            <line
-                                x1={armedCenter.x}
-                                y1={armedCenter.y}
-                                x2={armed.pointer.x}
-                                y2={armed.pointer.y}
-                                stroke="#e9b949"
-                                strokeWidth={2.4}
-                                strokeDasharray="2 9"
-                                strokeLinecap="round"
-                                className={reducedMotion ? undefined : "animate-[march_1.8s_linear_infinite]"}
-                            />
-                            <circle cx={armed.pointer.x} cy={armed.pointer.y} r={4} fill="#e9b949" />
                             {/* Hover affordance (mouse): a gold drop-target ring on the valid node under
                                 the cursor. Invalid nodes never set hoverRect, so they stay dim. */}
                             {hoverRect && (

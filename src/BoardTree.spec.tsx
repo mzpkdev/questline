@@ -287,7 +287,7 @@ describe("BoardTree", () => {
 
         context("reduced motion (the band respects prefers-reduced-motion)", () => {
             const origMatchMedia = window.matchMedia
-            const bandLine = () => screen.getByTestId("reparent-band").querySelector("line")
+            const bandLine = () => screen.getByTestId("reparent-band").querySelector("path")
             afterEach(() => {
                 window.matchMedia = origMatchMedia
             })
