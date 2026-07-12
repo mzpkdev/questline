@@ -6,7 +6,7 @@ import { Corners } from "./Corners"
 import { NodeDetailCard } from "./NodeDetailCard"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { BoardCelebration } from "./BoardCelebration"
-import { complete, descendantsOf, parentOf, reachableFromRoot, stateOf } from "./graph"
+import { complete, descendantsOf, parentOf, stateOf } from "./graph"
 import { IoButtons } from "./IoButtons"
 import {
     addReward,
@@ -30,7 +30,7 @@ import { isLinkedNode, type Node } from "./nodes"
 import { NavActions } from "./NavActions"
 import { addNote, type Note, removeNote, renameNote, updateNoteScene } from "./notes"
 import { deserialize, loadState, type PersistedSlices, saveState, serialize } from "./persist"
-import { type Board, boardCompleter, boardsReducer, linkedNodeName, type NodeRestore, seedBoard } from "./board"
+import { type Board, boardCompleter, boardsReducer, linkedNodeName, linkWouldCycle, type NodeRestore, seedBoard } from "./board"
 import { SectionTransition } from "./SectionTransition"
 import { useSfx } from "./SfxProvider"
 import { SoundToggle } from "./SoundToggle"
@@ -553,9 +553,10 @@ export function App() {
         if (selectedId === null || !active) return
         const parent = parentOf(selectedId, active.edges)
         dispatch({ type: "deleteNode", boardId: activeId, id: selectedId })
-        if (parent) focusNode(parent)
-        else setSelectedId(null)
-    }, [selectedId, active, activeId, focusNode])
+        // Move selection to the parent so the card stays valid, but DON'T focusNode it -- centering would
+        // jump the viewport. Deleting keeps the current pan / zoom.
+        setSelectedId(parent)
+    }, [selectedId, active, activeId])
 
     // Edit the selected node's name/description/reward in place.
     const editNode = useCallback(
@@ -662,7 +663,6 @@ export function App() {
                 return
             }
             if (descendantsOf(nodeId, active.edges).includes(targetId)) return
-            if (!reachableFromRoot(targetId, active.rootId, active.edges)) return
             dispatch({ type: "reparent", boardId: activeId, nodeId, newParentId: targetId })
             setReparenting(null)
             focusNode(nodeId)
@@ -692,9 +692,13 @@ export function App() {
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") cancelReparent()
         }
-        document.addEventListener("click", onClick)
+        // Defer the click listener by one task: the very click that armed this mode (the Detach / Attach
+        // button, bubbling to document) would otherwise land on a listener attached mid-dispatch and
+        // cancel the mode it just armed. Escape can bind synchronously.
+        const armTimer = setTimeout(() => document.addEventListener("click", onClick), 0)
         document.addEventListener("keydown", onKeyDown)
         return () => {
+            clearTimeout(armTimer)
             document.removeEventListener("click", onClick)
             document.removeEventListener("keydown", onKeyDown)
         }
@@ -894,7 +898,9 @@ export function App() {
     // Linked-node card inputs (meaningful only when isLinked): the live-mirrored display name, and the
     // dropdown of every OTHER board (self -- the active board -- excluded).
     const linkedName = shown && isLinked ? linkedNodeName(boards, shown.targetBoardId) : ""
-    const linkedBoardOptions = isLinked ? tabs.filter((tab) => tab.id !== activeId) : []
+    // Offer every other board as a link target EXCEPT ones that would cycle the board-link graph (self,
+    // or a board that already links back to this one) -- a cyclic link leaves both boards uncompletable.
+    const linkedBoardOptions = isLinked ? tabs.filter((tab) => !linkWouldCycle(boards, activeId, tab.id)) : []
 
     // The Draw note open in the editor (null → show the wall). A deleted id resolves to undefined, which
     // falls back to the wall.

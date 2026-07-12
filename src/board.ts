@@ -98,6 +98,36 @@ export function boardCompleter(boards: Boards): BoardComplete {
     return (boardId) => boardComplete(boards, boardId)
 }
 
+// Whether board `from` can reach board `to` by following cross-board links (each linked node points at
+// a target board -- one edge in the board-link graph). Breadth-first over boards with a visited guard,
+// so an existing cycle can't loop forever.
+function boardReaches(boards: Boards, from: string, to: string): boolean {
+    const seen = new Set<string>([from])
+    const queue: string[] = [from]
+    while (queue.length > 0) {
+        const board = boards[queue.shift() as string]
+        if (!board) continue
+        for (const node of Object.values(board.nodes)) {
+            const target = node.targetBoardId
+            if (target == null) continue
+            if (target === to) return true
+            if (!seen.has(target)) {
+                seen.add(target)
+                queue.push(target)
+            }
+        }
+    }
+    return false
+}
+
+// Whether pointing a linked node in `sourceBoardId` at `targetBoardId` would cycle the board-link graph
+// -- a self-link, or a target that can already reach the source (closing a loop). A cyclic link leaves
+// the boards on the loop uncompletable (each root's mastery waits on the link, which waits on the root),
+// so setLinkedTarget refuses it and the target dropdown hides such boards. Keeps the graph a DAG.
+export function linkWouldCycle(boards: Boards, sourceBoardId: string, targetBoardId: string): boolean {
+    return targetBoardId === sourceBoardId || boardReaches(boards, targetBoardId, sourceBoardId)
+}
+
 // Gold this board has earned: the sum of each mastered node's own `reward` (including a mastered tier-0
 // root). A mastered id with no surviving node record, or a reward-less linked node (a linked node never
 // enters `mastered` anyway), contributes nothing. A PARKED (detached) branch pays no gold either: a
@@ -503,6 +533,10 @@ export function boardsReducer(state: BoardsState, action: BoardsAction): BoardsS
         case "addLinkedNode":
             return updateBoard(state, action.boardId, (b) => addLinkedNode(b, action.parentId, action.childId))
         case "setLinkedTarget":
+            // Refuse a link that would cycle the board-link graph (uncompletable boards). Clearing (null) is fine.
+            if (action.targetBoardId !== null && linkWouldCycle(state.boards, action.boardId, action.targetBoardId)) {
+                return state
+            }
             return updateBoard(state, action.boardId, (b) => setLinkedTarget(b, action.id, action.targetBoardId))
         case "convertToLinked":
             return updateBoard(state, action.boardId, (b) => convertToLinkedNode(b, action.id))

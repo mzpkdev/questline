@@ -4,6 +4,7 @@ import {
     addChild,
     addLinkedNode,
     type Board,
+    type Boards,
     convertToLinkedNode,
     convertToRegularNode,
     boardComplete,
@@ -17,6 +18,7 @@ import {
     editNode,
     insertParent,
     linkedNodeName,
+    linkWouldCycle,
     moveNode,
     newBoard,
     removeBoard,
@@ -437,6 +439,52 @@ describe("setLinkedTarget", () => {
         const board = withLink()
         expect(setLinkedTarget(board, "nope", "board-x")).toBe(board)
         expect(setLinkedTarget(board, "link", null)).toBe(board) // already null
+    })
+})
+
+describe("linkWouldCycle", () => {
+    // Board A links to B; B and C each carry one (still unlinked) linked node.
+    const boardsWithLinks = (): Boards => ({
+        a: setLinkedTarget(addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link", "b"),
+        b: addLinkedNode(newBoard("b", "b-root", "B"), "b-root", "b-link"),
+        c: newBoard("c", "c-root", "C")
+    })
+
+    it("flags a self-link and a back-link that closes a loop, but allows a fresh target", () => {
+        const boards = boardsWithLinks()
+        expect(linkWouldCycle(boards, "a", "a")).toBe(true) // self-link
+        expect(linkWouldCycle(boards, "b", "a")).toBe(true) // A -> B already, so B -> A cycles
+        expect(linkWouldCycle(boards, "b", "c")).toBe(false) // B -> C is safe
+        expect(linkWouldCycle(boards, "a", "b")).toBe(false) // A -> B again is not a cycle
+    })
+
+    it("detects a longer chain (A -> B -> C, so C -> A or C -> B cycles)", () => {
+        const boards = boardsWithLinks()
+        boards.b = setLinkedTarget(boards.b as Board, "b-link", "c") // now A -> B -> C
+        expect(linkWouldCycle(boards, "c", "a")).toBe(true)
+        expect(linkWouldCycle(boards, "c", "b")).toBe(true)
+        expect(linkWouldCycle(boards, "a", "c")).toBe(false) // A -> C shortcut is still acyclic
+    })
+})
+
+describe("boardsReducer setLinkedTarget cycle guard", () => {
+    const linkedState = (): BoardsState => ({
+        boards: {
+            a: setLinkedTarget(addLinkedNode(newBoard("a", "a-root", "A"), "a-root", "a-link"), "a-link", "b"),
+            b: addLinkedNode(newBoard("b", "b-root", "B"), "b-root", "b-link"),
+            c: newBoard("c", "c-root", "C")
+        },
+        order: ["a", "b", "c"]
+    })
+
+    it("refuses a back-link that would cycle (same reference) but applies a safe target", () => {
+        const s = linkedState()
+        // A -> B exists, so pointing B's link back at A cycles -> refused, state unchanged.
+        expect(boardsReducer(s, { type: "setLinkedTarget", boardId: "b", id: "b-link", targetBoardId: "a" })).toBe(s)
+        // B -> C is acyclic, so it applies.
+        const safe = boardsReducer(s, { type: "setLinkedTarget", boardId: "b", id: "b-link", targetBoardId: "c" })
+        expect(safe).not.toBe(s)
+        expect(safe.boards.b?.nodes["b-link"]?.targetBoardId).toBe("c")
     })
 })
 

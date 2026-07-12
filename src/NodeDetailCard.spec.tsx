@@ -24,6 +24,13 @@ function linkedFixture(targetBoardId: string | null = null): Node {
 }
 
 describe("NodeDetailCard", () => {
+    // The App-level reparent-cancel guard leaves clicks inside the card alone via `[data-detail-card]`,
+    // so the arming click on Detach / Attach (inside the card) doesn't cancel the mode it just armed.
+    it("carries data-detail-card so the reparent-cancel guard skips card clicks", () => {
+        render(<NodeDetailCard node={nodeFixture()} state="available" todos={[]} isRoot={false} />)
+        expect(screen.getByTestId("detail-card")).toHaveAttribute("data-detail-card")
+    })
+
     context("the root node", () => {
         it("renders the name and state badge, no checklist, and the root node action label", () => {
             render(

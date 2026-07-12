@@ -16,7 +16,7 @@ import { type Boards, boardCompleter, linkedNodeName } from "./board"
 import { Edge } from "./Edge"
 import type { FlowNode, LinkedFlowNode, NodeFlowEdge, NodeFlowNode } from "./flow"
 import { NODE_SIZE } from "./flow"
-import { type BoardComplete, descendantsOf, isMastered, reachableFromRoot, stateOf } from "./graph"
+import { type BoardComplete, descendantsOf, isMastered, stateOf } from "./graph"
 import { LinkedNode } from "./LinkedNode"
 import { NodeCard } from "./NodeCard"
 // The tuple type `Edge` clashes with the `Edge` edge component above, so alias the tuple here.
@@ -198,11 +198,13 @@ export function buildEdges(
 // Whether a node is a valid reparent target while armed: a node in this board that is reachable from the
 // root (so you can only re-home under the live tree, never under another parked branch), and is neither
 // the detached node itself nor one of its descendants (re-hanging under its own subtree would cycle).
-// Mirrors App.attachTo's guard, reusing reachableFromRoot / descendantsOf, so the hover affordance lights
-// exactly the nodes a tap would actually attach to. Exported for a direct unit test (hover is awkward to
+// Mirrors App.attachTo's guard, so the hover affordance lights exactly the nodes a tap would attach to:
+// any node in this board that is neither the moving node nor one of its descendants (attaching under a
+// descendant would cycle). A detached / parked target is allowed -- the moving node just joins that
+// parked branch until the branch itself re-homes. Exported for a direct unit test (hover is awkward to
 // drive in jsdom).
-export function isReparentTarget(id: string, detachedId: string, edges: EdgeTuple[], rootId: string): boolean {
-    return id !== detachedId && reachableFromRoot(id, rootId, edges) && !descendantsOf(detachedId, edges).includes(id)
+export function isReparentTarget(id: string, detachedId: string, edges: EdgeTuple[]): boolean {
+    return id !== detachedId && !descendantsOf(detachedId, edges).includes(id)
 }
 
 export function BoardTree(props: BoardTreeProps) {
@@ -234,12 +236,16 @@ export function BoardTree(props: BoardTreeProps) {
     // handler that writes drag/select changes back into that state.
     const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(buildNodes())
 
-    // Refit the viewport when nodes are added or removed (e.g. a promoted parent lands above the old
-    // root, off the current view) so the change is actually visible. Position-only drags don't refit.
+    // Refit the viewport only when nodes were ADDED (e.g. add-parent lands a new root above the old one,
+    // off the current view) so the addition is visible. A removal (delete) keeps the current viewport,
+    // and position-only drags don't refit.
     const flowRef = useRef<ReactFlowInstance<FlowNode, NodeFlowEdge> | null>(null)
     const nodeCount = Object.keys(props.nodes).length
+    const prevNodeCount = useRef(nodeCount)
     useEffect(() => {
-        flowRef.current?.fitView(FIT_VIEW_OPTIONS)
+        const grew = nodeCount > prevNodeCount.current
+        prevNodeCount.current = nodeCount
+        if (grew) flowRef.current?.fitView(FIT_VIEW_OPTIONS)
     }, [nodeCount])
 
     // Center on a focused node once per focus nonce (URL routing or a just-created node). Waits for
@@ -426,7 +432,7 @@ export function BoardTree(props: BoardTreeProps) {
                     onNodeMouseEnter={(_, node) => {
                         // Light a valid target as the mouse enters it; invalid nodes (the detached node,
                         // its descendants) are skipped, so they stay dim. Touch fires no hover.
-                        if (!reparentingId || !isReparentTarget(node.id, reparentingId, props.edges, props.rootId)) return
+                        if (!reparentingId || !isReparentTarget(node.id, reparentingId, props.edges)) return
                         const container = containerRef.current
                         if (!container) return
                         const box = container.getBoundingClientRect()

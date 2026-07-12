@@ -153,6 +153,9 @@ const ICON_BTN_BASE =
     "grid aspect-square w-full place-items-center rounded-[11px] border-[1.5px] transition-colors duration-150 ease-out"
 const ICON_BTN_ADD = `${ICON_BTN_BASE} border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] hover:bg-[#f6eccf]`
 const ICON_BTN_DANGER = `${ICON_BTN_BASE} border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] hover:bg-[#a5482a]/10`
+// A primary / call-to-action variant in the app's gold "unlock" palette, with a soft gold glow, to draw
+// the eye to the one action that matters in a state -- Attach on a parked (detached) node.
+const ICON_BTN_PRIMARY = `${ICON_BTN_BASE} border-solid border-[#b8892b] bg-[#e6c458] text-[#3a2a0c] shadow-[0_3px_10px_-4px_rgba(184,137,43,0.85)] hover:bg-[#edc95d]`
 const CHECKLIST_HEAD_CLASS = "font-display text-[11px] uppercase tracking-widest text-[#8a6b28]"
 
 // A single read-mode checklist row. Its box bounces the moment it's ticked (useCheckPop), so checking
@@ -210,11 +213,13 @@ function ActionIcon({
     label,
     onClick,
     danger = false,
+    primary = false,
     children
 }: {
     label: string
     onClick?: () => void
     danger?: boolean
+    primary?: boolean
     children: ReactNode
 }) {
     return (
@@ -223,7 +228,7 @@ function ActionIcon({
             aria-label={label}
             title={label}
             onClick={onClick}
-            className={danger ? ICON_BTN_DANGER : ICON_BTN_ADD}
+            className={danger ? ICON_BTN_DANGER : primary ? ICON_BTN_PRIMARY : ICON_BTN_ADD}
         >
             {children}
         </button>
@@ -356,7 +361,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                 </ActionIcon>
             )}
             {onAttach && (
-                <ActionIcon label="Attach node" onClick={onAttach}>
+                <ActionIcon label="Attach node" primary onClick={onAttach}>
                     <AttachNode size={18} />
                 </ActionIcon>
             )}
@@ -454,7 +459,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             </button>
         )
         return (
-            <div ref={rootRef} data-testid="detail-card" className={`relative font-serif ${animation}`} style={CARD_STYLE}>
+            <div ref={rootRef} data-testid="detail-card" data-detail-card="" className={`relative font-serif ${animation}`} style={CARD_STYLE}>
                 {pencil}
                 {editing ? (
                     <>
@@ -550,7 +555,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
     }
 
     return (
-        <div ref={rootRef} data-testid="detail-card" className={`relative font-serif ${animation}`} style={CARD_STYLE}>
+        <div ref={rootRef} data-testid="detail-card" data-detail-card="" className={`relative font-serif ${animation}`} style={CARD_STYLE}>
             {pencil}
 
             {editing ? (
