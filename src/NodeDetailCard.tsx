@@ -1,10 +1,10 @@
-import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react"
+import { Check, Link2, Pencil, Plus, SquareArrowDown, SquareArrowUp, Trash2, Unlink, X } from "lucide-react"
+import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { STATE_LABEL } from "./graph"
 import type { Node, NodeState, Todo } from "./nodes"
 import { useCheckPop } from "./nodeMotion"
-import { PlusIcon } from "./PlusIcon"
 
 // A visual re-port of the mockup's detail sidebar (renderCard). Checklist ticks call `onToggle`
 // (only when the node is actionable); the pencil flips to the mockup's edit layout, whose fields
@@ -44,9 +44,9 @@ export type NodeDetailCardProps = {
     onAddParent?: () => void
     // Attach an (unlinked) linked node as a child. Offered on every node kind.
     onAddLinkedNode?: () => void
-    // Detach this node (with its whole subtree) from its parent and arm reparent mode ("Unconnect").
+    // Detach this node (with its whole subtree) from its parent and arm reparent mode ("Detach").
     // Offered on every node EXCEPT the root -- App passes it only for a non-root selection. Edit mode only.
-    onUnconnect?: () => void
+    onDetach?: () => void
     // When set, edit mode offers a destructive delete (confirmed first). Omit it and no delete shows.
     onDelete?: () => void
     // What the delete removes: a node + its subtree, or the whole board (deleting a board's root node).
@@ -129,12 +129,15 @@ const TODO_EDIT_CLASS = `min-w-0 flex-1 rounded-[7px] border border-[#d8c48f] bg
 const SELECT_CLASS = `w-full rounded-lg border border-[#d8c48f] bg-[#fffdf5] px-2.5 py-2 font-display text-[15px] text-[#4a3410] ${FIELD_FOCUS}`
 const EDIT_BTN_TRANSITION = "transition-colors duration-150 ease-out"
 const TODO_DEL_CLASS = `grid h-6 w-6 flex-none appearance-none place-items-center rounded-[7px] border border-transparent bg-transparent text-[17px] leading-none text-[#b3a074] opacity-[.42] transition-[opacity,color,background-color,transform] duration-150 ease-out hover:opacity-100 hover:bg-[#f4ead0]/70 hover:text-[#8a6b28] active:scale-95`
-const TODO_ADD_CLASS = `mt-2.5 self-start rounded-lg border-[1.5px] border-dashed border-[#cdb373] px-3 py-1.5 font-display text-[11px] uppercase tracking-wide text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
-const ADD_BTN_LAYOUT = "flex items-center justify-center gap-1.5"
-const ADD_DESC_CLASS = `${ACTION_CLASS} ${ADD_BTN_LAYOUT} border-[1.5px] border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
-// Destructive action (delete node / board): danger-red outline on parchment, colour-only hover, matching
-// the tab-remove affordance (#a5482a). Lives in edit mode only, so read mode can't fat-finger a delete.
-const DELETE_BTN_CLASS = `${ACTION_CLASS} mt-2.5 border-[1.5px] border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] ${EDIT_BTN_TRANSITION} hover:bg-[#a5482a]/10`
+const TODO_ADD_CLASS = `mt-2.5 grid h-8 w-8 place-items-center self-start rounded-lg border-[1.5px] border-dashed border-[#cdb373] text-[#8a6b28] ${EDIT_BTN_TRANSITION} hover:bg-[#f6eccf]`
+// Edit-mode action buttons are icon-only squares laid out in a grid: a dashed gold secondary look for
+// the structural adds / unconnect, and a danger-red variant for delete (matching the tab-remove
+// affordance #a5482a). Icon-only, so each carries an aria-label + title tooltip for its action. Lives
+// in edit mode only, so read mode can't fat-finger a delete.
+const ICON_BTN_BASE =
+    "grid aspect-square w-full place-items-center rounded-[11px] border-[1.5px] transition-colors duration-150 ease-out"
+const ICON_BTN_ADD = `${ICON_BTN_BASE} border-dashed border-[#cdb373] bg-transparent text-[#8a6b28] hover:bg-[#f6eccf]`
+const ICON_BTN_DANGER = `${ICON_BTN_BASE} border-solid border-[#a5482a]/40 bg-transparent text-[#a5482a] hover:bg-[#a5482a]/10`
 const CHECKLIST_HEAD_CLASS = "font-display text-[11px] uppercase tracking-widest text-[#8a6b28]"
 
 // A single read-mode checklist row. Its box bounces the moment it's ticked (useCheckPop), so checking
@@ -186,6 +189,32 @@ function ChecklistItem({
     )
 }
 
+// One icon-only edit-mode action button. Icon-only, so `label` is both the accessible name (aria-label)
+// and the hover tooltip (title); `danger` swaps the dashed gold look for the destructive red variant.
+function ActionIcon({
+    label,
+    onClick,
+    danger = false,
+    children
+}: {
+    label: string
+    onClick?: () => void
+    danger?: boolean
+    children: ReactNode
+}) {
+    return (
+        <button
+            type="button"
+            aria-label={label}
+            title={label}
+            onClick={onClick}
+            className={danger ? ICON_BTN_DANGER : ICON_BTN_ADD}
+        >
+            {children}
+        </button>
+    )
+}
+
 export function NodeDetailCard(props: NodeDetailCardProps) {
     const {
         node,
@@ -209,7 +238,7 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
         onAddChild,
         onAddParent,
         onAddLinkedNode,
-        onUnconnect,
+        onDetach,
         onDelete,
         deleteKind = "node",
         descendantCount = 0,
@@ -271,99 +300,83 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
             className="absolute right-3 top-3 grid h-[30px] w-[30px] place-items-center rounded-[9px] transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
             style={PENCIL_STYLE}
         >
-            <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                width={15}
-                height={15}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-            >
-                {editing ? (
-                    <path d="M5 12l5 5L20 6" />
-                ) : (
-                    <>
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                    </>
-                )}
-            </svg>
+            {editing ? <Check size={16} strokeWidth={2.5} /> : <Pencil size={15} strokeWidth={2} />}
         </button>
     )
 
-    // Shared structural buttons (edit mode), sharing the dashed secondary-action look. Add child is
-    // always offered; Add parent and Add linked node each render only when their handler is wired (App
-    // wires Add parent for regular AND linked nodes, since insertParent splices a node above either).
-    // Unconnect (a detach, not an add, so no + glyph) renders only when onUnconnect is wired -- App
-    // passes it for every non-root node, so the root never offers it.
-    const addButtons = (
-        <div className="flex flex-col gap-2.5">
+    // Structural actions (edit mode): an icon-only grid, one square per action. Add child is always
+    // offered; Add parent and Add linked node each render only when their handler is wired (App wires
+    // Add parent for regular AND linked nodes, since insertParent splices a node above either). Detach
+    // renders only when onDetach is wired -- App passes it for every non-root node, so the root never
+    // offers it. Delete (danger red) opens a confirm first. The parent-up / child-down arrows read as
+    // the top-down tree's above / below.
+    const actionGrid = (
+        <div className="grid grid-cols-4 gap-2">
             {onAddParent && (
-                <button type="button" className={ADD_DESC_CLASS} onClick={onAddParent}>
-                    <PlusIcon size={16} />
-                    Add parent node
-                </button>
+                <ActionIcon label="Add parent node" onClick={onAddParent}>
+                    <SquareArrowUp size={18} />
+                </ActionIcon>
             )}
-            <button type="button" className={ADD_DESC_CLASS} onClick={onAddChild}>
-                <PlusIcon size={16} />
-                Add child node
-            </button>
+            <ActionIcon label="Add child node" onClick={onAddChild}>
+                <SquareArrowDown size={18} />
+            </ActionIcon>
             {onAddLinkedNode && (
-                <button type="button" className={ADD_DESC_CLASS} onClick={onAddLinkedNode}>
-                    <PlusIcon size={16} />
-                    Add linked node
-                </button>
+                <ActionIcon label="Add linked node" onClick={onAddLinkedNode}>
+                    <Link2 size={18} />
+                </ActionIcon>
             )}
-            {onUnconnect && (
-                <button type="button" className={ADD_DESC_CLASS} onClick={onUnconnect}>
-                    Unconnect
-                </button>
+            {onDetach && (
+                <ActionIcon label="Detach node" onClick={onDetach}>
+                    <Unlink size={18} />
+                </ActionIcon>
+            )}
+            {onDelete && (
+                <ActionIcon
+                    label={deleteKind === "board" ? "Delete board" : "Delete node"}
+                    danger
+                    onClick={() => setConfirmOpen(true)}
+                >
+                    <Trash2 size={18} />
+                </ActionIcon>
             )}
         </div>
     )
 
-    // Shared delete affordance (edit mode). Label + confirm copy follow deleteKind.
-    const deleteSection = onDelete ? (
-        <>
-            <button type="button" className={DELETE_BTN_CLASS} onClick={() => setConfirmOpen(true)}>
-                {deleteKind === "board" ? "Delete board" : "Delete node"}
-            </button>
-            <ConfirmDialog
-                open={confirmOpen}
-                title={deleteKind === "board" ? "Remove this board?" : "Delete this node?"}
-                message={
-                    deleteKind === "board" ? (
-                        <>
-                            Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? This removes
-                            the whole board and can't be undone.
-                        </>
-                    ) : descendantCount > 0 ? (
-                        <>
-                            Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong> and its{" "}
-                            {descendantCount} sub-node{descendantCount === 1 ? "" : "s"}? This can't be undone.
-                        </>
-                    ) : (
-                        <>
-                            Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? This can't be
-                            undone.
-                        </>
-                    )
-                }
-                confirmLabel="Delete"
-                onConfirm={() => {
-                    // Close first, THEN delete: onDelete may unmount this card, so touching confirmOpen
-                    // afterward would be a set-state-on-unmounted warning.
-                    setConfirmOpen(false)
-                    onDelete()
-                }}
-                onOpenChange={(open) => {
-                    if (!open) setConfirmOpen(false)
-                }}
-            />
-        </>
+    // The delete confirm dialog (edit mode); its trigger is the danger cell in actionGrid above. Copy
+    // follows deleteKind. Rendered only when a delete handler is wired.
+    const confirmDialog = onDelete ? (
+        <ConfirmDialog
+            open={confirmOpen}
+            title={deleteKind === "board" ? "Remove this board?" : "Delete this node?"}
+            message={
+                deleteKind === "board" ? (
+                    <>
+                        Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? This removes the
+                        whole board and can't be undone.
+                    </>
+                ) : descendantCount > 0 ? (
+                    <>
+                        Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong> and its{" "}
+                        {descendantCount} sub-node{descendantCount === 1 ? "" : "s"}? This can't be undone.
+                    </>
+                ) : (
+                    <>
+                        Delete <strong className="font-semibold text-[#4a3410]">{displayName}</strong>? This can't be
+                        undone.
+                    </>
+                )
+            }
+            confirmLabel="Delete"
+            onConfirm={() => {
+                // Close first, THEN delete: onDelete may unmount this card, so touching confirmOpen
+                // afterward would be a set-state-on-unmounted warning.
+                setConfirmOpen(false)
+                onDelete()
+            }}
+            onOpenChange={(open) => {
+                if (!open) setConfirmOpen(false)
+            }}
+        />
     ) : null
 
     // A linked node: no checklist / reward / description. Read mode's action is Go to Board (disabled
@@ -404,8 +417,8 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                                 ))}
                             </select>
                         </div>
-                        {addButtons}
-                        {deleteSection}
+                        {actionGrid}
+                        {confirmDialog}
                     </>
                 ) : (
                     <>
@@ -526,23 +539,30 @@ export function NodeDetailCard(props: NodeDetailCardProps) {
                                         <button
                                             type="button"
                                             aria-label="Remove item"
+                                            title="Remove item"
                                             className={TODO_DEL_CLASS}
                                             onClick={() => onDeleteTodo?.(index)}
                                         >
-                                            ×
+                                            <X size={16} />
                                         </button>
                                     </li>
                                 ))}
                             </ul>
-                            <button type="button" className={TODO_ADD_CLASS} onClick={onAddTodo}>
-                                + Add item
+                            <button
+                                type="button"
+                                aria-label="Add item"
+                                title="Add item"
+                                className={TODO_ADD_CLASS}
+                                onClick={onAddTodo}
+                            >
+                                <Plus size={16} />
                             </button>
                         </div>
                     )}
 
-                    {addButtons}
+                    {actionGrid}
 
-                    {deleteSection}
+                    {confirmDialog}
                 </>
             ) : (
                 <>

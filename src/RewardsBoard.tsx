@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Coin } from "./Coin"
 import { ConfirmDialog } from "./ConfirmDialog"
-import { PlusIcon } from "./PlusIcon"
+import { Plus } from "lucide-react"
 import type { Reward } from "./rewards"
 import { prefersReducedMotion } from "./nodeMotion"
 
@@ -492,8 +492,7 @@ export function RewardsBoard({
                     onClick={onAddReward}
                     className="flex min-h-[132px] w-full items-center justify-center gap-2 rounded-[15px] border-2 border-dashed border-[#cdb373] bg-transparent font-display text-[12.5px] font-semibold uppercase tracking-[1px] text-[#b79a52] opacity-60 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
                 >
-                    <PlusIcon />
-                    Add Reward
+                    <Plus size={22} />
                 </button>
             </div>
         </div>

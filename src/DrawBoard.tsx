@@ -10,7 +10,7 @@
 
 import { exportToSvg, restore } from "@excalidraw/excalidraw"
 import { useEffect, useState } from "react"
-import { PlusIcon } from "./PlusIcon"
+import { Plus } from "lucide-react"
 import type { Note, NoteScene } from "./notes"
 
 // The card frame: the same double-gradient border trick as a reward tile (a cream padding-box fill
@@ -212,8 +212,7 @@ export function DrawBoard({ notes, onOpen, onAdd, onRename, highlightId }: DrawB
                     onClick={onAdd}
                     className="mb-4 flex aspect-[4/3] w-full break-inside-avoid items-center justify-center gap-2 rounded-[15px] border-2 border-dashed border-[#cdb373] bg-transparent font-display text-[12.5px] font-semibold uppercase tracking-[1px] text-[#b79a52] opacity-60 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
                 >
-                    <PlusIcon />
-                    Add Scribble
+                    <Plus size={22} />
                 </button>
                 {notes.map((note) => (
                     <NoteCard

@@ -262,7 +262,7 @@ describe("NodeDetailCard", () => {
             await user.click(screen.getByRole("button", { name: "Remove item" }))
             expect(onDeleteTodo).toHaveBeenCalledWith(0)
 
-            await user.click(screen.getByRole("button", { name: "+ Add item" }))
+            await user.click(screen.getByRole("button", { name: "Add item" }))
             expect(onAddTodo).toHaveBeenCalledTimes(1)
         })
 

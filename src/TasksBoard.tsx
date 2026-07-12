@@ -21,6 +21,7 @@ import {
     verticalListSortingStrategy
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { Plus } from "lucide-react"
 import type { CSSProperties } from "react"
 import type { Task } from "./tasks"
 import { useCheckPop } from "./nodeMotion"
@@ -184,19 +185,7 @@ export function TasksBoard({ items, onAdd, onToggle, onReorder, onSelect, select
                 onClick={onAdd}
                 className="mb-[11px] flex w-full items-center justify-center gap-2 rounded-[13px] border-2 border-dashed border-[#cdb373] bg-transparent py-3.5 font-display text-[12.5px] font-semibold uppercase tracking-[1px] text-[#b79a52] opacity-70 transition-[color,border-color,background-color,opacity] duration-150 ease-out hover:border-[#b8892b] hover:bg-white/30 hover:text-[#8a6b28] hover:opacity-100"
             >
-                <svg
-                    width={17}
-                    height={17}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.9}
-                    strokeLinecap="round"
-                    aria-hidden="true"
-                >
-                    <path d="M12 5v14M5 12h14" />
-                </svg>
-                Add task
+                <Plus size={22} />
             </button>
 
             {items.length > 0 ? (

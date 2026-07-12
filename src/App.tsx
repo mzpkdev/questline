@@ -119,12 +119,12 @@ export function App() {
     // A node just added via the detail card: its card opens in edit mode so the name is editable at
     // once. Cleared the moment that card mounts, so re-selecting the node later opens the read view.
     const [editOnAddId, setEditOnAddId] = useState<string | null>(null)
-    // A reparent in flight (the "Unconnect" gesture): the node being re-hung -- with its whole subtree
+    // A reparent in flight (the "Detach" gesture): the node being re-hung -- with its whole subtree
     // -- plus the parent to fall back to on cancel. Purely transient UI: it is NEVER dispatched into the
     // boards reducer and never persisted, so the detach leaves no orphan and a reload mid-reparent
     // reverts to the original parent. Only a completed attach dispatches the pure `reparent` op. One at
     // a time -- arming dismisses the card, and while armed a node click attaches instead of selecting,
-    // so no second node's card (or its Unconnect) is reachable.
+    // so no second node's card (or its Detach) is reachable.
     const [reparenting, setReparenting] = useState<{ nodeId: string; originalParentId: string } | null>(null)
     // The app-level Tasks checklist (one flat list shared across every tab) and which top-level
     // section is on screen: the roadmap board, the Tasks list, or the Rewards shop.
@@ -623,11 +623,11 @@ export function App() {
         setReparenting(null)
     }, [reparenting, activeId])
 
-    // Unconnect the selected node: detach it (with its whole subtree) from its parent and arm reparent
-    // mode. Dismisses the card while the loose edge trails the pointer. The detach is view-only (see
+    // Detach the selected node: lift it (with its whole subtree) off its parent and arm reparent mode.
+    // Dismisses the card while the loose edge trails the pointer. The detach is view-only (see
     // `reparenting`), so nothing is dispatched -- the board keeps its edges until a target is clicked
     // (attach) or the move is cancelled.
-    const unconnectSelected = useCallback(() => {
+    const detachSelected = useCallback(() => {
         if (selectedId === null || !active) return
         const originalParentId = parentOf(selectedId, active.edges)
         if (originalParentId === null) return // the root has no parent to detach from (App gates this off anyway)
@@ -1050,7 +1050,7 @@ export function App() {
                                     onAddChild={addChild}
                                     onAddParent={addParent}
                                     onAddLinkedNode={addLinkedNode}
-                                    onUnconnect={isRoot ? undefined : unconnectSelected}
+                                    onDetach={isRoot ? undefined : detachSelected}
                                     onDelete={onDeleteShown}
                                     deleteKind={deleteKind}
                                     descendantCount={deleteDescendantCount}

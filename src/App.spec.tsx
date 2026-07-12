@@ -219,27 +219,27 @@ describe("App", () => {
         })
     })
 
-    context("reparenting a node (Unconnect + click-to-attach)", () => {
+    context("reparenting a node (Detach + click-to-attach)", () => {
         const band = () => screen.queryByTestId("reparent-band")
 
-        it("offers Unconnect on a non-root node's edit card, but never on the root", async () => {
+        it("offers Detach on a non-root node's edit card, but never on the root", async () => {
             render(<App />)
             const leaf = await waitForNode("finish-node")
 
-            // A non-root node offers Unconnect in edit mode.
+            // A non-root node offers Detach in edit mode.
             fireEvent.click(leaf)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            expect(screen.getByRole("button", { name: "Unconnect" })).toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Detach node" })).toBeInTheDocument()
 
             // The root node never does -- it has no parent to detach from.
             selectSeedRoot()
             await screen.findByRole("heading", { name: /learn questline/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            expect(screen.queryByRole("button", { name: "Unconnect" })).toBeNull()
+            expect(screen.queryByRole("button", { name: "Detach node" })).toBeNull()
         })
 
-        it("arms on Unconnect, then attaches the branch under a clicked valid target", async () => {
+        it("arms on Detach, then attaches the branch under a clicked valid target", async () => {
             render(<App />)
             await waitForNode("finish-node")
 
@@ -252,7 +252,7 @@ describe("App", () => {
             fireEvent.click(nodeRoot("finish-node") as Element)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Unconnect" }))
+            fireEvent.click(screen.getByRole("button", { name: "Detach node" }))
 
             expect(await screen.findByTestId("reparent-band")).toBeInTheDocument()
             await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available"))
@@ -277,7 +277,7 @@ describe("App", () => {
             fireEvent.click(nodeRoot("finish-node") as Element)
             await screen.findByRole("heading", { name: /finish a node/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Unconnect" }))
+            fireEvent.click(screen.getByRole("button", { name: "Detach node" }))
             await screen.findByTestId("reparent-band")
             await waitFor(() => expect(nodeRoot("track-progress")?.getAttribute("data-state")).toBe("available"))
 
@@ -300,7 +300,7 @@ describe("App", () => {
             fireEvent.click(nodeRoot("track-progress") as Element)
             await screen.findByRole("heading", { name: /track your progress/i })
             fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-            fireEvent.click(screen.getByRole("button", { name: "Unconnect" }))
+            fireEvent.click(screen.getByRole("button", { name: "Detach node" }))
             await screen.findByTestId("reparent-band")
 
             // finish-node is a descendant of track-progress, so it's not a valid target: clicking it

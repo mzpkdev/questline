@@ -1,6 +1,6 @@
 # Reparent a node (detach + click-to-attach)
 
-Adds an **Unconnect** action to a node's edit-mode card that lifts the node (with its whole subtree) off
+Adds an **Detach** action to a node's edit-mode card that lifts the node (with its whole subtree) off
 its parent and re-hangs it under a node you then click or tap. Layers on the tree/board model
 (SPEC.md); vocabulary is node / root node / board / edge, and the mechanic is the same on the current
 tree or the post-SPEC board model. No schema change: an edge already stores `[parentId, childId]`, so a
@@ -8,7 +8,7 @@ reparent just rewires one edge.
 
 ## Entry
 
-- Edit mode gains an **Unconnect** button on every node **except the root node** (the root has no
+- Edit mode gains an **Detach** button on every node **except the root node** (the root has no
   parent to detach from), alongside add-child / add-parent / delete.
 - Clicking it detaches the node from its parent and enters **reparent mode** (armed): the node's
   incoming edge is removed and the branch is loose, waiting to be re-hung.
@@ -26,7 +26,7 @@ reparent just rewires one edge.
   - **Touch** — no hover to follow, so the detached node shows an armed highlight and a hint ("Tap a
     node to reattach"). Only a **tap** attaches: a press that drifts past a small move threshold is a
     pan, not an attach, so panning to reach a target never misfires.
-- One reparent at a time; Unconnect is unavailable on other nodes while armed.
+- One reparent at a time; Detach is unavailable on other nodes while armed.
 
 ## Targets
 
@@ -68,7 +68,7 @@ Sequential; each ends green (typecheck, tests, build) and ships on its own.
 - Pure `reparent(board, nodeId, newParentId)`: reject the node itself and any descendant, else rewire
   the incoming edge, recompute the moved subtree's tiers, un-master the new parent up the chain, keep
   `x/y`. Unit-tested.
-- **Unconnect** button on every non-root node's edit card; clicking it dismisses the card, detaches the
+- **Detach** button on every non-root node's edit card; clicking it dismisses the card, detaches the
   edge, and arms reparent mode. The detached subtree goes inert (`locked` via derivation); the board
   stays live.
 - Mouse: a rubber-band edge trails the cursor; a click on a valid target attaches; Escape, empty
@@ -88,7 +88,7 @@ Sequential; each ends green (typecheck, tests, build) and ships on its own.
   descendants (no-op, same reference); on a valid target rewires the incoming edge to `[newParentId,
   nodeId]`, recomputes the moved subtree's tiers, un-masters the new parent up the chain, and keeps every
   moved node's `x/y`.
-- Light interaction test: Unconnect arms the mode and detaches the edge; tapping a valid target moves the
+- Light interaction test: Detach arms the mode and detaches the edge; tapping a valid target moves the
   edge and reconnects the branch; Escape / empty-tap reverts to the original parent; a descendant is not
   a valid target.
 
